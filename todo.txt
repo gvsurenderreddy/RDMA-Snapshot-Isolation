@@ -1,0 +1,5 @@
+[ ] Be professional, make a makefile, god!!
+[ ] Rename the project name
+[ ] Upload to GitHub
+[ ] Make a script folder and put send_... there
+
