@@ -13,6 +13,7 @@
 #include <infiniband/verbs.h>
 #include "../tpcw-tables/item_version.hpp"
 #include "../tpcw-tables/orders_version.hpp"
+#include "../tpcw-tables/order_line_version.hpp"
 #include "../tpcw-tables/cc_xacts_version.hpp"
 #include "../timestamp/timestamp_oracle.hpp"
 #include "../timestamp/lock.hpp"
@@ -25,8 +26,9 @@ class Server{
 private:
 	static ItemVersion		*items_region;
 	static OrdersVersion	*orders_region;
+	static OrderLineVersion	*order_line_region;
 	static CCXactsVersion	*cc_xacts_region;
-	static TimestampOracle	*timestamp_oracle_region;
+	static TimestampOracle	*timestamp_region;
 	static uint64_t			*lock_items_region;
 	
 	static int				*last_orders_cnt;
@@ -45,11 +47,13 @@ private:
 	/* structure of system resources */
 
 	struct Message {
-		// We’ll use this to pass RDMA memory region (MR) keys between nodes and to signal that we’re done. Note that we don't use this structure for RDMA operations
+		// We’ll use this to pass RDMA memory region (MR) keys between nodes and to signal
+		// that we’re done. Note that we don't use this structure for RDMA operations
 		struct ibv_mr mr_items;
 		struct ibv_mr mr_orders;
+		struct ibv_mr mr_order_line;
 		struct ibv_mr mr_cc_xacts;
-		struct ibv_mr mr_timestamp_oracle;
+		struct ibv_mr mr_timestamp;
 		struct ibv_mr mr_lock_items; 
 	};
 
@@ -71,9 +75,10 @@ private:
 	
 		struct ibv_mr *send_mr;
 		struct ibv_mr *mr_items;
-		struct ibv_mr *mr_orders;
+		struct ibv_mr *mr_orders;		
+		struct ibv_mr *mr_order_line;
 		struct ibv_mr *mr_cc_xacts;
-		struct ibv_mr *mr_timestamp_oracle;
+		struct ibv_mr *mr_timestamp;
 		struct ibv_mr *mr_lock_items;
 	
 		struct Message *send_msg;

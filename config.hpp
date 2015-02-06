@@ -36,7 +36,10 @@ static const int MAX_CCXACTS_CNT	= 100100;	// Number of CCXacts
 
 static const int MAX_ITEM_VERSIONS		= 1;		// Maximum number of versions per data item
 static const int MAX_ORDERS_VERSIONS	= 1;		// Maximum number of versions per data item
+static const int MAX_ORDERLINE_VERSIONS	= 1;	
 static const int MAX_CCXACTS_VERSIONS	= 1;		// Maximum number of versions per data item
+
+static const int ORDERLINE_PER_ORDER	= 5;
 
 
 static const int TIMEOUT_IN_MS = 500; /* ms */

@@ -5,7 +5,7 @@ using namespace std;
 class Orders {
 public:
 	int O_ID;
-	int O_I_ID;	// I added this myself
+	//int O_I_ID;	// I added this myself
 	int O_C_ID;
 	char O_DATE[10];
 	double O_SUB_TOTAL;

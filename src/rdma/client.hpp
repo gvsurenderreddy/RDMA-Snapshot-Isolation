@@ -14,6 +14,7 @@
 #include <infiniband/verbs.h>
 #include "../tpcw-tables/item_version.hpp"
 #include "../tpcw-tables/orders_version.hpp"
+#include "../tpcw-tables/order_line_version.hpp"
 #include "../tpcw-tables/cc_xacts_version.hpp"
 #include "../timestamp/timestamp_oracle.hpp"
 #include "../timestamp/lock.hpp"
@@ -40,8 +41,9 @@ private:
 	
 		struct ibv_mr mr_items;
 		struct ibv_mr mr_orders;
+		struct ibv_mr mr_order_line;
 		struct ibv_mr mr_cc_xacts;
-		struct ibv_mr mr_timestamp_oracle;
+		struct ibv_mr mr_timestamp;
 		struct ibv_mr mr_lock_items; 
 	};
 
@@ -68,6 +70,7 @@ private:
 		struct ibv_mr *recv_mr;			// infiniband memory handler for the receiving message
 		struct ibv_mr *local_items_mr;	// infiniband memory handler for the RDMA memory region for items
 		struct ibv_mr *local_orders_mr;	// infiniband memory handler for the RDMA memory region for orders
+		struct ibv_mr *local_order_line_mr;	// infiniband memory handler for the RDMA memory region for orders
 		struct ibv_mr *local_cc_xacts_mr;	// infiniband memory handler for the RDMA memory region for cc xacts
 		struct ibv_mr *local_read_timestamp_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
 		struct ibv_mr *local_commit_timestamp_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
@@ -75,17 +78,19 @@ private:
  
 		struct ibv_mr peer_mr_items;
 		struct ibv_mr peer_mr_orders;
+		struct ibv_mr peer_mr_order_line;
 		struct ibv_mr peer_mr_cc_xacts;
 		struct ibv_mr peer_mr_timestamp;
 		struct ibv_mr peer_mr_lock_items;
 		
-		struct Message	*recv_msg;								// the memory region for the receiving message
-		ItemVersion		*local_items_region;
-		OrdersVersion	*local_orders_region;
-		CCXactsVersion	*local_cc_xacts_region;
-		TimestampOracle	*local_read_timestamp_region;		
-		TimestampOracle	*local_commit_timestamp_region;
-		uint64_t		*local_lock_items_region;
+		struct Message		*recv_msg;						// the memory region for the receiving message
+		ItemVersion			*local_items_region;
+		OrdersVersion		*local_orders_region;
+		OrderLineVersion	*local_order_line_region;
+		CCXactsVersion		*local_cc_xacts_region;
+		TimestampOracle		*local_read_timestamp_region;		
+		TimestampOracle		*local_commit_timestamp_region;
+		uint64_t			*local_lock_items_region;
 	};
 
 

@@ -23,14 +23,15 @@
 using namespace std;
 
 
-ItemVersion* Server::items_region = new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
-OrdersVersion *Server::orders_region = new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
-CCXactsVersion *Server::cc_xacts_region = new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
-TimestampOracle *Server::timestamp_oracle_region = new TimestampOracle[1];
-uint64_t *Server::lock_items_region = new uint64_t[MAX_ITEM_CNT];
+ItemVersion*		Server::items_region			= new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
+OrdersVersion*		Server::orders_region			= new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
+OrderLineVersion*	Server::order_line_region		= new OrderLineVersion[ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS];
+CCXactsVersion*		Server::cc_xacts_region			= new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
+TimestampOracle*	Server::timestamp_region		= new TimestampOracle[1];
+uint64_t*			Server::lock_items_region		= new uint64_t[MAX_ITEM_CNT];
 
-int* Server::last_orders_cnt = new int[1];
-int* Server::last_cc_xacts_cnt = new int[1]; 
+int* Server::last_orders_cnt	= new int[1];
+int* Server::last_cc_xacts_cnt	= new int[1]; 
 
 int Server::server_sockfd = -1;
 
@@ -91,28 +92,31 @@ int Server::build_connection(Context *ctx)
 int Server::register_memory(Context *ctx)
 {
 	int mr_flags = 0;
-	int items_size;
-	int orders_size;
-	int cc_xacts_size;
-	int ts_size;
-	int lock_items_size;
+	int i_s;
+	int o_s;
+	int ol_s;
+	int cc_s;
+	int ts_s;
+	int lock_item_s;
 	
 	ctx->send_msg = new Message[1];
 
-	items_size		= MAX_ITEM_CNT * MAX_ITEM_VERSIONS * sizeof(ItemVersion);
-	orders_size		= MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS * sizeof(OrdersVersion);
-	cc_xacts_size	= MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS * sizeof(CCXactsVersion);
-	ts_size			= sizeof(TimestampOracle);
-	lock_items_size	= MAX_ITEM_CNT * sizeof(uint64_t);
+	i_s			= MAX_ITEM_CNT * MAX_ITEM_VERSIONS * sizeof(ItemVersion);
+	o_s			= MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS * sizeof(OrdersVersion);
+	ol_s		= ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS * sizeof(OrderLineVersion);
+	cc_s		= MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS * sizeof(CCXactsVersion);
+	ts_s		= sizeof(TimestampOracle);
+	lock_item_s	= MAX_ITEM_CNT * sizeof(uint64_t);
 	
 	mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 	
-	TEST_Z(ctx->send_mr				= ibv_reg_mr(ctx->pd, ctx->send_msg, sizeof(struct Message), mr_flags));
-	TEST_Z(ctx->mr_items			= ibv_reg_mr(ctx->pd, items_region, items_size, mr_flags));
-	TEST_Z(ctx->mr_orders			= ibv_reg_mr(ctx->pd, orders_region, orders_size, mr_flags));
-	TEST_Z(ctx->mr_cc_xacts			= ibv_reg_mr(ctx->pd, cc_xacts_region, cc_xacts_size, mr_flags));
-	TEST_Z(ctx->mr_timestamp_oracle	= ibv_reg_mr(ctx->pd, timestamp_oracle_region, ts_size, mr_flags));
-	TEST_Z(ctx->mr_lock_items		= ibv_reg_mr(ctx->pd, lock_items_region, lock_items_size, mr_flags));
+	TEST_Z(ctx->send_mr			= ibv_reg_mr(ctx->pd, ctx->send_msg, sizeof(struct Message), mr_flags));
+	TEST_Z(ctx->mr_items		= ibv_reg_mr(ctx->pd, items_region, i_s, mr_flags));
+	TEST_Z(ctx->mr_orders		= ibv_reg_mr(ctx->pd, orders_region, o_s, mr_flags));
+	TEST_Z(ctx->mr_order_line	= ibv_reg_mr(ctx->pd, order_line_region, ol_s, mr_flags));
+	TEST_Z(ctx->mr_cc_xacts		= ibv_reg_mr(ctx->pd, cc_xacts_region, cc_s, mr_flags));
+	TEST_Z(ctx->mr_timestamp	= ibv_reg_mr(ctx->pd, timestamp_region, ts_s, mr_flags));
+	TEST_Z(ctx->mr_lock_items	= ibv_reg_mr(ctx->pd, lock_items_region, lock_item_s, mr_flags));
 	
 	return 0;
 }
@@ -135,11 +139,12 @@ void* Server::handle_client(void *param)
 	TEST_NZ (connect_qp (&ctx));
 	
 	// setup server buffer with read message
-	memcpy(&(ctx.send_msg->mr_items),				ctx.mr_items,				sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_orders),				ctx.mr_orders,				sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_cc_xacts),			ctx.mr_cc_xacts,			sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_timestamp_oracle),	ctx.mr_timestamp_oracle,	sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_lock_items),			ctx.mr_lock_items,			sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_items),		ctx.mr_items,		sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_orders),		ctx.mr_orders,		sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_order_line),	ctx.mr_order_line,	sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_cc_xacts),	ctx.mr_cc_xacts,	sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_timestamp),	ctx.mr_timestamp,	sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_lock_items),	ctx.mr_lock_items,	sizeof(struct ibv_mr));
 	
 	// send memory locations using SEND 
 	TEST_NZ (RDMACommon::post_SEND (ctx.qp, ctx.send_mr, (uintptr_t)ctx.send_msg, sizeof(struct Message)));
@@ -151,7 +156,7 @@ void* Server::handle_client(void *param)
 	
 	/* Sync so server will know that client is done mucking with its memory */
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-	cout << "final value of the timestamp buffer " << Server::timestamp_oracle_region[0].timestamp << endl;
+	cout << "final value of the timestamp buffer " << Server::timestamp_region[0].timestamp << endl;
 	cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
 	
 	TEST_NZ (destroy_context(&ctx));
@@ -214,11 +219,14 @@ int Server::destroy_context (struct Context *ctx)
 	if (ctx->mr_orders)
 		TEST_NZ (ibv_dereg_mr (ctx->mr_orders));
 	
+	if (ctx->mr_order_line)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_order_line));
+	
 	if (ctx->mr_cc_xacts)
 		TEST_NZ (ibv_dereg_mr (ctx->mr_cc_xacts));
 	
-	if (ctx->mr_timestamp_oracle)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_timestamp_oracle));
+	if (ctx->mr_timestamp)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_timestamp));
 	
 	if (ctx->mr_lock_items)
 		TEST_NZ (ibv_dereg_mr (ctx->mr_lock_items));
@@ -243,8 +251,9 @@ int Server::destroy_resources ()
 {
 	delete[](Server::items_region);
 	delete[](Server::orders_region);
+	delete[](Server::order_line_region);
 	delete[](Server::cc_xacts_region);
-	delete[](Server::timestamp_oracle_region);
+	delete[](Server::timestamp_region);
 	delete[](Server::lock_items_region);
 	
 	close(Server::server_sockfd);	// close the socket
@@ -253,8 +262,8 @@ int Server::destroy_resources ()
 
 int Server::initialize_data_structures(){
 	
-	Server::timestamp_oracle_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
-	DEBUG_COUT("Timestamp set to " << Server::timestamp_oracle_region[0].timestamp);
+	Server::timestamp_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
+	DEBUG_COUT("Timestamp set to " << Server::timestamp_region[0].timestamp);
 
 	TEST_NZ(load_tables_from_files());
 	DEBUG_COUT("tables loaded successfully");
@@ -350,7 +359,7 @@ int Server::start_server ()
 {	
 	TEST_NZ(initialize_data_structures());
 	
-	DEBUG_COUT("waiting for " <<  CLIENTS_CNT <<  " client(s) on port " << TCP_PORT << " for TCP connection!");
+	DEBUG_COUT("waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!");
 	
 	Server::server_sockfd = -1;
 	struct sockaddr_in serv_addr, cli_addr;

@@ -87,38 +87,40 @@ int Client::build_connection(Context *ctx)
 int Client::register_memory(Context *ctx)
 {
 	int mr_flags = 0;
-	int items_size;
-	int orders_size;
-	int cc_xacts_size;
-	int ts_size;
-	int lock_size;
+	int i_s;
+	int o_s;
+	int ol_s;
+	int cc_s;
+	int ts_s;
+	int lock_s;
 	
 	ctx->recv_msg = new Message[1];
 	
 	ctx->local_items_region				= new ItemVersion[FETCH_BLOCK_SIZE];
 	ctx->local_orders_region			= new OrdersVersion[1];
+	ctx->local_order_line_region		= new OrderLineVersion[ORDERLINE_PER_ORDER];
 	ctx->local_cc_xacts_region			= new CCXactsVersion[1];
 	ctx->local_read_timestamp_region	= new TimestampOracle[1];	
 	ctx->local_commit_timestamp_region	= new TimestampOracle[1];	
 	ctx->local_lock_items_region		= new uint64_t[1];	
 	
-	items_size		= FETCH_BLOCK_SIZE * sizeof(ItemVersion);
-	orders_size		= sizeof(OrdersVersion);
-	cc_xacts_size	= sizeof(CCXactsVersion);
-	ts_size			= sizeof(TimestampOracle);
-	lock_size		= sizeof(uint64_t);
+	i_s		= FETCH_BLOCK_SIZE * sizeof(ItemVersion);
+	o_s		= sizeof(OrdersVersion);
+	ol_s	= ORDERLINE_PER_ORDER * sizeof(OrderLineVersion);
+	cc_s	= sizeof(CCXactsVersion);
+	ts_s	= sizeof(TimestampOracle);
+	lock_s	= sizeof(uint64_t);
 	
 	mr_flags = IBV_ACCESS_LOCAL_WRITE;
-	// mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
-	
 	
 	TEST_Z(ctx->recv_mr						= ibv_reg_mr(ctx->pd, ctx->recv_msg, sizeof(struct Message), mr_flags));
-	TEST_Z(ctx->local_items_mr				= ibv_reg_mr(ctx->pd, ctx->local_items_region, items_size, mr_flags));
-	TEST_Z(ctx->local_orders_mr				= ibv_reg_mr(ctx->pd, ctx->local_orders_region, orders_size, mr_flags));
-	TEST_Z(ctx->local_cc_xacts_mr			= ibv_reg_mr(ctx->pd, ctx->local_cc_xacts_region, cc_xacts_size, mr_flags));
-	TEST_Z(ctx->local_read_timestamp_mr		= ibv_reg_mr(ctx->pd, ctx->local_read_timestamp_region, ts_size, mr_flags));
-	TEST_Z(ctx->local_commit_timestamp_mr	= ibv_reg_mr(ctx->pd, ctx->local_commit_timestamp_region, ts_size, mr_flags));
-	TEST_Z(ctx->local_lock_items_mr			= ibv_reg_mr(ctx->pd, ctx->local_lock_items_region, lock_size, mr_flags));
+	TEST_Z(ctx->local_items_mr				= ibv_reg_mr(ctx->pd, ctx->local_items_region, i_s, mr_flags));
+	TEST_Z(ctx->local_orders_mr				= ibv_reg_mr(ctx->pd, ctx->local_orders_region, o_s, mr_flags));
+	TEST_Z(ctx->local_order_line_mr			= ibv_reg_mr(ctx->pd, ctx->local_order_line_region, ol_s, mr_flags));
+	TEST_Z(ctx->local_cc_xacts_mr			= ibv_reg_mr(ctx->pd, ctx->local_cc_xacts_region, cc_s, mr_flags));
+	TEST_Z(ctx->local_read_timestamp_mr		= ibv_reg_mr(ctx->pd, ctx->local_read_timestamp_region, ts_s, mr_flags));
+	TEST_Z(ctx->local_commit_timestamp_mr	= ibv_reg_mr(ctx->pd, ctx->local_commit_timestamp_region, ts_s, mr_flags));
+	TEST_Z(ctx->local_lock_items_mr			= ibv_reg_mr(ctx->pd, ctx->local_lock_items_region, lock_s, mr_flags));
 	
 	return 0;
 }
@@ -178,6 +180,9 @@ int Client::destroy_context (struct Context *ctx)
 	if (ctx->local_orders_mr)
 		TEST_NZ (ibv_dereg_mr (ctx->local_orders_mr));
 	
+	if (ctx->local_order_line_mr)
+		TEST_NZ (ibv_dereg_mr (ctx->local_order_line_mr));
+	
 	if (ctx->local_cc_xacts_mr)
 		TEST_NZ (ibv_dereg_mr (ctx->local_cc_xacts_mr));
 	
@@ -194,6 +199,7 @@ int Client::destroy_context (struct Context *ctx)
 	delete[](ctx->recv_msg);
 	delete[](ctx->local_items_region);
 	delete[](ctx->local_orders_region);
+	delete[](ctx->local_order_line_region);
 	delete[](ctx->local_cc_xacts_region);
 	delete[](ctx->local_read_timestamp_region);
 	delete[](ctx->local_commit_timestamp_region);
@@ -252,6 +258,7 @@ int Client::start_transaction(Context *ctx)
 	uint64_t expected_lock, new_lock;
 	int abort_cnt = 0;
 	struct timespec firstRequestTime, lastRequestTime; // for calculating TPMS
+	int i; // for for-loop
 	
 	
 	ctx->transaction_statement_number = 0;
@@ -381,21 +388,44 @@ int Client::start_transaction(Context *ctx)
 				//	Add a new record to table ORDERS
 				ctx->local_orders_region->write_timestamp	= ctx->local_commit_timestamp_region[0].timestamp;
 				ctx->local_orders_region->orders.O_ID		= ctx->local_commit_timestamp_region[0].timestamp;
-				ctx->local_orders_region->orders.O_I_ID	= item_id;
+				//ctx->local_orders_region->orders.O_I_ID	= item_id;
 	
 				int order_offset = ((ctx->local_orders_region->orders.O_ID - 1) * sizeof(OrdersVersion));
-				OrdersVersion *orderes_lookup_address =  (OrdersVersion *)(order_offset + (uint64_t)ctx->peer_mr_orders.addr);
+				OrdersVersion *orders_lookup_address =  (OrdersVersion *)(order_offset + (uint64_t)ctx->peer_mr_orders.addr);
 			
 				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 				ctx->qp,
 				ctx->local_orders_mr,
 				(uint64_t)ctx->local_orders_region,
 				&(ctx->peer_mr_orders),
-				(uint64_t)orderes_lookup_address,
+				(uint64_t)orders_lookup_address,
 				(uint32_t)sizeof(OrdersVersion),
 				false));
 				DEBUG_COUT ("Step 5: Successfully added a new record to table ORDERS (unsignaled)");
+				
+				
+				// ************************************************
+				//	Add new record(s) to table ORDERLINE
+				for (i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					ctx->local_order_line_region[i].write_timestamp		= ctx->local_commit_timestamp_region[0].timestamp;
+					ctx->local_order_line_region[i].order_line.OL_ID	= (ORDERLINE_PER_ORDER * ctx->local_commit_timestamp_region[0].timestamp) + i;
+					ctx->local_order_line_region[i].order_line.OL_O_ID	= ctx->local_orders_region->orders.O_ID;
+					ctx->local_order_line_region[i].order_line.OL_I_ID	= item_id;
+				}
+				int ol_offset = ((ctx->local_order_line_region->order_line.OL_ID - 1) * sizeof(OrderLineVersion));
+				OrderLineVersion *ol_lookup_address =  (OrderLineVersion *)(ol_offset + (uint64_t)ctx->peer_mr_order_line.addr);
 			
+				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+				ctx->qp,
+				ctx->local_order_line_mr,
+				(uint64_t)ctx->local_order_line_region,
+				&(ctx->peer_mr_order_line),
+				(uint64_t)ol_lookup_address,
+				(uint32_t)ORDERLINE_PER_ORDER * sizeof(OrderLineVersion),
+				false));
+				DEBUG_COUT ("Step 6: Successfully added new record(s) to table ORDERLINE (unsignaled)");
+		
 			
 				// ************************************************
 				//	Adding a new record to CC_XACTS table
@@ -413,7 +443,7 @@ int Client::start_transaction(Context *ctx)
 				(uint64_t)cc_lookup_address,
 				(uint32_t)sizeof(CCXactsVersion),
 				false));
-				DEBUG_COUT ("Step 6: Successfully added a new record to table CC_XACTS (unsignaled)");
+				DEBUG_COUT ("Step 7: Successfully added a new record to table CC_XACTS (unsignaled)");
 			
 			
 				// ************************************************
@@ -434,7 +464,7 @@ int Client::start_transaction(Context *ctx)
 				(uint64_t)item_lookup_address,
 				(uint32_t)sizeof(ItemVersion),
 				false));
-				DEBUG_COUT ("Step 7: Successfully decremented the stock in table ITEM (unsignaled)");
+				DEBUG_COUT ("Step 8: Successfully decremented the stock in table ITEM (unsignaled)");
 
 
 				// ************************************************
@@ -453,7 +483,7 @@ int Client::start_transaction(Context *ctx)
 				(uint32_t)sizeof(uint64_t),
 				true));
 				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-				DEBUG_COUT ("Step 8: Lock released.");
+				DEBUG_COUT ("Step 9: Lock released.");
 				DEBUG_COUT ("Transaction finished successfully!");
 			}
 			else
@@ -504,11 +534,12 @@ int Client::start_client ()
 	
 	TEST_NZ(RDMACommon::poll_completion(ctx.cq));
 	// after receiving the message from the server, let's store its addresses in the context
-	memcpy(&ctx.peer_mr_items, &ctx.recv_msg->mr_items, sizeof(ctx.peer_mr_items));
-	memcpy(&ctx.peer_mr_orders, &ctx.recv_msg->mr_orders, sizeof(ctx.peer_mr_orders));
-	memcpy(&ctx.peer_mr_cc_xacts, &ctx.recv_msg->mr_cc_xacts, sizeof(ctx.peer_mr_cc_xacts));
-	memcpy(&ctx.peer_mr_timestamp, &ctx.recv_msg->mr_timestamp_oracle, sizeof(ctx.peer_mr_timestamp));
-	memcpy(&ctx.peer_mr_lock_items, &ctx.recv_msg->mr_lock_items, sizeof(ctx.peer_mr_lock_items));
+	memcpy(&ctx.peer_mr_items,		&ctx.recv_msg->mr_items,		sizeof(ctx.peer_mr_items));
+	memcpy(&ctx.peer_mr_orders,		&ctx.recv_msg->mr_orders,		sizeof(ctx.peer_mr_orders));
+	memcpy(&ctx.peer_mr_order_line,	&ctx.recv_msg->mr_order_line,	sizeof(ctx.peer_mr_order_line));
+	memcpy(&ctx.peer_mr_cc_xacts,	&ctx.recv_msg->mr_cc_xacts,		sizeof(ctx.peer_mr_cc_xacts));
+	memcpy(&ctx.peer_mr_timestamp,	&ctx.recv_msg->mr_timestamp,	sizeof(ctx.peer_mr_timestamp));
+	memcpy(&ctx.peer_mr_lock_items,	&ctx.recv_msg->mr_lock_items,	sizeof(ctx.peer_mr_lock_items));
 	
     srand (time(NULL));		// initialize random seed
 	
@@ -519,8 +550,6 @@ int Client::start_client ()
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
 	TEST_NZ(destroy_context(&ctx));
 }
-
-
 
 /******************************************************************************
 * Function: main

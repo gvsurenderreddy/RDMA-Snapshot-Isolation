@@ -1,5 +1,7 @@
 [+] Now, all WRITE posts require completion, fix that.
-[ ] Add code for statistics collection 
+[+] Add code for statistics collection 
+[+] Fix: each order contains multiple lineitem
+[ ] Run the experiments
 [ ] Be professional, make a makefile, god!!
 [+] Rename the project name
 [+] Upload to GitHub
