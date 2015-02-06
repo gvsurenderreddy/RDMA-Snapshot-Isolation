@@ -10,6 +10,11 @@
 
 #include <infiniband/verbs.h>
 
+
+#define RDMA_MAX_WR 1000
+#define RDMA_MAX_SGE 1
+
+
 class RDMACommon {
 public:
 

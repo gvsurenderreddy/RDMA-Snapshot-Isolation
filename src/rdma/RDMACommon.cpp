@@ -162,11 +162,12 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	attr.pd = pd;
 	attr.send_cq = cq;
 	attr.recv_cq = cq;
-	attr.cap.max_send_wr  = 1;
-	attr.cap.max_send_sge = 1;
+	attr.sq_sig_all = 0;	// In every WR, it must decided whether to generate a WC or not
+	attr.cap.max_send_wr  = RDMA_MAX_WR;
+	attr.cap.max_send_sge = RDMA_MAX_SGE;
 	attr.cap.max_inline_data = 0;
-	attr.cap.max_recv_wr  = 1;
-	attr.cap.max_recv_sge = 1;
+	attr.cap.max_recv_wr  = 2 * RDMA_MAX_WR;
+	attr.cap.max_recv_sge = RDMA_MAX_SGE;
 	//attr.max_atomic_arg = pow(2,5);
 	attr.max_atomic_arg = 32;
 	attr.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
@@ -211,10 +212,10 @@ int RDMACommon::modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remot
 	int rc;
 	memset (&attr, 0, sizeof (attr));
 	attr.qp_state = IBV_QPS_RTR;
-	attr.path_mtu = IBV_MTU_256;
+	attr.path_mtu = IBV_MTU_4096;
 	attr.dest_qp_num = remote_qpn;
 	attr.rq_psn = 0;
-	attr.max_dest_rd_atomic = 4;
+	attr.max_dest_rd_atomic = 16;
 	attr.min_rnr_timer = 0x12;
 	attr.ah_attr.is_global = 0;
 	attr.ah_attr.dlid = dlid;
@@ -241,7 +242,7 @@ int RDMACommon::modify_qp_to_rts (struct ibv_qp *qp)
 	attr.retry_cnt = 6;
 	attr.rnr_retry = 0;
 	attr.sq_psn = 0;
-	attr.max_rd_atomic = 4;
+	attr.max_rd_atomic = 16;
 	flags = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT |
 		IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
 	rc = ibv_modify_qp (qp, &attr, flags);

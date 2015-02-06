@@ -75,7 +75,7 @@ int Client::build_connection(Context *ctx)
 	
 	// Create completion channel and completion queue
 	TEST_Z(ctx->comp_channel = ibv_create_comp_channel(ctx->ib_ctx));
-	cq_size = 10;	// the size of the completion queue
+	cq_size = 1000;	// the size of the completion queue
 	TEST_Z(ctx->cq = ibv_create_cq (ctx->ib_ctx, cq_size, NULL, ctx->comp_channel, 0));
 	
 	return 0;
@@ -330,7 +330,7 @@ int Client::start_transaction(Context *ctx)
 		
 
 			// ************************************************
-			// First step, aquiring locks
+			// First step, acquiring locks
 	
 			// lock expected before locking 
 			lock_status		= (uint32_t) 0;
@@ -345,10 +345,8 @@ int Client::start_transaction(Context *ctx)
 			// and the actual content of the lock (before being swapped) will be stored in the following variable
 			memset(ctx->local_lock_items_region, 0, sizeof(uint64_t));
 			
-			
 			int lock_offset = (item_id) * sizeof(uint64_t);
 			uint64_t *lock_lookup_address =  (uint64_t *)(lock_offset + ((uint64_t)ctx->peer_mr_lock_items.addr));
-			
 		
 			TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(ctx->qp,
 			ctx->local_lock_items_mr,
@@ -388,10 +386,8 @@ int Client::start_transaction(Context *ctx)
 				&(ctx->peer_mr_orders),
 				(uint64_t)orderes_lookup_address,
 				(uint32_t)sizeof(OrdersVersion),
-				true));
-		
-				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-				DEBUG_COUT ("Step 5: Successfully added a new record to table ORDERS");
+				false));
+				DEBUG_COUT ("Step 5: Successfully added a new record to table ORDERS (unsignaled)");
 			
 			
 				// ************************************************
@@ -409,10 +405,8 @@ int Client::start_transaction(Context *ctx)
 				&(ctx->peer_mr_cc_xacts),
 				(uint64_t)cc_lookup_address,
 				(uint32_t)sizeof(CCXactsVersion),
-				true));
-	
-				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-				DEBUG_COUT ("Step 6: Successfully added a new record to table CC_XACTS");
+				false));
+				DEBUG_COUT ("Step 6: Successfully added a new record to table CC_XACTS (unsignaled)");
 			
 			
 				// ************************************************
@@ -432,10 +426,8 @@ int Client::start_transaction(Context *ctx)
 				&(ctx->peer_mr_items),
 				(uint64_t)item_lookup_address,
 				(uint32_t)sizeof(ItemVersion),
-				true));
-			
-				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-				DEBUG_COUT ("Step 7: Successfully decremented the stock in table ITEM");
+				false));
+				DEBUG_COUT ("Step 7: Successfully decremented the stock in table ITEM (unsignaled)");
 
 
 				// ************************************************
@@ -453,7 +445,6 @@ int Client::start_transaction(Context *ctx)
 				(uint64_t)lock_lookup_address,
 				(uint32_t)sizeof(uint64_t),
 				true));
-	
 				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
 				DEBUG_COUT ("Step 8: Lock released.");
 				DEBUG_COUT ("Transaction finished successfully!");
@@ -466,7 +457,6 @@ int Client::start_transaction(Context *ctx)
 				DEBUG_COUT ("...but was looking for version " << ctx->local_items_region[found_version_index].write_timestamp);
 				abort_cnt++;
 				continue;
-				//break;
 			}
 		}
 		else{
@@ -475,8 +465,10 @@ int Client::start_transaction(Context *ctx)
 			return -1;
 		}
 	}
-	DEBUG_COUT ("Client performed " << ctx->transaction_statement_number << " transaction(s) successfully!");
-	cout << "Abort cnt: " << abort_cnt << endl;
+	
+	int committed_cnt = TRANSACTION_STATEMENT_CNT - abort_cnt;
+	double success_rate = (double)committed_cnt /  TRANSACTION_STATEMENT_CNT;
+	cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << endl;
 	
 	return 0;
 }
