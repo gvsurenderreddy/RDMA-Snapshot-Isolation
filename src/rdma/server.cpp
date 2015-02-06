@@ -23,10 +23,12 @@
 using namespace std;
 
 
-ItemVersion* Server::rdma_region_items = new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
-OrdersVersion *Server::rdma_region_orders = new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
-CCXactsVersion *Server::rdma_region_cc_xacts = new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
-TimestampOracle *Server::rdma_region_timestamp_oracle = new TimestampOracle[1];
+ItemVersion* Server::items_region = new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
+OrdersVersion *Server::orders_region = new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
+CCXactsVersion *Server::cc_xacts_region = new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
+TimestampOracle *Server::timestamp_oracle_region = new TimestampOracle[1];
+uint64_t *Server::lock_items_region = new uint64_t[MAX_ITEM_CNT];
+
 int* Server::last_orders_cnt = new int[1];
 int* Server::last_cc_xacts_cnt = new int[1]; 
 
@@ -55,7 +57,7 @@ int Server::build_connection(Context *ctx)
 	// if there isn't any IB device in host
 	TEST_Z(num_devices);
 	
-	DEBUG_COUT ("found " << num_devices << " device(s)");
+	// DEBUG_COUT ("found " << num_devices << " device(s)");
 	
 	// select the first device
 	const char *dev_name = strdup (ibv_get_device_name (dev_list[0]));
@@ -93,6 +95,7 @@ int Server::register_memory(Context *ctx)
 	int orders_size;
 	int cc_xacts_size;
 	int ts_size;
+	int lock_items_size;
 	
 	ctx->send_msg = new Message[1];
 
@@ -100,14 +103,16 @@ int Server::register_memory(Context *ctx)
 	orders_size		= MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS * sizeof(OrdersVersion);
 	cc_xacts_size	= MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS * sizeof(CCXactsVersion);
 	ts_size			= sizeof(TimestampOracle);
+	lock_items_size	= MAX_ITEM_CNT * sizeof(uint64_t);
 	
-	mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_WRITE;
+	mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 	
-	TEST_Z(ctx->send_mr						= ibv_reg_mr(ctx->pd, ctx->send_msg, sizeof(struct Message), mr_flags));
-	TEST_Z(ctx->rdma_mr_items				= ibv_reg_mr(ctx->pd, rdma_region_items, items_size, mr_flags));
-	TEST_Z(ctx->rdma_mr_orders				= ibv_reg_mr(ctx->pd, rdma_region_orders, orders_size, mr_flags));
-	TEST_Z(ctx->rdma_mr_cc_xacts			= ibv_reg_mr(ctx->pd, rdma_region_cc_xacts, cc_xacts_size, mr_flags));
-	TEST_Z(ctx->rdma_mr_timestamp_oracle	= ibv_reg_mr(ctx->pd, rdma_region_timestamp_oracle, ts_size, mr_flags));
+	TEST_Z(ctx->send_mr				= ibv_reg_mr(ctx->pd, ctx->send_msg, sizeof(struct Message), mr_flags));
+	TEST_Z(ctx->mr_items			= ibv_reg_mr(ctx->pd, items_region, items_size, mr_flags));
+	TEST_Z(ctx->mr_orders			= ibv_reg_mr(ctx->pd, orders_region, orders_size, mr_flags));
+	TEST_Z(ctx->mr_cc_xacts			= ibv_reg_mr(ctx->pd, cc_xacts_region, cc_xacts_size, mr_flags));
+	TEST_Z(ctx->mr_timestamp_oracle	= ibv_reg_mr(ctx->pd, timestamp_oracle_region, ts_size, mr_flags));
+	TEST_Z(ctx->mr_lock_items		= ibv_reg_mr(ctx->pd, lock_items_region, lock_items_size, mr_flags));
 	
 	return 0;
 }
@@ -130,60 +135,24 @@ void* Server::handle_client(void *param)
 	TEST_NZ (connect_qp (&ctx));
 	
 	// setup server buffer with read message
-	memcpy(&(ctx.send_msg->rdma_mr_items), ctx.rdma_mr_items, sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->rdma_mr_orders), ctx.rdma_mr_orders, sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->rdma_mr_cc_xacts), ctx.rdma_mr_cc_xacts, sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->rdma_mr_timestamp_oracle), ctx.rdma_mr_timestamp_oracle, sizeof(struct ibv_mr));
-	
-	
+	memcpy(&(ctx.send_msg->mr_items),				ctx.mr_items,				sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_orders),				ctx.mr_orders,				sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_cc_xacts),			ctx.mr_cc_xacts,			sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_timestamp_oracle),	ctx.mr_timestamp_oracle,	sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg->mr_lock_items),			ctx.mr_lock_items,			sizeof(struct ibv_mr));
 	
 	// send memory locations using SEND 
 	TEST_NZ (RDMACommon::post_SEND (ctx.qp, ctx.send_mr, (uintptr_t)ctx.send_msg, sizeof(struct Message)));
+	TEST_NZ (RDMACommon::poll_completion(ctx.cq));
 	
 	/*
-	if (poll_completion (&ctx))
-	{
-		fprintf (stderr, "poll completion failed\n");
-		return -1;
-	}
-	*/
-	
-	/*
-	struct ibv_wc wc;
-	int ne;
-	do {
-		wc.status = IBV_WC_SUCCESS;
-		ne = ibv_poll_cq(ctx.cq, 1, &wc);
-		if(wc.status != IBV_WC_SUCCESS) {
-			cerr << "RDMA completion event in CQ with error" << endl;
-			return NULL;
-		}
-	}while(ne==0);
-
-	if(ne<0) {
-		cerr << "RDMA polling from CQ failed!" << endl;
-		return NULL;
-	}
-	cout << "WQ polled from CQ successfully" << endl;
-	*/
-	
-			
-	/*
-	// Sync so we are sure server side has data ready before client tries to read it
-	if (sock_sync_data (ctx.client_sockfd, 1, "R", &temp_char) != 0)	// just send a dummy char back and forth
-	{
-		fprintf (stderr, "sync error before RDMA ops\n");
-		destroy_context(&ctx);
-		return NULL;
-	}
-	*/
-	
-	/*
-		Server waits here for the client to muck with its memory
+		Server waits for the client to muck with its memory
 	*/
 	
 	/* Sync so server will know that client is done mucking with its memory */
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
+	cout << "final value of the timestamp buffer " << Server::timestamp_oracle_region[0].timestamp << endl;
+	cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
 	
 	TEST_NZ (destroy_context(&ctx));
 	return NULL;
@@ -202,7 +171,7 @@ int Server::connect_qp (struct Context *ctx)
 	local_con_data.lid = htons (ctx->port_attr.lid);
 	
 	memcpy (local_con_data.gid, &my_gid, sizeof my_gid);
-	fprintf (stdout, "\nLocal LID = 0x%x\n", ctx->port_attr.lid);
+	// fprintf (stdout, "\nLocal LID = 0x%x\n", ctx->port_attr.lid);
 	
 	TEST_NZ (sock_sync_data(ctx->client_sockfd, sizeof (struct CommunicationExchangeData), (char *) &local_con_data, (char *) &tmp_con_data));
 	
@@ -212,8 +181,8 @@ int Server::connect_qp (struct Context *ctx)
 	
 	// save the remote side attributes, we will need it for the post SR
 	ctx->remote_props = remote_con_data;
-	fprintf (stdout, "Remote QP number = 0x%x\n", remote_con_data.qp_num);
-	fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
+	// fprintf (stdout, "Remote QP number = 0x%x\n", remote_con_data.qp_num);
+	// fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
 	
 	
 	// modify the QP to init
@@ -239,17 +208,20 @@ int Server::destroy_context (struct Context *ctx)
 	if (ctx->send_mr)
 		TEST_NZ (ibv_dereg_mr (ctx->send_mr));
 	
-	if (ctx->rdma_mr_items)
-		TEST_NZ (ibv_dereg_mr (ctx->rdma_mr_items));
+	if (ctx->mr_items)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_items));
 	
-	if (ctx->rdma_mr_orders)
-		TEST_NZ (ibv_dereg_mr (ctx->rdma_mr_orders));
+	if (ctx->mr_orders)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_orders));
 	
-	if (ctx->rdma_mr_cc_xacts)
-		TEST_NZ (ibv_dereg_mr (ctx->rdma_mr_cc_xacts));
+	if (ctx->mr_cc_xacts)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_cc_xacts));
 	
-	if (ctx->rdma_mr_timestamp_oracle)
-		TEST_NZ (ibv_dereg_mr (ctx->rdma_mr_timestamp_oracle));
+	if (ctx->mr_timestamp_oracle)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_timestamp_oracle));
+	
+	if (ctx->mr_lock_items)
+		TEST_NZ (ibv_dereg_mr (ctx->mr_lock_items));
 	
 	delete[](ctx->send_msg);
 	
@@ -269,10 +241,11 @@ int Server::destroy_context (struct Context *ctx)
 
 int Server::destroy_resources ()
 {
-	delete[](Server::rdma_region_items);
-	delete[](Server::rdma_region_orders);
-	delete[](Server::rdma_region_cc_xacts);
-	delete[](Server::rdma_region_timestamp_oracle);
+	delete[](Server::items_region);
+	delete[](Server::orders_region);
+	delete[](Server::cc_xacts_region);
+	delete[](Server::timestamp_oracle_region);
+	delete[](Server::lock_items_region);
 	
 	close(Server::server_sockfd);	// close the socket
 	return 0;
@@ -280,12 +253,23 @@ int Server::destroy_resources ()
 
 int Server::initialize_data_structures(){
 	
-	Server::rdma_region_timestamp_oracle[0].timestamp = 1;	// the timestamp counter is initially set to 1
-	
-	
+	Server::timestamp_oracle_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
+	DEBUG_COUT("Timestamp set to " << Server::timestamp_oracle_region[0].timestamp);
+
 	TEST_NZ(load_tables_from_files());
 	DEBUG_COUT("tables loaded successfully");
 	
+	int i;
+	uint32_t stat;
+	uint32_t version;
+	for (i=0; i < MAX_ITEM_CNT; i++)
+	{
+		stat = (uint32_t)0;	// 0 for free, 1 for locked
+		version = (uint32_t)0;	// the first version of each item is 0
+		lock_items_region[i] = Lock::set_lock(stat, version);
+	}
+	DEBUG_COUT("All locks set free");
+		
 	Server::last_orders_cnt[0] = 0;
 	Server::last_cc_xacts_cnt[0] = 0;
 	return 0;
@@ -311,30 +295,30 @@ int Server::load_tables_from_files() {
 				// we don't want to read more data from file.
 				break;
 			
-			Server::rdma_region_items[i].item.I_ID = atoi(strtok(line,  "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_TITLE,strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_PUB_DATE, strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_PUBLISHER, strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_SUBJECT, strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_DESC, strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_RELATED1 = atoi(strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_RELATED2 = atoi(strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_RELATED3 = atoi(strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_RELATED4 = atoi(strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_RELATED5 = atoi(strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_THUMBNAIL, strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_IMAGE, strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_SRP = atof(strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_COST = atof(strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_AVAIL, strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_STOCK = atoi(strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_ISBN, strtok(NULL, "\t"));
-			Server::rdma_region_items[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_BACKING, strtok(NULL, "\t"));
-			strcpy(Server::rdma_region_items[i].item.I_DIMENSION, strtok(NULL, "\t"));
+			Server::items_region[i].item.I_ID = atoi(strtok(line,  "\t"));
+			strcpy(Server::items_region[i].item.I_TITLE,strtok(NULL, "\t"));
+			Server::items_region[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_PUB_DATE, strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_PUBLISHER, strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_SUBJECT, strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_DESC, strtok(NULL, "\t"));
+			Server::items_region[i].item.I_RELATED1 = atoi(strtok(NULL, "\t"));
+			Server::items_region[i].item.I_RELATED2 = atoi(strtok(NULL, "\t"));
+			Server::items_region[i].item.I_RELATED3 = atoi(strtok(NULL, "\t"));
+			Server::items_region[i].item.I_RELATED4 = atoi(strtok(NULL, "\t"));
+			Server::items_region[i].item.I_RELATED5 = atoi(strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_THUMBNAIL, strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_IMAGE, strtok(NULL, "\t"));
+			Server::items_region[i].item.I_SRP = atof(strtok(NULL, "\t"));
+			Server::items_region[i].item.I_COST = atof(strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_AVAIL, strtok(NULL, "\t"));
+			Server::items_region[i].item.I_STOCK = atoi(strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_ISBN, strtok(NULL, "\t"));
+			Server::items_region[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_BACKING, strtok(NULL, "\t"));
+			strcpy(Server::items_region[i].item.I_DIMENSION, strtok(NULL, "\t"));
 			
-			Server::rdma_region_items[i].write_timestamp = 1;	
+			Server::items_region[i].write_timestamp = 0;	
 			i++;
 		}
 
@@ -402,7 +386,7 @@ int Server::start_server ()
 			cerr << "ERROR on accept" << endl;
 			return -1;
 		}
-		DEBUG_COUT("received client number" << i);
+		DEBUG_COUT("received client #" << i);
 		pthread_create(&master_threads[i], NULL, Server::handle_client, &client_socks[i]);
 		i++;
 	}

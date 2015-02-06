@@ -30,7 +30,7 @@ static const int IB_PORT		= 1;
 static const char ITEM_FILENAME[50] = "./data/small_item.data";
 
 
-static const int MAX_ITEM_CNT		= 10000;		// Number of Items
+static const int MAX_ITEM_CNT		= 100;		// Number of Items
 static const int MAX_ORDERS_CNT		= 100100;	// Number of Orders
 static const int MAX_CCXACTS_CNT	= 100100;	// Number of CCXacts
 
@@ -46,14 +46,12 @@ static const int FETCH_BLOCK_SIZE = 1;		// Number of items fetched at each RDMA 
 
 int TRANSACTIONS_PER_CLIENT 			= 1;
 
-int TRANSACTION_STATEMENT_CNT 			= 10000;
+int TRANSACTION_STATEMENT_CNT 			= 2000;
 
 // This parameter sets how many of the first runs should be excluded from the reported statistics
 int NUM_OF_EXCLUDING_THE_FIRST_RUNS 	= 5000;	
 
-static const int CLIENTS_CNT 			= 1;
-
-static const bool ON_SCREEN_LOGGING 	= false;
+static const int CLIENTS_CNT 			= 2;
 
 static const double WRITE_RATIO			= -1;
 

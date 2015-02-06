@@ -46,6 +46,53 @@ public:
 	******************************************************************************/
 	static int post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length);
 	
+	
+	/******************************************************************************
+	* Prepares and executes an RDMA READ/WRITE operation, depending on the input opcode 
+	*
+	* @param	conn			the connection on which 
+	* @param	opcode			the opcode used for the operation (IBV_WR_RDMA_WRITE or IBV_WR_RDMA_READ)
+	* @param	local_buffer	the address of the local buffer to read from/write to
+	* @param	remote_buffer	the address of the remote buffer to write to/read from
+	* @param	lcoal_mr		the pointer to the local ibv_mr
+	* @param	peer_mr			the pointer to the remote ibv_mr
+	* @param	length			the length of the reading/writing
+	* @return	0 or 1			In case of success 0, and in case of failure -1
+	******************************************************************************/
+	static int post_RDMA_READ_WRT(enum ibv_wr_opcode opcode, struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
+	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled);
+	
+	
+	/******************************************************************************
+	* Prepares and executes an RDMA Compare and Swap operation 
+	*
+	* @param	conn			the connection on which 
+	* @param	local_buffer	the address of the local buffer to read from/write to
+	* @param	remote_buffer	the address of the remote buffer to write to/read from
+	* @param	length			the length of the reading/writing
+	* @param	old_value		the value at the remote buffer to be compared with
+	* @param	new_value		the value to be set at the remote buffer
+	* @return	0 or 1			In case of success 0, and in case of failure -1
+	******************************************************************************/
+	static int post_RDMA_CMP_SWAP(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
+	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value);
+		
+		
+	/******************************************************************************
+	* Prepares and executes an RDMA Fetch and Add operation 
+	*
+	* @param	conn			the connection on which 
+	* @param	local_buffer	the address of the local buffer to read from/write to
+	* @param	remote_buffer	the address of the remote buffer to write to/read from
+	* @param	length			the length of the reading/writing
+	* @param	lcoal_mr		the pointer to the local ibv_mr
+	* @param	peer_mr			the pointer to the remote ibv_mr
+	* @return	0 or 1			In case of success 0, and in case of failure -1
+	******************************************************************************/
+	static int send_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, 
+	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint64_t addition, uint32_t length);
+	
+	
 	static int create_queuepair(struct ibv_context *context, struct ibv_pd *pd, struct ibv_cq *cq, struct ibv_qp **qp);
 	
 	

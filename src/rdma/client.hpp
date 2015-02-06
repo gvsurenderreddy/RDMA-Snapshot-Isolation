@@ -16,6 +16,8 @@
 #include "../tpcw-tables/orders_version.hpp"
 #include "../tpcw-tables/cc_xacts_version.hpp"
 #include "../timestamp/timestamp_oracle.hpp"
+#include "../timestamp/lock.hpp"
+
 
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
@@ -36,10 +38,11 @@ private:
 		// We’ll use this to pass RDMA memory region (MR) keys between nodes and to signal that we’re done.
 		// Note that we don't use this structure for RDMA operations
 	
-		struct ibv_mr rdma_mr_items;
-		struct ibv_mr rdma_mr_orders;
-		struct ibv_mr rdma_mr_cc_xacts;
-		struct ibv_mr rdma_mr_timestamp_oracle; 
+		struct ibv_mr mr_items;
+		struct ibv_mr mr_orders;
+		struct ibv_mr mr_cc_xacts;
+		struct ibv_mr mr_timestamp_oracle;
+		struct ibv_mr mr_lock_items; 
 	};
 
 	/* structure of Context */
@@ -56,52 +59,34 @@ private:
 		struct ibv_cq *cq;		/* CQ handle */
 		struct ibv_qp *qp;		/* QP handle */
 	
-	
 		int client_sockfd;			/* TCP socket file descriptor */
 		pthread_t cq_poller_thread;		/* the thread which polls from the completion queue */
 	
-	
 		int fetch_block_num;	// shows which block of the remote region is being read
 		int transaction_statement_number; 
-		int item_id;
 
 		struct ibv_mr *recv_mr;			// infiniband memory handler for the receiving message
-		struct ibv_mr *local_rdma_items_mr;	// infiniband memory handler for the RDMA memory region for items
-		struct ibv_mr *local_rdma_orders_mr;	// infiniband memory handler for the RDMA memory region for orders
-		struct ibv_mr *local_rdma_cc_xacts_mr;	// infiniband memory handler for the RDMA memory region for cc xacts
-		struct ibv_mr *local_rdma_timestamp_oracle_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
+		struct ibv_mr *local_items_mr;	// infiniband memory handler for the RDMA memory region for items
+		struct ibv_mr *local_orders_mr;	// infiniband memory handler for the RDMA memory region for orders
+		struct ibv_mr *local_cc_xacts_mr;	// infiniband memory handler for the RDMA memory region for cc xacts
+		struct ibv_mr *local_read_timestamp_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
+		struct ibv_mr *local_commit_timestamp_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
+		struct ibv_mr *local_lock_items_mr;	// the infiniband memory handler for the RDMA for timestamp oracle
  
 		struct ibv_mr peer_mr_items;
 		struct ibv_mr peer_mr_orders;
 		struct ibv_mr peer_mr_cc_xacts;
-		struct ibv_mr peer_mr_timestamp_oracle;
- 
-		struct Message *recv_msg;	// the memory region for the receiving message
-		ItemVersion *local_rdma_items_region;
-		OrdersVersion *local_rdma_orders_region;
-		CCXactsVersion *local_rdma_cc_xacts_region;
-		TimestampOracle *local_rdma_timestamp_region;	// it will have two elements, one for read timestamp, one for commit timestamp
-	
-		enum {
-			POINTER_READING,
-			DATA_READING
-		} read_state;
-	
-		enum {
-			BEGIN_TRANSACTION,
-			ACQUIRING_READ_TIMESTAMP,
-			ACQUIRING_COMMIT_TIMESTAMP,
-			LOCKING_ITEM,
-			FETCHING_ITEM_POINTER,
-			FETCHING_ITEM_INFORMATION,
-			ADDING_RECORD_TO_ORDERS,
-			ADDING_RECORD_TO_CCXACTS,
-			UPDATING_ITEM_TABLE,
-			UNLOCKING_TABLES,
-			END_TRANSACTION
-		} state;
+		struct ibv_mr peer_mr_timestamp;
+		struct ibv_mr peer_mr_lock_items;
+		
+		struct Message	*recv_msg;								// the memory region for the receiving message
+		ItemVersion		*local_items_region;
+		OrdersVersion	*local_orders_region;
+		CCXactsVersion	*local_cc_xacts_region;
+		TimestampOracle	*local_read_timestamp_region;		
+		TimestampOracle	*local_commit_timestamp_region;
+		uint64_t		*local_lock_items_region;
 	};
-
 
 
 	/******************************************************************************
@@ -118,10 +103,10 @@ private:
 	* This function creates and allocates all necessary system Context. These
 	* are stored in res (the input argument).
 	*****************************************************************************/
-	static int create_context(struct Context *res);
+	static int create_context(struct Context *ctx);
 
-	static int build_connection(Context *res);
-	static int register_memory(Context *res);
+	static int build_connection(Context *ctx);
+	static int register_memory(Context *ctx);
 
 
 	/******************************************************************************
@@ -139,7 +124,7 @@ private:
 	* Description
 	* Connect the QP. Transition the server side to RTR, sender side to RTS
 	******************************************************************************/
-	static int connect_qp (struct Context *res);
+	static int connect_qp (struct Context *ctx);
 
 
 	/******************************************************************************
@@ -159,8 +144,25 @@ private:
 	******************************************************************************/
 	static int destroy_context (struct Context *ctx);
 
-	static void die(const char *reason);
-
+	static void die(const char *reason);	
+	
+	/******************************************************************************
+	* Function: check_if_version_is_in_block
+	*
+	* Input
+	* res pointer to Context structure
+	*
+	* Returns
+	* either -1 or an index greater than or equal to 0.
+	* if cannot find an item which satisfies the version in the buffer return -1
+	* and in case it can find, it returns the index of that item
+	*
+	* Description
+	* Cleanup and deallocate all Context used
+	******************************************************************************/
+	static int check_if_version_is_in_block(int version, ItemVersion *items_region, int size);
+	
+	static int start_transaction(Context *ctx);
 	
 
 public:

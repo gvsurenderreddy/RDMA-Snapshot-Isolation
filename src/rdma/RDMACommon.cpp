@@ -5,69 +5,145 @@
  *	Author: erfanz
  */
 
-
 #include "RDMACommon.hpp"
+#include "../util/utils.hpp"
 #include <iostream>
 #include <cstring>
 using namespace std;
 
-
 int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length)
 {
-	struct ibv_send_wr sr;
+	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
-	struct ibv_send_wr *bad_wr = NULL;
-	int rc;
 
-	/* prepare the scatter/gather entry */
 	memset (&sge, 0, sizeof (sge));
 	sge.addr		= local_buffer;
 	sge.length		= length;
 	sge.lkey		= local_mr->lkey;
-	/* prepare the send work request */
-	memset (&sr, 0, sizeof (sr));
-	sr.next			= NULL;
-	sr.wr_id		= 0;
-	sr.sg_list		= &sge;
-	sr.num_sge		= 1;
-	sr.opcode		= IBV_WR_SEND;
-	sr.send_flags	= IBV_SEND_SIGNALED;
-	
-	/* there is a Receive Request in the responder side, so we won't get any into RNR flow */
-	rc = ibv_post_send (qp, &sr, &bad_wr);
-	if (rc != 0)
-		cerr << "Failed to post Send Request" << endl;
-	else
-		cout << "Send Request was posted" << endl;
-	
-	return rc;
-}
 
-int RDMACommon::post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length)
-{
-	struct ibv_recv_wr wr;
-	struct ibv_sge sge;
-	struct ibv_recv_wr *bad_wr;
-	int rc;
-	/* prepare the scatter/gather entry */
-	memset (&sge, 0, sizeof (sge));
-	sge.addr		= local_buffer;
-	sge.length		= length;
-	sge.lkey		= local_mr->lkey;
-	/* prepare the receive work request */
 	memset (&wr, 0, sizeof (wr));
 	wr.next			= NULL;
 	wr.wr_id		= 0;
 	wr.sg_list		= &sge;
 	wr.num_sge		= 1;
-	/* post the Receive Request to the RQ */
-	rc = ibv_post_recv (qp, &wr, &bad_wr);
-	if (rc != 0)
-		cerr << "Failed to post Receive Request" << endl;
-	else
-		cerr << "Receive Request was posted" << endl;
+	wr.opcode		= IBV_WR_SEND;
+	wr.send_flags	= IBV_SEND_SIGNALED;
 	
-	return rc;
+	if (ibv_post_send(qp, &wr, &bad_wr)) {
+		cerr << "Error, ibv_post_send() failed" << endl;
+		return -1;
+	}	
+	return 0;
+}
+
+int RDMACommon::post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length)
+{
+	struct ibv_recv_wr wr, *bad_wr;
+	struct ibv_sge sge;
+
+	memset (&sge, 0, sizeof (sge));
+	sge.addr		= local_buffer;
+	sge.length		= length;
+	sge.lkey		= local_mr->lkey;
+
+	memset (&wr, 0, sizeof (wr));
+	wr.next			= NULL;
+	wr.wr_id		= 0;
+	wr.sg_list		= &sge;
+	wr.num_sge		= 1;
+	
+	if (ibv_post_recv(qp, &wr, &bad_wr)) {
+		cerr << "Error, ibv_post_recv() failed" << endl;
+		return -1;
+	}	
+	return 0;
+}
+
+int RDMACommon::post_RDMA_READ_WRT(enum ibv_wr_opcode opcode, struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
+struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
+{
+	struct ibv_sge sge;
+	struct ibv_send_wr wr, *bad_wr;
+
+	memset(&sge, 0, sizeof(sge));
+	sge.addr				= local_buffer;
+	sge.length				= length;
+	sge.lkey	  			= local_mr->lkey;
+
+	memset(&wr, 0, sizeof(wr));
+	wr.wr_id      			= 0;
+	wr.sg_list    			= &sge;
+	wr.num_sge    			= 1;
+	wr.opcode				= opcode;
+	wr.wr.rdma.remote_addr	= peer_buffer;
+	wr.wr.rdma.rkey       	= peer_mr->rkey;
+	if (signaled)
+		wr.send_flags 		= IBV_SEND_SIGNALED;
+	else
+		wr.send_flags 		= 0;
+	
+	if (ibv_post_send(qp, &wr, &bad_wr)) {
+		cerr << "Error, ibv_post_send() failed" << endl;
+		return -1;
+	}	
+	return 0;
+}
+
+int RDMACommon::send_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uint64_t local_buffer, 
+struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length)
+{
+	struct ibv_sge sge;
+	struct ibv_send_wr wr, *bad_wr = NULL;
+	
+	memset(&sge, 0, sizeof(sge));
+	sge.addr 		= local_buffer;
+	sge.length 		= length;
+	sge.lkey 		= local_mr->lkey;
+	
+	memset(&wr, 0, sizeof(wr));
+	wr.wr_id					= 0;
+	wr.sg_list 					= &sge;
+	wr.num_sge 					= 1;
+	wr.opcode 					= IBV_WR_ATOMIC_FETCH_AND_ADD;
+	wr.send_flags 				= IBV_SEND_SIGNALED;
+	wr.wr.atomic.remote_addr	= peer_buffer;
+	wr.wr.atomic.rkey        	= peer_mr->rkey;
+	wr.wr.atomic.compare_add	= addition; /* value to be added to the remote address content */
+	
+	if (ibv_post_send(qp, &wr, &bad_wr)) {
+		cerr << "Error, ibv_post_send() failed" << endl;
+		return -1;
+	}	
+	return 0;
+}
+
+int RDMACommon::post_RDMA_CMP_SWAP(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
+struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value)
+{
+	struct ibv_send_wr wr, *bad_wr = NULL;
+	struct ibv_sge sge;
+		
+	memset(&sge, 0, sizeof(sge));
+	sge.addr 		= local_buffer;
+	sge.length 		= length;
+	sge.lkey 		= local_mr->lkey;
+	
+	memset(&wr, 0, sizeof(wr));
+	wr.wr_id					= 0;
+	wr.opcode 					= IBV_WR_ATOMIC_CMP_AND_SWP;
+	wr.sg_list 					= &sge;
+	wr.num_sge 					= 1;
+	wr.send_flags 				= IBV_SEND_SIGNALED;
+	wr.wr.atomic.remote_addr	= peer_buffer;
+	wr.wr.atomic.rkey        	= peer_mr->rkey;
+	wr.wr.atomic.compare_add	= expected_value; /* expected value in remote address */
+	wr.wr.atomic.swap        	= new_value; /* the value that remote address will be assigned to */
+		
+	if (ibv_post_send(qp, &wr, &bad_wr)) {
+		cerr << "Error, ibv_post_send() failed" << endl;
+		return -1;
+	}	
+	return 0;
 }
 
 int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, struct ibv_cq *cq, struct ibv_qp **qp)
@@ -78,7 +154,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	memset(&dev_attr, 0, sizeof(dev_attr));
 	dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
 	if (ibv_exp_query_device(ib_ctx, &dev_attr)) {
-		fprintf(stderr, "ibv_exp_query_device failed\n");
+		cerr << "ibv_exp_query_device failed" << endl;
 		return -1;
 	}
 
@@ -105,15 +181,11 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 		cerr << "failed to create QP" << endl;
 		return -1;
 	}
-	fprintf (stdout, "QP was created, QP number=0x%x\n", (*qp)->qp_num);
-	
-	if ((*qp) == NULL || (*qp) == 0)
-		cout << "queue pair is REALLY empty" << endl;
-	
+	DEBUG_COUT ("QP was created, QP number=0x" << (*qp)->qp_num);
+	//fprintf (stdout, "QP was created, QP number=0x%x\n", (*qp)->qp_num);
 	
 	return 0;
 }
-
 
 int RDMACommon::modify_qp_to_init (int ib_port, struct ibv_qp *qp)
 {
@@ -124,14 +196,13 @@ int RDMACommon::modify_qp_to_init (int ib_port, struct ibv_qp *qp)
 	attr.qp_state = IBV_QPS_INIT;
 	attr.port_num = ib_port;
 	attr.pkey_index = 0;
-	attr.qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE;
+	attr.qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 	flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
 		cerr << "failed to modify QP state to INIT" << endl;
 	return rc;
 }
-
 
 int RDMACommon::modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid, uint8_t * dgid)
 {
@@ -143,7 +214,7 @@ int RDMACommon::modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remot
 	attr.path_mtu = IBV_MTU_256;
 	attr.dest_qp_num = remote_qpn;
 	attr.rq_psn = 0;
-	attr.max_dest_rd_atomic = 1;
+	attr.max_dest_rd_atomic = 4;
 	attr.min_rnr_timer = 0x12;
 	attr.ah_attr.is_global = 0;
 	attr.ah_attr.dlid = dlid;
@@ -170,7 +241,7 @@ int RDMACommon::modify_qp_to_rts (struct ibv_qp *qp)
 	attr.retry_cnt = 6;
 	attr.rnr_retry = 0;
 	attr.sq_psn = 0;
-	attr.max_rd_atomic = 1;
+	attr.max_rd_atomic = 4;
 	flags = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT |
 		IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
 	rc = ibv_modify_qp (qp, &attr, flags);
@@ -196,6 +267,5 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		cerr << "RDMA polling from CQ failed!" << endl;
 		return -1;
 	}
-	cout << ("WQ polled from CQ successfully") << endl;
 	return 0;
 }

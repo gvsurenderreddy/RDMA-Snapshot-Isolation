@@ -15,22 +15,24 @@
 #include "../tpcw-tables/orders_version.hpp"
 #include "../tpcw-tables/cc_xacts_version.hpp"
 #include "../timestamp/timestamp_oracle.hpp"
+#include "../timestamp/lock.hpp"
+
 
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
 class Server{
 private:
-	static ItemVersion *rdma_region_items;
-	static OrdersVersion *rdma_region_orders;
-	static CCXactsVersion *rdma_region_cc_xacts;
-	static TimestampOracle *rdma_region_timestamp_oracle;
-	static int *last_orders_cnt;
-	static int *last_cc_xacts_cnt; 
+	static ItemVersion		*items_region;
+	static OrdersVersion	*orders_region;
+	static CCXactsVersion	*cc_xacts_region;
+	static TimestampOracle	*timestamp_oracle_region;
+	static uint64_t			*lock_items_region;
 	
-	static int server_sockfd;		// Server's socket file descriptor
+	static int				*last_orders_cnt;
+	static int				*last_cc_xacts_cnt; 
 	
-	
+	static int				server_sockfd;		// Server's socket file descriptor
 
 	/* structure to exchange data which is needed to connect the QPs */
 	struct CommunicationExchangeData
@@ -44,10 +46,11 @@ private:
 
 	struct Message {
 		// We’ll use this to pass RDMA memory region (MR) keys between nodes and to signal that we’re done. Note that we don't use this structure for RDMA operations
-		struct ibv_mr rdma_mr_items;
-		struct ibv_mr rdma_mr_orders;
-		struct ibv_mr rdma_mr_cc_xacts;
-		struct ibv_mr rdma_mr_timestamp_oracle;
+		struct ibv_mr mr_items;
+		struct ibv_mr mr_orders;
+		struct ibv_mr mr_cc_xacts;
+		struct ibv_mr mr_timestamp_oracle;
+		struct ibv_mr mr_lock_items; 
 	};
 
 	struct Context
@@ -67,10 +70,11 @@ private:
 		int connected;
 	
 		struct ibv_mr *send_mr;
-		struct ibv_mr *rdma_mr_items;
-		struct ibv_mr *rdma_mr_orders;
-		struct ibv_mr *rdma_mr_cc_xacts;
-		struct ibv_mr *rdma_mr_timestamp_oracle;
+		struct ibv_mr *mr_items;
+		struct ibv_mr *mr_orders;
+		struct ibv_mr *mr_cc_xacts;
+		struct ibv_mr *mr_timestamp_oracle;
+		struct ibv_mr *mr_lock_items;
 	
 		struct Message *send_msg;
 	};

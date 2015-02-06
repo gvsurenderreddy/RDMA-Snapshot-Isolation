@@ -1,5 +1,6 @@
+[ ] Now, all WRITE posts require completion, fix that.
 [ ] Be professional, make a makefile, god!!
-[ ] Rename the project name
-[ ] Upload to GitHub
+[+] Rename the project name
+[+] Upload to GitHub
 [ ] Make a script folder and put send_... there
 

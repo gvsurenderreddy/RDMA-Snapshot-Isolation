@@ -1,5 +1,5 @@
 #include <iostream>
-#include "cc_xacts.cpp"
+#include "cc_xacts.hpp"
 using namespace std;
 
 class CCXactsVersion {
