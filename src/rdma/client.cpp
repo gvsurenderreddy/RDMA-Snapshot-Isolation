@@ -20,6 +20,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <time.h>	// for struct timespec
+
 
 char* Client::server_name = NULL;
 
@@ -249,9 +251,14 @@ int Client::start_transaction(Context *ctx)
 	uint32_t lock_status, version;
 	uint64_t expected_lock, new_lock;
 	int abort_cnt = 0;
+	struct timespec firstRequestTime, lastRequestTime; // for calculating TPMS
+	
 	
 	ctx->transaction_statement_number = 0;
 	DEBUG_COUT ("Transaction now gets started");
+	
+	
+	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer
 	
 	while (ctx->transaction_statement_number  <  TRANSACTION_STATEMENT_CNT){
 		// ************************************************
@@ -465,6 +472,12 @@ int Client::start_transaction(Context *ctx)
 			return -1;
 		}
 	}
+	
+	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
+	
+	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
+	double T_P_MILISEC = (double)(TRANSACTION_STATEMENT_CNT / (double)(nano_elapsed_time / 1000000));
+	cout << "Transaction per millisec: " <<  T_P_MILISEC << endl;
 	
 	int committed_cnt = TRANSACTION_STATEMENT_CNT - abort_cnt;
 	double success_rate = (double)committed_cnt /  TRANSACTION_STATEMENT_CNT;

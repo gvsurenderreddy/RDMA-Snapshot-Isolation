@@ -46,7 +46,7 @@ static const int FETCH_BLOCK_SIZE = 1;		// Number of items fetched at each RDMA 
 
 int TRANSACTIONS_PER_CLIENT 			= 1;
 
-int TRANSACTION_STATEMENT_CNT 			= 2000;
+int TRANSACTION_STATEMENT_CNT 			= 10000;
 
 // This parameter sets how many of the first runs should be excluded from the reported statistics
 int NUM_OF_EXCLUDING_THE_FIRST_RUNS 	= 5000;	

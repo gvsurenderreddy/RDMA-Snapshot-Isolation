@@ -1,6 +1,6 @@
-[ ] Now, all WRITE posts require completion, fix that.
+[+] Now, all WRITE posts require completion, fix that.
+[ ] Add code for statistics collection 
 [ ] Be professional, make a makefile, god!!
 [+] Rename the project name
 [+] Upload to GitHub
 [ ] Make a script folder and put send_... there
-

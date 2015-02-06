@@ -61,10 +61,10 @@ static inline uint64_t ntohll (uint64_t x)
 #error __BYTE_ORDER is neither __LITTLE_ENDIAN nor __BIG_ENDIAN
 #endif
 
-
 #ifndef DEBUG
 #define DEBUG
 #endif
+
 
 #ifdef DEBUG
 # define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )
