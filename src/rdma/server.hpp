@@ -15,8 +15,8 @@
 #include "../tpcw-tables/orders_version.hpp"
 #include "../tpcw-tables/order_line_version.hpp"
 #include "../tpcw-tables/cc_xacts_version.hpp"
-#include "../timestamp/timestamp_oracle.hpp"
-#include "../timestamp/lock.hpp"
+#include "../auxilary/timestamp_oracle.hpp"
+#include "../auxilary/lock.hpp"
 
 
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)

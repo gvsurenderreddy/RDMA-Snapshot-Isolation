@@ -267,7 +267,7 @@ int Client::start_transaction(Context *ctx)
 	
 	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer
 	
-	while (ctx->transaction_statement_number  <  TRANSACTION_STATEMENT_CNT){
+	while (ctx->transaction_statement_number  <  TRANSACTION_CNT){
 		// ************************************************
 		//	Acquiring read timestamp
 		// ************************************************
@@ -409,11 +409,11 @@ int Client::start_transaction(Context *ctx)
 				for (i = 0; i < ORDERLINE_PER_ORDER; i++)
 				{
 					ctx->local_order_line_region[i].write_timestamp		= ctx->local_commit_timestamp_region[0].timestamp;
-					ctx->local_order_line_region[i].order_line.OL_ID	= (ORDERLINE_PER_ORDER * ctx->local_commit_timestamp_region[0].timestamp) + i;
+					ctx->local_order_line_region[i].order_line.OL_ID	= (ctx->local_commit_timestamp_region[0].timestamp - 1) * ORDERLINE_PER_ORDER + 1 + i;
 					ctx->local_order_line_region[i].order_line.OL_O_ID	= ctx->local_orders_region->orders.O_ID;
 					ctx->local_order_line_region[i].order_line.OL_I_ID	= item_id;
 				}
-				int ol_offset = ((ctx->local_order_line_region->order_line.OL_ID - 1) * sizeof(OrderLineVersion));
+				int ol_offset = (ctx->local_commit_timestamp_region[0].timestamp - 1) * ORDERLINE_PER_ORDER * sizeof(OrderLineVersion);
 				OrderLineVersion *ol_lookup_address =  (OrderLineVersion *)(ol_offset + (uint64_t)ctx->peer_mr_order_line.addr);
 			
 				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
@@ -506,11 +506,11 @@ int Client::start_transaction(Context *ctx)
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
 	
 	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
-	double T_P_MILISEC = (double)(TRANSACTION_STATEMENT_CNT / (double)(nano_elapsed_time / 1000000));
+	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(nano_elapsed_time / 1000000));
 	cout << "Transaction per millisec: " <<  T_P_MILISEC << endl;
 	
-	int committed_cnt = TRANSACTION_STATEMENT_CNT - abort_cnt;
-	double success_rate = (double)committed_cnt /  TRANSACTION_STATEMENT_CNT;
+	int committed_cnt = TRANSACTION_CNT - abort_cnt;
+	double success_rate = (double)committed_cnt /  TRANSACTION_CNT;
 	cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << endl;
 	
 	return 0;

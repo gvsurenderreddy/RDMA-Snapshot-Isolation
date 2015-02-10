@@ -1,6 +1,6 @@
 g++ -c -Wno-write-strings src/util/utils.cpp
 
-g++ -c -Wno-write-strings src/timestamp/lock.cpp
+g++ -c -Wno-write-strings src/auxilary/lock.cpp
 
 g++ -c -Wno-write-strings src/rdma/RDMACommon.cpp
 

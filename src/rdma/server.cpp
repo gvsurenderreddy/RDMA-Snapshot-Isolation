@@ -359,7 +359,7 @@ int Server::start_server ()
 {	
 	TEST_NZ(initialize_data_structures());
 	
-	DEBUG_COUT("waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!");
+	cout << "waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!" << endl;
 	
 	Server::server_sockfd = -1;
 	struct sockaddr_in serv_addr, cli_addr;
@@ -395,7 +395,7 @@ int Server::start_server ()
 			cerr << "ERROR on accept" << endl;
 			return -1;
 		}
-		DEBUG_COUT("received client #" << i);
+		cout << "received client #" << i << endl;
 		pthread_create(&master_threads[i], NULL, Server::handle_client, &client_socks[i]);
 		i++;
 	}
@@ -406,7 +406,7 @@ int Server::start_server ()
 	}
 	
 	// close server socket
-	DEBUG_COUT ("Server is done, now destroying resources!");
+	cout << "Server is done, now destroying resources!" << endl;
 	TEST_NZ(destroy_resources());
 }
 
