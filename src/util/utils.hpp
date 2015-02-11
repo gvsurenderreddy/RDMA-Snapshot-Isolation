@@ -1,7 +1,7 @@
 /*
  *	utils.hpp
  *
- *	Created on: 26.01.2015
+ *	Created on: 26.Jan.2015
  *	Author: erfanz
  */
 
@@ -38,11 +38,11 @@ static inline uint32_t hton32 (uint32_t x)
 #endif
 
 
-
+/*
 #ifndef DEBUG
 #define DEBUG
 #endif
-
+*/
 
 #ifdef DEBUG
 # define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )

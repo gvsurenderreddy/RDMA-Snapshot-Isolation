@@ -1,14 +1,14 @@
 /*
- *	client.cpp
+ *	rdma-client.cpp
  *
- *	Created on: 25.01.2015
+ *	Created on: 25.Jan.2015
  *	Author: erfanz
  */
 
+#include "rdma-client.hpp"
 #include "../../config.hpp"
 #include "../util/utils.hpp"
-#include "client.hpp"
-#include "RDMACommon.hpp"
+#include "../util/RDMACommon.hpp"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -326,7 +326,7 @@ int Client::start_transaction(Context *ctx)
 			// ************************************************
 			//	Acquiring commit timestamp
 			ctx->local_commit_timestamp_region[0].timestamp = 4ULL;
-			TEST_NZ (RDMACommon::send_RDMA_FETCH_ADD(ctx->qp,
+			TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(ctx->qp,
 			ctx->local_commit_timestamp_mr,
 			(uint64_t)ctx->local_commit_timestamp_region,
 			&(ctx->peer_mr_timestamp),
@@ -388,8 +388,7 @@ int Client::start_transaction(Context *ctx)
 				//	Add a new record to table ORDERS
 				ctx->local_orders_region->write_timestamp	= ctx->local_commit_timestamp_region[0].timestamp;
 				ctx->local_orders_region->orders.O_ID		= ctx->local_commit_timestamp_region[0].timestamp;
-				//ctx->local_orders_region->orders.O_I_ID	= item_id;
-	
+				
 				int order_offset = ((ctx->local_orders_region->orders.O_ID - 1) * sizeof(OrdersVersion));
 				OrdersVersion *orders_lookup_address =  (OrdersVersion *)(order_offset + (uint64_t)ctx->peer_mr_orders.addr);
 			

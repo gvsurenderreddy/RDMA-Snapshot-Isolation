@@ -1,14 +1,13 @@
 /*
- *	server.cpp
+ *	traditional-server.cpp
  *
- *	Created on: 25.01.2015
+ *	Created on: 9.Feb.2015
  *	Author: erfanz
  */
 
-#include "../../config.hpp"
+#include "traditional-server.hpp"
 #include "../util/utils.hpp"
-#include "server.hpp"
-#include "RDMACommon.hpp"
+#include "../util/RDMACommon.hpp"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -27,13 +26,10 @@ ItemVersion*		Server::items_region			= new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_V
 OrdersVersion*		Server::orders_region			= new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
 OrderLineVersion*	Server::order_line_region		= new OrderLineVersion[ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS];
 CCXactsVersion*		Server::cc_xacts_region			= new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
-TimestampOracle*	Server::timestamp_region		= new TimestampOracle[1];
-uint64_t*			Server::lock_items_region		= new uint64_t[MAX_ITEM_CNT];
-
-int* Server::last_orders_cnt	= new int[1];
-int* Server::last_cc_xacts_cnt	= new int[1]; 
-
-int Server::server_sockfd = -1;
+TimestampOracle		Server::timestamp_region;
+std::mutex 			Server::timestamp_mutex;
+std::mutex	 		Server::item_lock[MAX_ITEM_CNT];
+int					Server::server_sockfd			= -1;
 
 
 int Server::create_context(struct Context *ctx)
@@ -92,31 +88,17 @@ int Server::build_connection(Context *ctx)
 int Server::register_memory(Context *ctx)
 {
 	int mr_flags = 0;
-	int i_s;
-	int o_s;
-	int ol_s;
-	int cc_s;
-	int ts_s;
-	int lock_item_s;
+	ctx->item_info_request	= new ItemInfoRequest[1];
+	ctx->item_info_response	= new ItemInfoResponse[1];
+	ctx->commit_request		= new CommitRequest[1];
+	ctx->commit_response	= new CommitResponse[1];
 	
-	ctx->send_msg = new Message[1];
-
-	i_s			= MAX_ITEM_CNT * MAX_ITEM_VERSIONS * sizeof(ItemVersion);
-	o_s			= MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS * sizeof(OrdersVersion);
-	ol_s		= ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS * sizeof(OrderLineVersion);
-	cc_s		= MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS * sizeof(CCXactsVersion);
-	ts_s		= sizeof(TimestampOracle);
-	lock_item_s	= MAX_ITEM_CNT * sizeof(uint64_t);
+	mr_flags = IBV_ACCESS_LOCAL_WRITE;
 	
-	mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
-	
-	TEST_Z(ctx->send_mr			= ibv_reg_mr(ctx->pd, ctx->send_msg, sizeof(struct Message), mr_flags));
-	TEST_Z(ctx->mr_items		= ibv_reg_mr(ctx->pd, items_region, i_s, mr_flags));
-	TEST_Z(ctx->mr_orders		= ibv_reg_mr(ctx->pd, orders_region, o_s, mr_flags));
-	TEST_Z(ctx->mr_order_line	= ibv_reg_mr(ctx->pd, order_line_region, ol_s, mr_flags));
-	TEST_Z(ctx->mr_cc_xacts		= ibv_reg_mr(ctx->pd, cc_xacts_region, cc_s, mr_flags));
-	TEST_Z(ctx->mr_timestamp	= ibv_reg_mr(ctx->pd, timestamp_region, ts_s, mr_flags));
-	TEST_Z(ctx->mr_lock_items	= ibv_reg_mr(ctx->pd, lock_items_region, lock_item_s, mr_flags));
+	TEST_Z(ctx->item_info_req_mr	= ibv_reg_mr(ctx->pd, ctx->item_info_request, sizeof(struct ItemInfoRequest), mr_flags));
+	TEST_Z(ctx->item_info_res_mr	= ibv_reg_mr(ctx->pd, ctx->item_info_response, sizeof(struct ItemInfoResponse), mr_flags));
+	TEST_Z(ctx->commit_req_mr		= ibv_reg_mr(ctx->pd, ctx->commit_request, sizeof(struct CommitRequest), mr_flags));
+	TEST_Z(ctx->commit_res_mr		= ibv_reg_mr(ctx->pd, ctx->commit_response, sizeof(struct CommitResponse), mr_flags));
 	
 	return 0;
 }
@@ -126,6 +108,16 @@ void* Server::handle_client(void *param)
 {
 	int client_sock = *((int*) param);
 	char temp_char;
+	int transaction_statement_number = 0;
+	int requested_item_id;
+	
+	TimestampOracle read_timestamp;
+	TimestampOracle commit_timestamp;
+	
+	int new_order_index;
+	int new_orderline_index;
+	int new_ccxacts_index;
+	int i;	// for for-loops
 	
 	// init all of the resources, so cleanup will be easy
 	struct Context ctx;
@@ -135,29 +127,114 @@ void* Server::handle_client(void *param)
 	// create all resources
 	TEST_NZ (create_context(&ctx));
 	
+	// before connecting the queue pairs, we post the RECEIVE job to be
+	// ready for the client's message containing its first request
+	TEST_NZ (RDMACommon::post_RECEIVE(ctx.qp, ctx.item_info_req_mr, (uintptr_t)ctx.item_info_request, sizeof(struct ItemInfoRequest)));
+	
 	// connect the QPs
 	TEST_NZ (connect_qp (&ctx));
-	
-	// setup server buffer with read message
-	memcpy(&(ctx.send_msg->mr_items),		ctx.mr_items,		sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_orders),		ctx.mr_orders,		sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_order_line),	ctx.mr_order_line,	sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_cc_xacts),	ctx.mr_cc_xacts,	sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_timestamp),	ctx.mr_timestamp,	sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg->mr_lock_items),	ctx.mr_lock_items,	sizeof(struct ibv_mr));
-	
-	// send memory locations using SEND 
-	TEST_NZ (RDMACommon::post_SEND (ctx.qp, ctx.send_mr, (uintptr_t)ctx.send_msg, sizeof(struct Message)));
-	TEST_NZ (RDMACommon::poll_completion(ctx.cq));
-	
-	/*
-		Server waits for the client to muck with its memory
-	*/
+
+	while (ctx.transaction_statement_number  <  TRANSACTION_CNT)
+	{
+		ctx.transaction_statement_number = ctx.transaction_statement_number + 1;
+		DEBUG_COUT (endl << "Waiting for transaction #" << ctx.transaction_statement_number);
+		
+		// ************************************************************************
+		// Waits for user to post a ItemInfoRequest job
+		TEST_NZ (RDMACommon::poll_completion(ctx.cq));		// completion for post_RECEIVE
+		memcpy(&read_timestamp, &(Server::timestamp_region), sizeof(TimestampOracle));
+		memcpy(&requested_item_id, &(ctx.item_info_request->I_ID), sizeof(ctx.item_info_request->I_ID));
+		DEBUG_COUT("Received request for item #" << requested_item_id);
+
+		
+		// ************************************************************************
+		// Server now fethces ItemInfo and fills in ItemInfoResponse
+		memcpy(&(ctx.item_info_response->item), &(items_region[requested_item_id].item), sizeof(Item));
+		
+		TEST_NZ (RDMACommon::post_RECEIVE(ctx.qp, ctx.commit_req_mr, (uintptr_t)ctx.commit_request, sizeof(struct CommitRequest)));
+		TEST_NZ (RDMACommon::post_SEND (ctx.qp, ctx.item_info_res_mr, (uintptr_t)ctx.item_info_response, sizeof(struct ItemInfoResponse)));
+		TEST_NZ (RDMACommon::poll_completion(ctx.cq));		// completion for post_SEND
+		
+		DEBUG_COUT("Successfully sent ItemInfoResponse to client, with read_timestamp " << read_timestamp.timestamp); 
+		
+		
+		// ************************************************************************
+		// Server now waits for user to post CommitRequest Job
+		TEST_NZ (RDMACommon::poll_completion(ctx.cq));		// completion for psot_RECEIVE
+		DEBUG_COUT("Received CommitRequest.");
+
+		
+		// ************************************************************************
+		//	Commit starts. first acquire locks, and finally fills in CommitResponse
+		
+		// Get commit timestamp
+		timestamp_mutex.lock();
+		timestamp_region.timestamp++;
+		memcpy(&commit_timestamp, &(Server::timestamp_region), sizeof(TimestampOracle));
+		DEBUG_COUT("Acquired commit timestamp " << commit_timestamp.timestamp);
+		timestamp_mutex.unlock();
+		
+		// Lock item and decrement the stock
+		item_lock[requested_item_id].lock();
+		DEBUG_COUT("Acquired lock on item " << requested_item_id);
+		
+		// Decrement the stock 
+		if (items_region[requested_item_id].item.I_STOCK < 10)
+			items_region[requested_item_id].item.I_STOCK += 20;
+		else
+			items_region[requested_item_id].item.I_STOCK -= 1;
+		DEBUG_COUT("Decremented the stock in table ITEM");
+		
+		
+		// Insert the order
+		new_order_index = commit_timestamp.timestamp - 1;
+		memcpy(&orders_region[new_order_index].orders, &(ctx.commit_request->order), sizeof(Orders));
+		orders_region[new_order_index].write_timestamp	= commit_timestamp.timestamp;
+		orders_region[new_order_index].orders.O_ID		= commit_timestamp.timestamp;
+		DEBUG_COUT("Added a record to table ORDERS");
+		
+		// Insert orderlines
+		new_orderline_index	= ORDERLINE_PER_ORDER * (commit_timestamp.timestamp - 1);
+		for (i = 0; i < ORDERLINE_PER_ORDER; i++)
+		{
+			memcpy(&order_line_region[new_orderline_index + i].order_line, &ctx.commit_request->orderlines[i], sizeof(OrderLine));
+			order_line_region[new_orderline_index + i].write_timestamp		= commit_timestamp.timestamp;
+			order_line_region[new_orderline_index + i].order_line.OL_ID		= new_orderline_index + i + 1;
+			order_line_region[new_orderline_index + i].order_line.OL_O_ID	= orders_region[new_order_index].orders.O_ID;
+			order_line_region[new_orderline_index + i].order_line.OL_I_ID	= requested_item_id;
+		}
+		DEBUG_COUT("Added record(s) to table ORDERLINE");
+		
+		// Insert ccxacts
+		new_ccxacts_index = commit_timestamp.timestamp - 1;
+		memcpy(&cc_xacts_region[new_ccxacts_index].cc_xacts, &(ctx.commit_request->ccxact), sizeof(CCXacts));
+		cc_xacts_region[new_ccxacts_index].write_timestamp	= commit_timestamp.timestamp;
+		cc_xacts_region[new_ccxacts_index].cc_xacts.CX_O_ID	= orders_region[new_order_index].orders.O_ID;
+		DEBUG_COUT("Added record to table CC_XACTS");
+		
+		// Release the lock
+		item_lock[requested_item_id].unlock();
+		DEBUG_COUT("Released the lock on item " << requested_item_id);
+		
+		
+		// ************************************************************************
+		//	Return the result of the commit to user
+		ctx.commit_response->commit_outcome = CommitResponse::COMMITTED;
+		
+		
+		// if server expects more requests from the user, it must submit RECEIVE job
+		if (ctx.transaction_statement_number  <  TRANSACTION_CNT)
+			TEST_NZ (RDMACommon::post_RECEIVE(ctx.qp, ctx.item_info_req_mr, (uintptr_t)ctx.item_info_request, sizeof(struct ItemInfoRequest)));
+			
+		TEST_NZ (RDMACommon::post_SEND (ctx.qp, ctx.commit_res_mr, (uintptr_t)ctx.commit_response, sizeof(struct CommitResponse)));
+		TEST_NZ (RDMACommon::poll_completion(ctx.cq));		// completion for post_SEND
+		DEBUG_COUT("Result of the commit successfully sent to user"); 
+	}
 	
 	/* Sync so server will know that client is done mucking with its memory */
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-	cout << "final value of the timestamp buffer " << Server::timestamp_region[0].timestamp << endl;
-	cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
+	cout << "final value of the timestamp buffer " << Server::timestamp_region.timestamp << endl;
+	//cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
 	
 	TEST_NZ (destroy_context(&ctx));
 	return NULL;
@@ -210,28 +287,22 @@ int Server::destroy_context (struct Context *ctx)
 	if (ctx->qp)
 		TEST_NZ(ibv_destroy_qp (ctx->qp));
 	
-	if (ctx->send_mr)
-		TEST_NZ (ibv_dereg_mr (ctx->send_mr));
+	if (ctx->item_info_req_mr)
+		TEST_NZ (ibv_dereg_mr (ctx->item_info_req_mr));
 	
-	if (ctx->mr_items)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_items));
+	if (ctx->item_info_res_mr)
+		TEST_NZ (ibv_dereg_mr (ctx->item_info_res_mr));
 	
-	if (ctx->mr_orders)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_orders));
+	if (ctx->commit_req_mr)
+		TEST_NZ (ibv_dereg_mr (ctx->commit_req_mr));
 	
-	if (ctx->mr_order_line)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_order_line));
+	if (ctx->commit_res_mr)
+		TEST_NZ (ibv_dereg_mr (ctx->commit_res_mr));
 	
-	if (ctx->mr_cc_xacts)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_cc_xacts));
-	
-	if (ctx->mr_timestamp)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_timestamp));
-	
-	if (ctx->mr_lock_items)
-		TEST_NZ (ibv_dereg_mr (ctx->mr_lock_items));
-	
-	delete[](ctx->send_msg);
+	delete[](ctx->item_info_request);
+	delete[](ctx->item_info_response);
+	delete[](ctx->commit_request);
+	delete[](ctx->commit_response);
 	
 	if (ctx->cq)
 		TEST_NZ (ibv_destroy_cq (ctx->cq));
@@ -253,8 +324,6 @@ int Server::destroy_resources ()
 	delete[](Server::orders_region);
 	delete[](Server::order_line_region);
 	delete[](Server::cc_xacts_region);
-	delete[](Server::timestamp_region);
-	delete[](Server::lock_items_region);
 	
 	close(Server::server_sockfd);	// close the socket
 	return 0;
@@ -262,25 +331,12 @@ int Server::destroy_resources ()
 
 int Server::initialize_data_structures(){
 	
-	Server::timestamp_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
-	DEBUG_COUT("Timestamp set to " << Server::timestamp_region[0].timestamp);
+	Server::timestamp_region.timestamp = 0ULL;	// the timestamp counter is initially set to 0
+	DEBUG_COUT("Timestamp set to " << Server::timestamp_region.timestamp);
 
 	TEST_NZ(load_tables_from_files());
 	DEBUG_COUT("tables loaded successfully");
 	
-	int i;
-	uint32_t stat;
-	uint32_t version;
-	for (i=0; i < MAX_ITEM_CNT; i++)
-	{
-		stat = (uint32_t)0;	// 0 for free, 1 for locked
-		version = (uint32_t)0;	// the first version of each item is 0
-		lock_items_region[i] = Lock::set_lock(stat, version);
-	}
-	DEBUG_COUT("All locks set free");
-		
-	Server::last_orders_cnt[0] = 0;
-	Server::last_cc_xacts_cnt[0] = 0;
 	return 0;
 }
 

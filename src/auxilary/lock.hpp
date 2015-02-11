@@ -1,3 +1,10 @@
+/*
+ *	lock.hpp
+ *
+ *	Created on: 5.Feb.2015
+ *	Author: erfanz
+ */
+
 #include <stdint.h>
 
 class Lock {

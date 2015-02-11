@@ -1,7 +1,7 @@
 /*
- *	RDMACommon.cpp
+ *	RDMACommon.hpp
  *
- *	Created on: 26.01.2015
+ *	Created on: 26.Jan.2015
  *	Author: erfanz
  */
 
@@ -94,7 +94,7 @@ public:
 	* @param	peer_mr			the pointer to the remote ibv_mr
 	* @return	0 or 1			In case of success 0, and in case of failure -1
 	******************************************************************************/
-	static int send_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, 
+	static int post_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, 
 	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint64_t addition, uint32_t length);
 	
 	

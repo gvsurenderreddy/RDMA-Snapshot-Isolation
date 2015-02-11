@@ -1,8 +1,11 @@
 [+] Now, all WRITE posts require completion, fix that.
 [+] Add code for statistics collection 
 [+] Fix: each order contains multiple lineitem
+[+] Add Centralized-based Snapshot Isolation
+[ ] Rename Client and Server class names  
+[ ] Add a config flag for LOG level
 [ ] Run the experiments
 [ ] Be professional, make a makefile, god!!
 [+] Rename the project name
 [+] Upload to GitHub
-[ ] Make a script folder and put send_... there
+[+] Make a script folder and put send_... there

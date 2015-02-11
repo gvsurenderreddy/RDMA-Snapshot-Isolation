@@ -1,3 +1,10 @@
+/*
+ *	order_line.hpp
+ *
+ *	Created on: 22.Jan.2015
+ *	Author: erfanz
+ */
+
 class OrderLine {
 public:
 	int OL_ID;

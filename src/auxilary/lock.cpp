@@ -1,3 +1,10 @@
+/*
+ *	lock.cpp
+ *
+ *	Created on: 5.Feb.2015
+ *	Author: erfanz
+ */
+
 #include "lock.hpp"
 #include <stdint.h>
 #include <stdio.h>

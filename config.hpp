@@ -1,7 +1,7 @@
 /*
  *	config.hpp
  *
- *  Created on: 27.01.2015
+ *  Created on: 27.Jan.2015
  *	Author: erfanz
  */
 
@@ -22,7 +22,7 @@ static const int IB_PORT				= 1;
 
 static const char ITEM_FILENAME[50]		= "./data/item.data";
 
-static const int CLIENTS_CNT 			= 30;
+static const int CLIENTS_CNT 			= 6;
 
 static const int TRANSACTION_CNT 		= 100000;
 

@@ -1,12 +1,12 @@
 /*
  *	RDMACommon.cpp
  *
- *	Created on: 26.01.2015
+ *	Created on: 26.Jan.2015
  *	Author: erfanz
  */
 
 #include "RDMACommon.hpp"
-#include "../util/utils.hpp"
+#include "utils.hpp"
 #include <iostream>
 #include <cstring>
 using namespace std;
@@ -89,7 +89,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 	return 0;
 }
 
-int RDMACommon::send_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uint64_t local_buffer, 
+int RDMACommon::post_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uint64_t local_buffer, 
 struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length)
 {
 	struct ibv_sge sge;

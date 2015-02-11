@@ -1,3 +1,10 @@
+/*
+ *	timestamp_oracle.hpp
+ *
+ *	Created on: 28.Jan.2015
+ *	Author: erfanz
+ */
+
 #include <iostream>
 using namespace std;
 

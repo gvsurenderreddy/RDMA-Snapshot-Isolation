@@ -1,7 +1,7 @@
 /*
  *	utils.cpp
  *
- *	Created on: 26.01.2015
+ *	Created on: 26.Jan.2015
  *	Author: erfanz
  */
 
