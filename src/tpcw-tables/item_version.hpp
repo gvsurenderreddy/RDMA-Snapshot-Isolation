@@ -5,9 +5,7 @@
  *	Author: erfanz
  */
 
-#include <iostream>
 #include "item.hpp"
-using namespace std;
 
 class ItemVersion {
 public:

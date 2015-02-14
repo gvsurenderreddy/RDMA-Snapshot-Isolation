@@ -5,8 +5,8 @@
  *	Author: erfanz
  */
 
-#ifndef SERVER_H_
-#define SERVER_H_
+#ifndef RDMASERVER_H_
+#define RDMASERVER_H_
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,8 +22,12 @@
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
-class Server{
+class RDMAServer{
 private:
+	static int				tcp_port;
+	static int				ib_port;
+	
+	
 	static ItemVersion		*items_region;
 	static OrdersVersion	*orders_region;
 	static OrderLineVersion	*order_line_region;
@@ -31,7 +35,11 @@ private:
 	static TimestampOracle	*timestamp_region;
 	static uint64_t			*lock_items_region;
 	
+	
+	
 	static int				server_sockfd;		// Server's socket file descriptor
+	
+	
 
 	/* structure to exchange data which is needed to connect the QPs */
 	struct CommunicationExchangeData
@@ -148,7 +156,7 @@ public:
 	* Function: start_server
 	*
 	* Input
-	* nothing
+	* server_number (e.g. 0, 1, ...., Config.SERVER_CNT)
 	*
 	* Returns
 	* socket (fd) on success, negative error code on failure
@@ -157,7 +165,7 @@ public:
 	* Starts the server. 
 	*
 	******************************************************************************/
-	int start_server ();
+	int start_server (int server_num);
 	
 	/******************************************************************************
 	* Function: usage

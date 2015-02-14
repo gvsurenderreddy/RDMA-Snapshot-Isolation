@@ -5,9 +5,6 @@
  *	Author: erfanz
  */
 
-#include <iostream>
-using namespace std;
-
 class Item {
 public:
 	int I_ID;
@@ -32,34 +29,4 @@ public:
 	int I_PAGE;
 	char I_BACKING[15];
 	char I_DIMENSION[25];	
-	
-	
-	friend std::ostream& operator<<(std::ostream&, const Item&);	// overriding << operation for printing the object
 };
-
-std::ostream& operator<<(std::ostream &strm, const Item &item) {
-	return strm << "Item("
-		<< item.I_ID << ", "
-			<< item.I_TITLE << ", "
-				<< item.I_A_ID << ", "
-					<< item.I_PUB_DATE << ", "
-						<< item.I_PUBLISHER << ", "
-							<< item.I_SUBJECT << ", "
-								<< item.I_DESC << ", "
-									<< item.I_RELATED1 << ", "
-										<< item.I_RELATED2 << ", "
-											<< item.I_RELATED3 << ", "
-												<< item.I_RELATED4 << ", "
-													<< item.I_RELATED5 << ", "
-														<< item.I_THUMBNAIL << ", "
-															<< item.I_IMAGE << ", "
-																<< item.I_SRP << ", "
-																	<< item.I_COST << ", "
-																		<< item.I_AVAIL << ", "
-																			<< item.I_STOCK << ", "
-																				<< item.I_ISBN << ", "
-																					<< item.I_PAGE << ", "
-																						<< item.I_BACKING << ", "
-																							<< item.I_DIMENSION << ", "
-																								<<  ")" << endl;
-}

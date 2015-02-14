@@ -9,7 +9,6 @@
 #include "utils.hpp"
 #include <iostream>
 #include <cstring>
-using namespace std;
 
 int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length)
 {
@@ -30,7 +29,7 @@ int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t
 	wr.send_flags	= IBV_SEND_SIGNALED;
 	
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
-		cerr << "Error, ibv_post_send() failed" << endl;
+		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
 	}	
 	return 0;
@@ -53,7 +52,7 @@ int RDMACommon::post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintpt
 	wr.num_sge		= 1;
 	
 	if (ibv_post_recv(qp, &wr, &bad_wr)) {
-		cerr << "Error, ibv_post_recv() failed" << endl;
+		std::cerr << "Error, ibv_post_recv() failed" << std::endl;
 		return -1;
 	}	
 	return 0;
@@ -83,7 +82,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 		wr.send_flags 		= 0;
 	
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
-		cerr << "Error, ibv_post_send() failed" << endl;
+		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
 	}	
 	return 0;
@@ -111,7 +110,7 @@ struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length
 	wr.wr.atomic.compare_add	= addition; /* value to be added to the remote address content */
 	
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
-		cerr << "Error, ibv_post_send() failed" << endl;
+		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
 	}	
 	return 0;
@@ -140,7 +139,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expecte
 	wr.wr.atomic.swap        	= new_value; /* the value that remote address will be assigned to */
 		
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
-		cerr << "Error, ibv_post_send() failed" << endl;
+		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
 	}	
 	return 0;
@@ -154,7 +153,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	memset(&dev_attr, 0, sizeof(dev_attr));
 	dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
 	if (ibv_exp_query_device(ib_ctx, &dev_attr)) {
-		cerr << "ibv_exp_query_device failed" << endl;
+		std::cerr << "ibv_exp_query_device failed" << std::endl;
 		return -1;
 	}
 
@@ -179,7 +178,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	(*qp) = ibv_exp_create_qp(ib_ctx, &attr);
    	if (!(*qp))
 	{
-		cerr << "failed to create QP" << endl;
+		std::cerr << "failed to create QP" << std::endl;
 		return -1;
 	}
 	DEBUG_COUT ("QP was created, QP number=0x" << (*qp)->qp_num);
@@ -201,7 +200,7 @@ int RDMACommon::modify_qp_to_init (int ib_port, struct ibv_qp *qp)
 	flags = IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
-		cerr << "failed to modify QP state to INIT" << endl;
+		std::cerr << "failed to modify QP state to INIT" << std::endl;
 	return rc;
 }
 
@@ -227,7 +226,7 @@ int RDMACommon::modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remot
 		IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
-		cerr << "failed to modify QP state to RTR" << endl;
+		std::cerr << "failed to modify QP state to RTR" << std::endl;
 	return rc;
 }
 
@@ -247,7 +246,7 @@ int RDMACommon::modify_qp_to_rts (struct ibv_qp *qp)
 		IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
-		cerr << "failed to modify QP state to RTS" << endl;
+		std::cerr << "failed to modify QP state to RTS" << std::endl;
 	return rc;
 }
 
@@ -259,13 +258,13 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		wc.status = IBV_WC_SUCCESS;
 		ne = ibv_poll_cq(cq, 1, &wc);
 		if(wc.status != IBV_WC_SUCCESS) {
-			cerr << "RDMA completion event in CQ with error!" << endl;
+			std::cerr << "RDMA completion event in CQ with error!" << std::endl;
 			return -1;
 		}
 	}while(ne==0);
 
 	if(ne<0) {
-		cerr << "RDMA polling from CQ failed!" << endl;
+		std::cerr << "RDMA polling from CQ failed!" << std::endl;
 		return -1;
 	}
 	return 0;

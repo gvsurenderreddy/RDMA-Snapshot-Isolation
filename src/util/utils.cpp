@@ -14,7 +14,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <iostream>
-using namespace std;
 
 int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data)
 {
@@ -23,7 +22,7 @@ int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data
 	int total_read_bytes = 0;
 	rc = write (sock, local_data, xfer_size);
 	if (rc < xfer_size)
-		cerr << "Failed writing data during sock_sync_data" << endl;
+		std::cerr << "Failed writing data during sock_sync_data" << std::endl;
 	else
 		rc = 0;
 	while (!rc && total_read_bytes < xfer_size)
@@ -45,7 +44,7 @@ int sock_connect (const char *servername, int port)
 	
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0){ 
-		cerr << "ERROR opening socket" << endl;
+		std::cerr << "ERROR opening socket" << std::endl;
 		return -1;
 	}
 	
@@ -54,7 +53,7 @@ int sock_connect (const char *servername, int port)
 	serv_addr.sin_port = htons(port);
 	serv_addr.sin_addr.s_addr = inet_addr(servername);
 	if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0){ 
-		cerr << "ERROR connecting" << endl;
+		std::cerr << "ERROR connecting" << std::endl;
 		return -1;
 	}
 	return sockfd;

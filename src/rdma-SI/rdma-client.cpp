@@ -6,7 +6,6 @@
  */
 
 #include "rdma-client.hpp"
-#include "../../config.hpp"
 #include "../util/utils.hpp"
 #include "../util/RDMACommon.hpp"
 #include <stdio.h>
@@ -20,12 +19,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <iostream>
 #include <time.h>	// for struct timespec
 
 
-char* Client::server_name = NULL;
+// Definitions
+RDMAClient::ShoppingCart	RDMAClient::shopping_cart;
+int							RDMAClient::transaction_statement_number = 0;
+RDMAClient::SharedContext	RDMAClient::shared_context;	
 
-int Client::create_context (struct Context *ctx)
+int RDMAClient::create_context (struct Context *ctx)
 {
 	TEST_NZ(build_connection(ctx));
 	TEST_NZ(register_memory(ctx));
@@ -34,17 +37,17 @@ int Client::create_context (struct Context *ctx)
 	return 0;
 }
 
-int Client::build_connection(Context *ctx)
+int RDMAClient::build_connection(Context *ctx)
 {
 	struct ibv_device **dev_list = NULL;
 	struct ibv_device *ib_dev = NULL;
 	int cq_size = 0;
 	int num_devices;
 	
-	ctx->client_sockfd = sock_connect (Client::server_name, TCP_PORT);
+	ctx->client_sockfd = sock_connect (ctx->server_address, ctx->tcp_port);
 	if (ctx->client_sockfd < 0)
 	{
-		cerr << "failed to establish TCP connection to server " <<  Client::server_name << ", port " << TCP_PORT << endl;
+		std::cerr << "failed to establish TCP connection to server " <<  ctx->server_address << ", port " << ctx->tcp_port << std::endl;
 		destroy_context(ctx);
 		return -1;
 	}
@@ -71,7 +74,7 @@ int Client::build_connection(Context *ctx)
 	dev_list = NULL;
 	ib_dev = NULL;
 	
-	TEST_NZ (ibv_query_port (ctx->ib_ctx, IB_PORT, &ctx->port_attr));	// query port properties
+	TEST_NZ (ibv_query_port (ctx->ib_ctx, ctx->ib_port, &ctx->port_attr));	// query port properties
 	
 	TEST_Z(ctx->pd = ibv_alloc_pd (ctx->ib_ctx));		// allocate Protection Domain
 	
@@ -84,7 +87,7 @@ int Client::build_connection(Context *ctx)
 }
 
 
-int Client::register_memory(Context *ctx)
+int RDMAClient::register_memory(Context *ctx)
 {
 	int mr_flags = 0;
 	int i_s;
@@ -97,11 +100,7 @@ int Client::register_memory(Context *ctx)
 	ctx->recv_msg = new Message[1];
 	
 	ctx->local_items_region				= new ItemVersion[FETCH_BLOCK_SIZE];
-	ctx->local_orders_region			= new OrdersVersion[1];
 	ctx->local_order_line_region		= new OrderLineVersion[ORDERLINE_PER_ORDER];
-	ctx->local_cc_xacts_region			= new CCXactsVersion[1];
-	ctx->local_read_timestamp_region	= new TimestampOracle[1];	
-	ctx->local_commit_timestamp_region	= new TimestampOracle[1];	
 	ctx->local_lock_items_region		= new uint64_t[1];	
 	
 	i_s		= FETCH_BLOCK_SIZE * sizeof(ItemVersion);
@@ -115,17 +114,17 @@ int Client::register_memory(Context *ctx)
 	
 	TEST_Z(ctx->recv_mr						= ibv_reg_mr(ctx->pd, ctx->recv_msg, sizeof(struct Message), mr_flags));
 	TEST_Z(ctx->local_items_mr				= ibv_reg_mr(ctx->pd, ctx->local_items_region, i_s, mr_flags));
-	TEST_Z(ctx->local_orders_mr				= ibv_reg_mr(ctx->pd, ctx->local_orders_region, o_s, mr_flags));
+	TEST_Z(ctx->local_orders_mr				= ibv_reg_mr(ctx->pd, &ctx->local_orders_region, o_s, mr_flags));
 	TEST_Z(ctx->local_order_line_mr			= ibv_reg_mr(ctx->pd, ctx->local_order_line_region, ol_s, mr_flags));
-	TEST_Z(ctx->local_cc_xacts_mr			= ibv_reg_mr(ctx->pd, ctx->local_cc_xacts_region, cc_s, mr_flags));
-	TEST_Z(ctx->local_read_timestamp_mr		= ibv_reg_mr(ctx->pd, ctx->local_read_timestamp_region, ts_s, mr_flags));
-	TEST_Z(ctx->local_commit_timestamp_mr	= ibv_reg_mr(ctx->pd, ctx->local_commit_timestamp_region, ts_s, mr_flags));
+	TEST_Z(ctx->local_cc_xacts_mr			= ibv_reg_mr(ctx->pd, &ctx->local_cc_xacts_region, cc_s, mr_flags));
+	TEST_Z(ctx->local_read_timestamp_mr		= ibv_reg_mr(ctx->pd, &ctx->local_read_timestamp_region, ts_s, mr_flags));
+	TEST_Z(ctx->local_commit_timestamp_mr	= ibv_reg_mr(ctx->pd, &ctx->local_commit_timestamp_region, ts_s, mr_flags));
 	TEST_Z(ctx->local_lock_items_mr			= ibv_reg_mr(ctx->pd, ctx->local_lock_items_region, lock_s, mr_flags));
 	
 	return 0;
 }
 
-int Client::connect_qp (struct Context *ctx)
+int RDMAClient::connect_qp (struct Context *ctx)
 {
 	struct CommunicationExchangeData local_con_data, remote_con_data, tmp_con_data;
 	char temp_char;
@@ -152,10 +151,10 @@ int Client::connect_qp (struct Context *ctx)
 	// fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
 	
 	// modify the QP to init
-	TEST_NZ(RDMACommon::modify_qp_to_init (IB_PORT, ctx->qp));
+	TEST_NZ(RDMACommon::modify_qp_to_init (ctx->ib_port, ctx->qp));
 	
 	// modify the QP to RTR
-	TEST_NZ(RDMACommon::modify_qp_to_rtr (IB_PORT, ctx->qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
+	TEST_NZ(RDMACommon::modify_qp_to_rtr (ctx->ib_port, ctx->qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
 	
 	// modify the QP to RTS
 	TEST_NZ(RDMACommon::modify_qp_to_rts (ctx->qp));
@@ -166,7 +165,7 @@ int Client::connect_qp (struct Context *ctx)
 	return 0;
 }
 
-int Client::destroy_context (struct Context *ctx)
+int RDMAClient::destroy_context (struct Context *ctx)
 {
 	if (ctx->qp)
 		TEST_NZ(ibv_destroy_qp (ctx->qp));
@@ -198,11 +197,7 @@ int Client::destroy_context (struct Context *ctx)
 	
 	delete[](ctx->recv_msg);
 	delete[](ctx->local_items_region);
-	delete[](ctx->local_orders_region);
 	delete[](ctx->local_order_line_region);
-	delete[](ctx->local_cc_xacts_region);
-	delete[](ctx->local_read_timestamp_region);
-	delete[](ctx->local_commit_timestamp_region);
 	delete[](ctx->local_lock_items_region);
 	
 	if (ctx->cq)
@@ -220,20 +215,20 @@ int Client::destroy_context (struct Context *ctx)
 	return 0;
 }
 
-void Client::die(const char *reason)
+void RDMAClient::die(const char *reason)
 {
-	cerr <<  reason << endl;
-	cerr << "Errno: " << strerror(errno) << endl;	
+	std::cerr <<  reason << std::endl;
+	std::cerr << "Errno: " << strerror(errno) << std::endl;	
 	exit(EXIT_FAILURE);
 }
 
-void Client::usage (const char *argv0)
+void RDMAClient::usage (const char *argv0)
 {
-	cout << "Usage:" << endl;
-	cout << argv0 << " <host> connects to server at <host>" << endl;
+	std::cout << "Usage:" << std::endl;
+	std::cout << argv0 << " connects to server(s) specified in the config file" << std::endl;
 }
 
-int Client::check_if_version_is_in_block(int version, ItemVersion *items_region, int size)
+int RDMAClient::check_if_version_is_in_block(int version, ItemVersion *items_region, int size)
 {
 	int biggest_eligible_index = -1;
 	int i;
@@ -250,73 +245,211 @@ int Client::check_if_version_is_in_block(int version, ItemVersion *items_region,
 	return biggest_eligible_index;
 }
 
-
-int Client::start_transaction(Context *ctx)
+void RDMAClient::fill_shopping_cart(Context *ctx)
 {
 	int item_id;
-	uint32_t lock_status, version;
-	uint64_t expected_lock, new_lock;
-	int abort_cnt = 0;
-	struct timespec firstRequestTime, lastRequestTime; // for calculating TPMS
-	int i; // for for-loop
+	int quantity;
+	
+	DEBUG_COUT ("Cart contents: (Item ID,  Quantity)");
+	for (int i=0; i < ORDERLINE_PER_ORDER; i++)
+	{
+		item_id		= (i * ITEM_PER_SERVER) + (rand() % ITEM_PER_SERVER);	// generating in the range 0 to ITEM_CNT
+		quantity	= (rand() % 1) + 1;			// the quanity of the item (not importatn)
+		RDMAClient::shopping_cart.cart_lines[i].SCL_I_ID	= item_id;
+		RDMAClient::shopping_cart.cart_lines[i].SCL_QTY		= quantity;
+		DEBUG_COUT (".... " <<  item_id << '\t' << quantity);
+	
+		ctx[i].associated_cart_line = &RDMAClient::shopping_cart.cart_lines[i];
+	}
+}
+
+void* RDMAClient::get_item_info(Context *ctx)
+{
+	ctx->fetch_block_num = 0;
+	int item_id = ctx->associated_cart_line->SCL_I_ID;
+	
+		// Find the lookup address on the server remote memory 
+	int item_offset = (item_id * MAX_ITEM_VERSIONS * sizeof(ItemVersion))
+		+ ctx->fetch_block_num * FETCH_BLOCK_SIZE * sizeof(ItemVersion);
+	
+	ItemVersion *item_lookup_address =  (ItemVersion *)(item_offset + ((uint64_t)ctx->peer_mr_items.addr));
+
+	// RDMA READ it from the server
+	TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+	ctx->qp,
+	ctx->local_items_mr,
+	(uint64_t)ctx->local_items_region,
+	&(ctx->peer_mr_items),
+	(uint64_t)item_lookup_address,
+	FETCH_BLOCK_SIZE * sizeof(ItemVersion),
+	true));
+}
+
+void* RDMAClient::acquire_item_lock(Context *ctx, uint64_t *expected_lock, uint64_t *new_lock)
+{
+	int item_id = ctx->associated_cart_line->SCL_I_ID;
+	
+	// and the actual content of the lock (before being swapped) will be stored in the following variable
+	memset(ctx->local_lock_items_region, 0, sizeof(uint64_t));
+	
+	int lock_offset					= item_id * sizeof(uint64_t);
+	uint64_t *lock_lookup_address	= (uint64_t *)(lock_offset + ((uint64_t)ctx->peer_mr_lock_items.addr));
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(ctx->qp,
+	ctx->local_lock_items_mr,
+	(uint64_t)ctx->local_lock_items_region,
+	&(ctx->peer_mr_lock_items),
+	(uint64_t)lock_lookup_address,
+	(uint32_t)sizeof(uint64_t),
+	(uint64_t)expected_lock,
+	(uint64_t)new_lock));
+}
+
+void* RDMAClient::revert_lock(Context *ctx, uint64_t *new_lock)
+{
+	int item_id		= ctx->associated_cart_line->SCL_I_ID;
+	
+	memcpy(ctx->local_lock_items_region, new_lock, sizeof(uint64_t));	
+		
+	int lock_offset					= item_id * sizeof(uint64_t);
+	uint64_t *lock_lookup_address	= (uint64_t *)(lock_offset + ((uint64_t)ctx->peer_mr_lock_items.addr));
+		
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	ctx->qp,
+	ctx->local_lock_items_mr,
+	(uint64_t)ctx->local_lock_items_region,
+	&(ctx->peer_mr_lock_items),
+	(uint64_t)lock_lookup_address,
+	(uint32_t)sizeof(uint64_t),
+	true));
+}
+
+
+void* RDMAClient::decrement_item_stock(Context *ctx)
+{
+	int item_id		= ctx->associated_cart_line->SCL_I_ID;
+	int quantity	= ctx->associated_cart_line->SCL_QTY;
+	
+	ctx->local_items_region[0].write_timestamp = shared_context.commit_timestamp;
+	ctx->local_items_region[0].item.I_STOCK -= quantity;
+	
+	if (ctx->local_items_region[0].item.I_STOCK < 10)
+		ctx->local_items_region[0].item.I_STOCK += 20;
+	
+	// Find the lookup address on the server remote memory 
+	int item_offset = (item_id * MAX_ITEM_VERSIONS * sizeof(ItemVersion))
+		+ ctx->fetch_block_num * FETCH_BLOCK_SIZE * sizeof(ItemVersion);
+	
+	ItemVersion *item_lookup_address =  (ItemVersion *)(item_offset + ((uint64_t)ctx->peer_mr_items.addr));
+	
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	ctx->qp,
+	ctx->local_items_mr,
+	(uint64_t)ctx->local_items_region,
+	&(ctx->peer_mr_items),
+	(uint64_t)item_lookup_address,
+	(uint32_t)sizeof(ItemVersion),
+	false));
+
+	DEBUG_COUT (".... Successfully decremented the stock for item " << item_id
+		<< " (with commit timestamp " << shared_context.commit_timestamp << ")");
+}
+
+void* RDMAClient::release_lock(Context *ctx)
+{
+	int item_id		= ctx->associated_cart_line->SCL_I_ID;
+	uint32_t		lock_status, version;
+	
+	lock_status		= (uint32_t) 0;
+	version			= (uint32_t) shared_context.commit_timestamp;
+	ctx->local_lock_items_region[0] = Lock::set_lock(lock_status, version);	
+
+	int lock_offset					= item_id * sizeof(uint64_t);
+	uint64_t *lock_lookup_address	= (uint64_t *)(lock_offset + ((uint64_t)ctx->peer_mr_lock_items.addr));
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	ctx->qp,
+	ctx->local_lock_items_mr,
+	(uint64_t)ctx->local_lock_items_region,
+	&(ctx->peer_mr_lock_items),
+	(uint64_t)lock_lookup_address,
+	(uint32_t)sizeof(uint64_t),
+	true));
+}
+
+int RDMAClient::start_transaction(Context *ctx)
+{
+	int		server_num;
+	int		abort_cnt = 0;
+	bool	abort_flag;
+    bool	successful_locking_servers[SERVER_CNT] = { false };		// initializes the entire array to false 
+	struct timespec firstRequestTime, lastRequestTime;				// for calculating TPMS
+	uint32_t	lock_status, version;
+	uint64_t	expected_lock[SERVER_CNT], new_lock[SERVER_CNT];
 	
 	
-	ctx->transaction_statement_number = 0;
 	DEBUG_COUT ("Transaction now gets started");
-	
 	
 	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer
 	
-	while (ctx->transaction_statement_number  <  TRANSACTION_CNT){
+	while (transaction_statement_number  <  TRANSACTION_CNT){
 		// ************************************************
 		//	Acquiring read timestamp
 		// ************************************************
-		ctx->transaction_statement_number = ctx->transaction_statement_number + 1;
-		DEBUG_COUT (endl << "Handling transaction #" << ctx->transaction_statement_number);
+		transaction_statement_number = transaction_statement_number + 1;
+		DEBUG_COUT (std::endl << "Handling transaction #" << transaction_statement_number);
+		
+		fill_shopping_cart(ctx);
 	
+		// the first server is responsible for timestamps (timestamp oracle)
 		TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-		ctx->qp,
-		ctx->local_read_timestamp_mr,
-		(uint64_t)ctx->local_read_timestamp_region,
-		&(ctx->peer_mr_timestamp),
-		(uint64_t)ctx->peer_mr_timestamp.addr,
+		ctx[0].qp,
+		ctx[0].local_read_timestamp_mr,
+		(uint64_t)&ctx[0].local_read_timestamp_region,
+		&(ctx[0].peer_mr_timestamp),
+		(uint64_t)ctx[0].peer_mr_timestamp.addr,
 		(uint32_t)sizeof(uint64_t),
 		true));
+		TEST_NZ (RDMACommon::poll_completion(ctx[0].cq));
+		
+		shared_context.read_timestamp = ctx[0].local_read_timestamp_region.timestamp;
+		
+		// copy to all contexts
 	
-		TEST_NZ (RDMACommon::poll_completion(ctx->cq));
+		DEBUG_COUT ("Step 1: Received read timestamp from oracle with TID " << shared_context.read_timestamp);
 	
-		DEBUG_COUT ("Step 1: Received read timestamp from oracle with TID " << ctx->local_read_timestamp_region[0].timestamp);
 	
 		// ************************************************
-		//	Fetching ITEM information
+		//	Fetching ITEMs information
 		// ************************************************
-		item_id = rand() % MAX_ITEM_CNT;	// generating in the range 0 to MAX_ITEM_CNT
-	
-		// Find the lookup address on the server remote memory 
-		int item_offset = (item_id * MAX_ITEM_VERSIONS * sizeof(ItemVersion))
-			+ ctx->fetch_block_num * FETCH_BLOCK_SIZE * sizeof(ItemVersion);
-		ItemVersion *item_lookup_address =  (ItemVersion *)(item_offset + ((uint64_t)ctx->peer_mr_items.addr));
-	
-		// RDMA READ it from the server
-		TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-		ctx->qp,
-		ctx->local_items_mr,
-		(uint64_t)ctx->local_items_region,
-		&(ctx->peer_mr_items),
-		(uint64_t)item_lookup_address,
-		FETCH_BLOCK_SIZE * sizeof(ItemVersion),
-		true));
-	
-		TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-		DEBUG_COUT ("Step 2: Received information for item " << item_id <<  ". checking if the suitable version is among them!");
-	
-		ItemVersion *found_version = new ItemVersion[1];
-		int found_version_index = Client::check_if_version_is_in_block(ctx->local_read_timestamp_region[0].timestamp, ctx->local_items_region, MAX_ITEM_VERSIONS);
-	
+		
+		// TODO: Should be fixed. multiple requests to the same server should be sent with only one signalled request 
+		for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+		{
+			// first find which server the data corresponds to
+			server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+			get_item_info(&ctx[server_num]);
+		}
+		
+		for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+		{
+			server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+			TEST_NZ (RDMACommon::poll_completion(ctx[server_num].cq));
+			DEBUG_COUT (".... Received information for item " << ctx[server_num].local_items_region->item.I_ID << " from " << ctx[server_num].server_address);
+		}
+		DEBUG_COUT ("Step 2: Received information for all items");
+		
+		
+		// Since we only have one version per item (and hence one version is read for each item), we simplify this section
+		/*
+		int found_version_index = RDMAClient::check_if_version_is_in_block(ctx->local_read_timestamp_region[0].timestamp, ctx->local_items_region, MAX_ITEM_VERSIONS);
 		if (found_version_index >= 0)
+		*/
+		int found_version_index = 0;
+		if (true)	
 		{
 			// Found the version in the received block
-			DEBUG_COUT("....... Version Found in block " << ctx->fetch_block_num << " with timestamp " << ctx->local_items_region[found_version_index].write_timestamp);
+			// DEBUG_COUT("....... Version Found in block " << ctx[0].fetch_block_num << " with timestamp " << ctx[0].local_items_region[found_version_index].write_timestamp);
 		
 			// ************************************************
 			//	Commit begins
@@ -325,180 +458,189 @@ int Client::start_transaction(Context *ctx)
 		
 			// ************************************************
 			//	Acquiring commit timestamp
-			ctx->local_commit_timestamp_region[0].timestamp = 4ULL;
-			TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(ctx->qp,
-			ctx->local_commit_timestamp_mr,
-			(uint64_t)ctx->local_commit_timestamp_region,
-			&(ctx->peer_mr_timestamp),
-			(uint64_t)ctx->peer_mr_timestamp.addr,
+			
+			TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(ctx[0].qp,
+			ctx[0].local_commit_timestamp_mr,
+			(uint64_t)&ctx[0].local_commit_timestamp_region,
+			&(ctx[0].peer_mr_timestamp),
+			(uint64_t)ctx[0].peer_mr_timestamp.addr,
 			(uint64_t)1ULL,
 			(uint32_t)sizeof(TimestampOracle)));
-	
-			TEST_NZ (RDMACommon::poll_completion(ctx->cq));
+			TEST_NZ (RDMACommon::poll_completion(ctx[0].cq));
 			
 			// Byte swapping, since all values read by atomic operations are in reverse bit order
-			ctx->local_commit_timestamp_region[0].timestamp = hton64(ctx->local_commit_timestamp_region[0].timestamp);
-			
-			ctx->local_commit_timestamp_region[0].timestamp += 1ULL;
-			DEBUG_COUT ("Step 3: Commit timestamp " << ctx->local_commit_timestamp_region[0].timestamp << " successfully acquired.");	
+			ctx[0].local_commit_timestamp_region.timestamp = hton64(ctx[0].local_commit_timestamp_region.timestamp);
+			ctx[0].local_commit_timestamp_region.timestamp += 1ULL;
+			shared_context.commit_timestamp = ctx[0].local_commit_timestamp_region.timestamp;
+			DEBUG_COUT ("Step 3: Commit timestamp " << shared_context.commit_timestamp << " successfully acquired.");
 		
-
+			
 			// ************************************************
 			// First step, acquiring locks
-	
-			// lock expected before locking 
-			lock_status		= (uint32_t) 0;
-			version			= (uint32_t) ctx->local_items_region[found_version_index].write_timestamp;
-			expected_lock	= Lock::set_lock(lock_status, version);
-			
-			// new lock
-			lock_status		= (uint32_t) 1;
-			version			= (uint32_t) ctx->local_commit_timestamp_region[0].timestamp;			
-			new_lock		= Lock::set_lock(lock_status, version);
-			
-			// and the actual content of the lock (before being swapped) will be stored in the following variable
-			memset(ctx->local_lock_items_region, 0, sizeof(uint64_t));
-			
-			int lock_offset = (item_id) * sizeof(uint64_t);
-			uint64_t *lock_lookup_address =  (uint64_t *)(lock_offset + ((uint64_t)ctx->peer_mr_lock_items.addr));
-		
-			TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(ctx->qp,
-			ctx->local_lock_items_mr,
-			(uint64_t)ctx->local_lock_items_region,
-			&(ctx->peer_mr_lock_items),
-			(uint64_t)lock_lookup_address,
-			(uint32_t)sizeof(uint64_t),
-			(uint64_t)expected_lock,
-			(uint64_t)new_lock));
-			
-			TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-			
-			// Byte swapping, since all values read by atomic operations are in reverse bit order
-			ctx->local_lock_items_region[0] = hton64(ctx->local_lock_items_region[0]);
-			
-			//DEBUG_COUT ("Expected lock: " << Lock::get_lock_status(expected_lock) << " | " << Lock::get_version(expected_lock));
-			//DEBUG_COUT ("Existing lock: " << Lock::get_lock_status(ctx->local_lock_items_region[0]) << " | " << Lock::get_version(ctx->local_lock_items_region[0]));
-			//DEBUG_COUT ("New lock:		" << Lock::get_lock_status(new_lock) << " | " << Lock::get_version(new_lock));
-			
-			if (Lock::are_equals(ctx->local_lock_items_region[0], expected_lock))
+			for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
 			{
-				DEBUG_COUT ("Step 4: Lock on item " << item_id << " successfully acquired.");
+				server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
 				
-				// ************************************************
-				//	Add a new record to table ORDERS
-				ctx->local_orders_region->write_timestamp	= ctx->local_commit_timestamp_region[0].timestamp;
-				ctx->local_orders_region->orders.O_ID		= ctx->local_commit_timestamp_region[0].timestamp;
-				
-				int order_offset = ((ctx->local_orders_region->orders.O_ID - 1) * sizeof(OrdersVersion));
-				OrdersVersion *orders_lookup_address =  (OrdersVersion *)(order_offset + (uint64_t)ctx->peer_mr_orders.addr);
-			
-				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-				ctx->qp,
-				ctx->local_orders_mr,
-				(uint64_t)ctx->local_orders_region,
-				&(ctx->peer_mr_orders),
-				(uint64_t)orders_lookup_address,
-				(uint32_t)sizeof(OrdersVersion),
-				false));
-				DEBUG_COUT ("Step 5: Successfully added a new record to table ORDERS (unsignaled)");
-				
-				
-				// ************************************************
-				//	Add new record(s) to table ORDERLINE
-				for (i = 0; i < ORDERLINE_PER_ORDER; i++)
-				{
-					ctx->local_order_line_region[i].write_timestamp		= ctx->local_commit_timestamp_region[0].timestamp;
-					ctx->local_order_line_region[i].order_line.OL_ID	= (ctx->local_commit_timestamp_region[0].timestamp - 1) * ORDERLINE_PER_ORDER + 1 + i;
-					ctx->local_order_line_region[i].order_line.OL_O_ID	= ctx->local_orders_region->orders.O_ID;
-					ctx->local_order_line_region[i].order_line.OL_I_ID	= item_id;
-				}
-				int ol_offset = (ctx->local_commit_timestamp_region[0].timestamp - 1) * ORDERLINE_PER_ORDER * sizeof(OrderLineVersion);
-				OrderLineVersion *ol_lookup_address =  (OrderLineVersion *)(ol_offset + (uint64_t)ctx->peer_mr_order_line.addr);
-			
-				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-				ctx->qp,
-				ctx->local_order_line_mr,
-				(uint64_t)ctx->local_order_line_region,
-				&(ctx->peer_mr_order_line),
-				(uint64_t)ol_lookup_address,
-				(uint32_t)ORDERLINE_PER_ORDER * sizeof(OrderLineVersion),
-				false));
-				DEBUG_COUT ("Step 6: Successfully added new record(s) to table ORDERLINE (unsignaled)");
-		
-			
-				// ************************************************
-				//	Adding a new record to CC_XACTS table
-				ctx->local_cc_xacts_region->write_timestamp = ctx->local_commit_timestamp_region[0].timestamp;
-				ctx->local_cc_xacts_region->cc_xacts.CX_O_ID = ctx->local_orders_region->orders.O_ID;
-		
-				int cc_offset = ((ctx->local_cc_xacts_region->cc_xacts.CX_O_ID - 1) * sizeof(CCXactsVersion));
-				CCXactsVersion *cc_lookup_address =  (CCXactsVersion *)(cc_offset + (uint64_t)ctx->peer_mr_cc_xacts.addr);
-			
-				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-				ctx->qp,
-				ctx->local_cc_xacts_mr,
-				(uint64_t)ctx->local_cc_xacts_region,
-				&(ctx->peer_mr_cc_xacts),
-				(uint64_t)cc_lookup_address,
-				(uint32_t)sizeof(CCXactsVersion),
-				false));
-				DEBUG_COUT ("Step 7: Successfully added a new record to table CC_XACTS (unsignaled)");
-			
-			
-				// ************************************************
-				//	Decrementing the stock in ITEM table
-				ctx->local_items_region[0].write_timestamp = ctx->local_commit_timestamp_region[0].timestamp;
-				if (ctx->local_items_region[0].item.I_STOCK < 10)
-					ctx->local_items_region[0].item.I_STOCK += 20;
-				else
-					ctx->local_items_region[0].item.I_STOCK -= 1;
+				// lock expected before locking 
+				lock_status					= (uint32_t) 0;
+				version						= (uint32_t) ctx[server_num].local_items_region[found_version_index].write_timestamp;
+				expected_lock[server_num]	= Lock::set_lock(lock_status, version);
 	
-				// we already have item_lookup_address
-			
-				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-				ctx->qp,
-				ctx->local_items_mr,
-				(uint64_t)ctx->local_items_region,
-				&(ctx->peer_mr_items),
-				(uint64_t)item_lookup_address,
-				(uint32_t)sizeof(ItemVersion),
-				false));
-				DEBUG_COUT ("Step 8: Successfully decremented the stock in table ITEM (unsignaled)");
-
-
-				// ************************************************
-				//	Releasing the lock
+				// new lock
+				lock_status					= (uint32_t) 1;
+				version						= (uint32_t) shared_context.commit_timestamp;			
+				new_lock[server_num]		= Lock::set_lock(lock_status, version);
 				
-				lock_status		= (uint32_t) 0;
-				version			= (uint32_t) ctx->local_commit_timestamp_region[0].timestamp;
-				ctx->local_lock_items_region[0] = Lock::set_lock(lock_status, version);	
-				
-				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-				ctx->qp,
-				ctx->local_lock_items_mr,
-				(uint64_t)ctx->local_lock_items_region,
-				&(ctx->peer_mr_lock_items),
-				(uint64_t)lock_lookup_address,
-				(uint32_t)sizeof(uint64_t),
-				true));
-				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
-				DEBUG_COUT ("Step 9: Lock released.");
-				DEBUG_COUT ("Transaction finished successfully!");
+				acquire_item_lock(&ctx[server_num], &expected_lock[server_num], &new_lock[server_num]);
 			}
-			else
+			
+			abort_flag = false;
+			for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
 			{
-				DEBUG_CERR ("ABORT: requested item is either locked or changed by some other transaction. Lock on item could not get acquired :(");
-				DEBUG_CERR ("Details:");
-				DEBUG_CERR ("...Lock: " << Lock::get_lock_status(ctx->local_lock_items_region[0]) << " | " << Lock::get_version(ctx->local_lock_items_region[0]));		
-				DEBUG_COUT ("...but was looking for version " << ctx->local_items_region[found_version_index].write_timestamp);
+				server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+				
+				TEST_NZ (RDMACommon::poll_completion(ctx[server_num].cq));
+	
+				// Byte swapping, since all values read by atomic operations are in reverse bit order
+				ctx[server_num].local_lock_items_region[0]	= hton64(ctx[server_num].local_lock_items_region[0]);
+	
+				// Check if Compare-and-swap was successful
+				if (Lock::are_equals(ctx[server_num].local_lock_items_region[0], expected_lock[server_num]))
+				{
+					DEBUG_COUT (".... Lock on item " << shopping_cart.cart_lines[i].SCL_I_ID << " successfully acquired.");
+					successful_locking_servers[server_num] = true;
+				}
+				else
+				{
+					DEBUG_COUT (".... Failed to lock item " << shopping_cart.cart_lines[i].SCL_I_ID);
+					DEBUG_COUT ("........ Expected lock: " << Lock::get_lock_status(expected_lock[server_num])
+						<< " | " << Lock::get_version(expected_lock[server_num]));
+					DEBUG_COUT ("........ Existing lock: " << Lock::get_lock_status(ctx[server_num].local_lock_items_region[0])
+						<< " | " << Lock::get_version(ctx[server_num].local_lock_items_region[0]));
+				
+					successful_locking_servers[server_num] = false;					
+					abort_flag = true;
+				}	
+			}
+			
+			// Check if all item locks are successfully acquired 
+			if (abort_flag == true)
+			{
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+					if (successful_locking_servers[server_num] == true)
+						revert_lock(&ctx[server_num], &expected_lock[server_num]);
+				}
+				
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+					if (successful_locking_servers[server_num] == true)
+					{
+						TEST_NZ (RDMACommon::poll_completion(ctx[server_num].cq));
+						DEBUG_COUT (".... Lock reverted on item " << ctx[server_num].local_items_region->item.I_ID);
+					}
+				}
+				DEBUG_CERR ("ABORT: Lock on all items could not be acquired :(");
 				abort_cnt++;
 				continue;
 			}
-		}
-		else{
-			// TODO				
-			DEBUG_COUT ("Version NOT Found: in block " << ctx-> fetch_block_num);
-			return -1;
+			else
+			{
+				DEBUG_COUT ("Step 4: All locks successfully acquired");
+				
+				// ************************************************
+				//	Decrementing the stock in ITEM table
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+					decrement_item_stock(&ctx[server_num]);
+				}				
+				DEBUG_COUT ("Step 5: Successfully decremented the stock in table ITEM (unsignaled)");
+				
+				
+				// ************************************************
+				//	Releasing the lock
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+					release_lock(&ctx[server_num]);
+				}
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					server_num = shopping_cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
+					
+					TEST_NZ (RDMACommon::poll_completion(ctx[server_num].cq));
+					DEBUG_COUT (".... Lock on item " << shopping_cart.cart_lines[i].SCL_I_ID  << " released with commit timestamp " << shared_context.commit_timestamp);
+				}					
+				DEBUG_COUT ("Step 6: All locks successfully released");
+				
+				
+				// ************************************************
+				//	Add a new record to table ORDERS (which is stored on only one server)
+				ctx[0].local_orders_region.write_timestamp	= shared_context.commit_timestamp;
+				ctx[0].local_orders_region.orders.O_ID		= shared_context.commit_timestamp;
+				
+				int order_offset = ((ctx[0].local_orders_region.orders.O_ID - 1) * sizeof(OrdersVersion));
+				OrdersVersion *orders_lookup_address =  (OrdersVersion *)(order_offset + (uint64_t)ctx[0].peer_mr_orders.addr);
+			
+				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+				ctx[0].qp,
+				ctx[0].local_orders_mr,
+				(uint64_t)&ctx[0].local_orders_region,
+				&(ctx[0].peer_mr_orders),
+				(uint64_t)orders_lookup_address,
+				(uint32_t)sizeof(OrdersVersion),
+				false));
+				DEBUG_COUT ("Step 7: Successfully added a new record to table ORDERS (unsignaled)");
+				
+				
+				// ************************************************
+				//	Add new record(s) to table ORDERLINE (which is stored on only one server)
+				for (int i = 0; i < ORDERLINE_PER_ORDER; i++)
+				{
+					ctx[0].local_order_line_region[i].write_timestamp		= shared_context.commit_timestamp;
+					ctx[0].local_order_line_region[i].order_line.OL_ID		= (shared_context.commit_timestamp - 1) * ORDERLINE_PER_ORDER + 1 + i;
+					ctx[0].local_order_line_region[i].order_line.OL_O_ID	= ctx[0].local_orders_region.orders.O_ID;
+					ctx[0].local_order_line_region[i].order_line.OL_I_ID	= shopping_cart.cart_lines[i].SCL_I_ID;
+					ctx[0].local_order_line_region[i].order_line.OL_QTY		= shopping_cart.cart_lines[i].SCL_QTY;
+				}
+				int ol_offset = (shared_context.commit_timestamp- 1) * ORDERLINE_PER_ORDER * sizeof(OrderLineVersion);
+				OrderLineVersion *ol_lookup_address = (OrderLineVersion *)(ol_offset + (uint64_t)ctx[0].peer_mr_order_line.addr);
+			
+				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+				ctx[0].qp,
+				ctx[0].local_order_line_mr,
+				(uint64_t)ctx[0].local_order_line_region,
+				&(ctx[0].peer_mr_order_line),
+				(uint64_t)ol_lookup_address,
+				(uint32_t)ORDERLINE_PER_ORDER * sizeof(OrderLineVersion),
+				false));
+				DEBUG_COUT ("Step 8: Successfully added new record(s) to table ORDERLINE (unsignaled)");
+		
+				
+				// ************************************************
+				//	Adding a new record to CC_XACTS table (which is stored on only one server)
+				ctx[0].local_cc_xacts_region.write_timestamp = shared_context.commit_timestamp;
+				ctx[0].local_cc_xacts_region.cc_xacts.CX_O_ID = ctx[0].local_orders_region.orders.O_ID;
+		
+				int cc_offset = ((shared_context.commit_timestamp - 1) * sizeof(CCXactsVersion));
+				CCXactsVersion *cc_lookup_address =  (CCXactsVersion *)(cc_offset + (uint64_t)ctx[0].peer_mr_cc_xacts.addr);
+			
+				TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+				ctx[0].qp,
+				ctx[0].local_cc_xacts_mr,
+				(uint64_t)&ctx[0].local_cc_xacts_region,
+				&(ctx[0].peer_mr_cc_xacts),
+				(uint64_t)cc_lookup_address,
+				(uint32_t)sizeof(CCXactsVersion),
+				true));
+				TEST_NZ (RDMACommon::poll_completion(ctx->cq));
+				DEBUG_COUT ("Step 9: Successfully added a new record to table CC_XACTS (signaled)");
+			
+				DEBUG_COUT ("Transaction finished successfully!");
+			}
 		}
 	}
 	
@@ -506,48 +648,60 @@ int Client::start_transaction(Context *ctx)
 	
 	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
 	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(nano_elapsed_time / 1000000));
-	cout << "Transaction per millisec: " <<  T_P_MILISEC << endl;
+	std::cout << "Transaction per millisec: " <<  T_P_MILISEC << std::endl;
 	
 	int committed_cnt = TRANSACTION_CNT - abort_cnt;
 	double success_rate = (double)committed_cnt /  TRANSACTION_CNT;
-	cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << endl;
+	std::cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
 	
 	return 0;
 }
 
-int Client::start_client ()
+
+int RDMAClient::start_client ()
 {	
 	// Init Context
-	struct Context ctx;
+	struct Context ctx[SERVER_CNT];
 	char temp_char;
 	
-    memset (&ctx, 0, sizeof ctx);
-    ctx.client_sockfd = -1;
+	for (int i = 0; i < SERVER_CNT; i++){
+	    memset (&ctx[i], 0, sizeof(Context));
+	    ctx[i].client_sockfd = -1;
+	   	strcpy(ctx[i].server_address, SERVER_ADDR[i].c_str());
+		ctx[i].tcp_port	= TCP_PORT[i];
+		ctx[i].ib_port	= IB_PORT[i];
+		
 	
-	TEST_NZ (create_context (&ctx));
+		TEST_NZ (create_context (&ctx[i]));
 	
-	// before connecting the queue pairs, we post the RECEIVE job to be ready for the server's message containing its memory locations
-	RDMACommon::post_RECEIVE(ctx.qp, ctx.recv_mr, (uintptr_t)ctx.recv_msg, sizeof(struct Message));
+		// before connecting the queue pairs, we post the RECEIVE job to be ready for the server's message containing its memory locations
+		RDMACommon::post_RECEIVE(ctx[i].qp, ctx[i].recv_mr, (uintptr_t)ctx[i].recv_msg, sizeof(struct Message));
 	
-	TEST_NZ(connect_qp (&ctx));
+		TEST_NZ(connect_qp (&ctx[i]));
 	
-	TEST_NZ(RDMACommon::poll_completion(ctx.cq));
-	// after receiving the message from the server, let's store its addresses in the context
-	memcpy(&ctx.peer_mr_items,		&ctx.recv_msg->mr_items,		sizeof(ctx.peer_mr_items));
-	memcpy(&ctx.peer_mr_orders,		&ctx.recv_msg->mr_orders,		sizeof(ctx.peer_mr_orders));
-	memcpy(&ctx.peer_mr_order_line,	&ctx.recv_msg->mr_order_line,	sizeof(ctx.peer_mr_order_line));
-	memcpy(&ctx.peer_mr_cc_xacts,	&ctx.recv_msg->mr_cc_xacts,		sizeof(ctx.peer_mr_cc_xacts));
-	memcpy(&ctx.peer_mr_timestamp,	&ctx.recv_msg->mr_timestamp,	sizeof(ctx.peer_mr_timestamp));
-	memcpy(&ctx.peer_mr_lock_items,	&ctx.recv_msg->mr_lock_items,	sizeof(ctx.peer_mr_lock_items));
+		TEST_NZ(RDMACommon::poll_completion(ctx[i].cq));
+		// after receiving the message from the server, let's store its addresses in the context
+		memcpy(&ctx[i].peer_mr_items,		&ctx[i].recv_msg->mr_items,			sizeof(struct ibv_mr));
+		memcpy(&ctx[i].peer_mr_orders,		&ctx[i].recv_msg->mr_orders,		sizeof(struct ibv_mr));
+		memcpy(&ctx[i].peer_mr_order_line,	&ctx[i].recv_msg->mr_order_line,	sizeof(struct ibv_mr));
+		memcpy(&ctx[i].peer_mr_cc_xacts,	&ctx[i].recv_msg->mr_cc_xacts,		sizeof(struct ibv_mr));
+		memcpy(&ctx[i].peer_mr_timestamp,	&ctx[i].recv_msg->mr_timestamp,		sizeof(struct ibv_mr));
+		memcpy(&ctx[i].peer_mr_lock_items,	&ctx[i].recv_msg->mr_lock_items,	sizeof(struct ibv_mr));
+	}
+	
+	std::cout << "Successfully connected to all servers." << std::endl;
 	
     srand (time(NULL));		// initialize random seed
 	
-	start_transaction(&ctx);
+	start_transaction(ctx);
 	
 	/* Sync so server will know that client is done mucking with its memory */
-	DEBUG_COUT("Client is done, and is ready to destroy its resources!");
-	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-	TEST_NZ(destroy_context(&ctx));
+	DEBUG_COUT("RDMAClient is done, and is ready to destroy its resources!");
+	for (int i = 0; i < SERVER_CNT; i++)
+	{
+		TEST_NZ (sock_sync_data (ctx[i].client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
+		TEST_NZ(destroy_context(&ctx[i]));
+	}
 }
 
 /******************************************************************************
@@ -569,13 +723,12 @@ int Client::start_client ()
 int main (int argc, char *argv[])
 {
 	/* parse the command line parameters */
-	if (argc != 2) {
-		Client::usage(argv[0]);
+	if (argc != 1) {
+		RDMAClient::usage(argv[0]);
 		return 1;
 	}
-	Client::server_name = argv[1];
 	
-	Client client;
+	RDMAClient client;
 	client.start_client();
 	return 0;
 	

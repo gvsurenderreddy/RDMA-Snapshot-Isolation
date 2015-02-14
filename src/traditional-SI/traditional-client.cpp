@@ -44,7 +44,7 @@ int Client::build_connection(Context *ctx)
 	ctx->client_sockfd = sock_connect (Client::server_name, TCP_PORT);
 	if (ctx->client_sockfd < 0)
 	{
-		cerr << "failed to establish TCP connection to server " <<  Client::server_name << ", port " << TCP_PORT << endl;
+		std::cerr << "failed to establish TCP connection to server " <<  Client::server_name << ", port " << TCP_PORT << std::endl;
 		destroy_context(ctx);
 		return -1;
 	}
@@ -182,15 +182,15 @@ int Client::destroy_context (struct Context *ctx)
 
 void Client::die(const char *reason)
 {
-	cerr <<  reason << endl;
-	cerr << "Errno: " << strerror(errno) << endl;	
+	std::cerr <<  reason << std::endl;
+	std::cerr << "Errno: " << strerror(errno) << std::endl;	
 	exit(EXIT_FAILURE);
 }
 
 void Client::usage (const char *argv0)
 {
-	cout << "Usage:" << endl;
-	cout << argv0 << " <host> connects to server at <host>" << endl;
+	std::cout << "Usage:" << std::endl;
+	std::cout << argv0 << " <host> connects to server at <host>" << std::endl;
 }
 
 int Client::start_transaction(Context *ctx)
@@ -206,7 +206,7 @@ int Client::start_transaction(Context *ctx)
 	
 	while (ctx->transaction_statement_number  <  TRANSACTION_CNT){
 		ctx->transaction_statement_number = ctx->transaction_statement_number + 1;
-		DEBUG_COUT (endl << "Handling transaction #" << ctx->transaction_statement_number);
+		DEBUG_COUT (std::endl << "Handling transaction #" << ctx->transaction_statement_number);
 		
 		// ************************************************************************
 		//	Clients sends ItemInfoRequest to receive info on the item
@@ -250,11 +250,11 @@ int Client::start_transaction(Context *ctx)
 	
 	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
 	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(nano_elapsed_time / 1000000));
-	cout << "Transaction per millisec: " <<  T_P_MILISEC << endl;
+	std::cout << "Transaction per millisec: " <<  T_P_MILISEC << std::endl;
 	
 	int committed_cnt = TRANSACTION_CNT - abort_cnt;
 	double success_rate = (double)committed_cnt /  TRANSACTION_CNT;
-	cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << endl;
+	std::cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
 	
 	return 0;
 }

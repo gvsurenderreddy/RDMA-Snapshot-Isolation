@@ -5,10 +5,6 @@
  *	Author: erfanz
  */
 
-#include <iostream>
-using namespace std;
-
-
 class Orders {
 public:
 	int O_ID;

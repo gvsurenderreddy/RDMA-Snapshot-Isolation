@@ -8,6 +8,7 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
+#include "../../config.hpp"
 #include <stdint.h>
 #include <byteswap.h>
 
@@ -38,19 +39,15 @@ static inline uint32_t hton32 (uint32_t x)
 #endif
 
 
-/*
-#ifndef DEBUG
-#define DEBUG
-#endif
-*/
-
-#ifdef DEBUG
+#if(DEBUG_ENABLED)
 # define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )
 # define DEBUG_CERR(x) do { std::cerr << x << std::endl; } while( false )
 #else
 # define DEBUG_COUT(x) do {} while (false)
 # define DEBUG_CERR(x) do {} while (false)
 #endif
+
+
 
 /******************************************************************************
 * Function: sock_sync_data

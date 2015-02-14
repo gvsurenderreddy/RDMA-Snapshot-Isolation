@@ -20,20 +20,22 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <iostream>
-using namespace std;
 
 
-ItemVersion*		Server::items_region			= new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
-OrdersVersion*		Server::orders_region			= new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
-OrderLineVersion*	Server::order_line_region		= new OrderLineVersion[ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS];
-CCXactsVersion*		Server::cc_xacts_region			= new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
-TimestampOracle*	Server::timestamp_region		= new TimestampOracle[1];
-uint64_t*			Server::lock_items_region		= new uint64_t[MAX_ITEM_CNT];
 
-int Server::server_sockfd = -1;
+ItemVersion*		RDMAServer::items_region		= new ItemVersion[ITEM_CNT * MAX_ITEM_VERSIONS];
+OrdersVersion*		RDMAServer::orders_region		= new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
+OrderLineVersion*	RDMAServer::order_line_region	= new OrderLineVersion[ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS];
+CCXactsVersion*		RDMAServer::cc_xacts_region		= new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
+TimestampOracle*	RDMAServer::timestamp_region	= new TimestampOracle[1];
+uint64_t*			RDMAServer::lock_items_region	= new uint64_t[ITEM_CNT];
+
+int RDMAServer::server_sockfd = -1;
+int	RDMAServer::tcp_port;
+int	RDMAServer::ib_port;
 
 
-int Server::create_context(struct Context *ctx)
+int RDMAServer::create_context(struct Context *ctx)
 {	
 	TEST_NZ(build_connection(ctx));
 	TEST_NZ(register_memory(ctx));
@@ -42,7 +44,7 @@ int Server::create_context(struct Context *ctx)
 	return 0;
 }
 
-int Server::build_connection(Context *ctx)
+int RDMAServer::build_connection(Context *ctx)
 {	
 	struct ibv_device **dev_list = NULL;
 	struct ibv_device *ib_dev = NULL;
@@ -73,7 +75,7 @@ int Server::build_connection(Context *ctx)
 	ib_dev = NULL;
 	
 	// query port properties
-	TEST_NZ (ibv_query_port (ctx->ib_ctx, IB_PORT, &ctx->port_attr));
+	TEST_NZ (ibv_query_port (ctx->ib_ctx, RDMAServer::ib_port, &ctx->port_attr));
 	
 	
 	// allocate Protection Domain
@@ -86,7 +88,7 @@ int Server::build_connection(Context *ctx)
 	return 0;
 }
 
-int Server::register_memory(Context *ctx)
+int RDMAServer::register_memory(Context *ctx)
 {
 	int mr_flags = 0;
 	int i_s;
@@ -98,12 +100,12 @@ int Server::register_memory(Context *ctx)
 	
 	ctx->send_msg = new Message[1];
 
-	i_s			= MAX_ITEM_CNT * MAX_ITEM_VERSIONS * sizeof(ItemVersion);
+	i_s			= ITEM_CNT * MAX_ITEM_VERSIONS * sizeof(ItemVersion);
 	o_s			= MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS * sizeof(OrdersVersion);
 	ol_s		= ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS * sizeof(OrderLineVersion);
 	cc_s		= MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS * sizeof(CCXactsVersion);
 	ts_s		= sizeof(TimestampOracle);
-	lock_item_s	= MAX_ITEM_CNT * sizeof(uint64_t);
+	lock_item_s	= ITEM_CNT * sizeof(uint64_t);
 	
 	mr_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 	
@@ -119,7 +121,7 @@ int Server::register_memory(Context *ctx)
 }
 
 
-void* Server::handle_client(void *param)
+void* RDMAServer::handle_client(void *param)
 {
 	int client_sock = *((int*) param);
 	char temp_char;
@@ -153,14 +155,14 @@ void* Server::handle_client(void *param)
 	
 	/* Sync so server will know that client is done mucking with its memory */
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-	cout << "final value of the timestamp buffer " << Server::timestamp_region[0].timestamp << endl;
-	cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
+	std::cout << "final value of the timestamp buffer " << RDMAServer::timestamp_region[0].timestamp << std::endl;
+	std::cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << std::endl;
 	
 	TEST_NZ (destroy_context(&ctx));
 	return NULL;
 }
 
-int Server::connect_qp (struct Context *ctx)
+int RDMAServer::connect_qp (struct Context *ctx)
 {
 	struct CommunicationExchangeData local_con_data, remote_con_data, tmp_con_data;
 	char temp_char;
@@ -188,10 +190,10 @@ int Server::connect_qp (struct Context *ctx)
 	
 	
 	// modify the QP to init
-	TEST_NZ(RDMACommon::modify_qp_to_init (IB_PORT, ctx->qp));
+	TEST_NZ(RDMACommon::modify_qp_to_init (RDMAServer::ib_port, ctx->qp));
 	
 	// modify the QP to RTR
-	TEST_NZ(RDMACommon::modify_qp_to_rtr (IB_PORT, ctx->qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
+	TEST_NZ(RDMACommon::modify_qp_to_rtr (RDMAServer::ib_port, ctx->qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
 	
 	// modify the QP to RTS
 	TEST_NZ(RDMACommon::modify_qp_to_rts (ctx->qp));
@@ -202,7 +204,7 @@ int Server::connect_qp (struct Context *ctx)
 	return 0;
 }
 
-int Server::destroy_context (struct Context *ctx)
+int RDMAServer::destroy_context (struct Context *ctx)
 {
 	if (ctx->qp)
 		TEST_NZ(ibv_destroy_qp (ctx->qp));
@@ -244,23 +246,23 @@ int Server::destroy_context (struct Context *ctx)
 	}
 }
 
-int Server::destroy_resources ()
+int RDMAServer::destroy_resources ()
 {
-	delete[](Server::items_region);
-	delete[](Server::orders_region);
-	delete[](Server::order_line_region);
-	delete[](Server::cc_xacts_region);
-	delete[](Server::timestamp_region);
-	delete[](Server::lock_items_region);
+	delete[](RDMAServer::items_region);
+	delete[](RDMAServer::orders_region);
+	delete[](RDMAServer::order_line_region);
+	delete[](RDMAServer::cc_xacts_region);
+	delete[](RDMAServer::timestamp_region);
+	delete[](RDMAServer::lock_items_region);
 	
-	close(Server::server_sockfd);	// close the socket
+	close(RDMAServer::server_sockfd);	// close the socket
 	return 0;
 }
 
-int Server::initialize_data_structures(){
+int RDMAServer::initialize_data_structures(){
 	
-	Server::timestamp_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
-	DEBUG_COUT("Timestamp set to " << Server::timestamp_region[0].timestamp);
+	RDMAServer::timestamp_region[0].timestamp = 0ULL;	// the timestamp counter is initially set to 0
+	DEBUG_COUT("Timestamp set to " << RDMAServer::timestamp_region[0].timestamp);
 
 	TEST_NZ(load_tables_from_files());
 	DEBUG_COUT("tables loaded successfully");
@@ -268,7 +270,7 @@ int Server::initialize_data_structures(){
 	int i;
 	uint32_t stat;
 	uint32_t version;
-	for (i=0; i < MAX_ITEM_CNT; i++)
+	for (i=0; i < ITEM_CNT; i++)
 	{
 		stat = (uint32_t)0;	// 0 for free, 1 for locked
 		version = (uint32_t)0;	// the first version of each item is 0
@@ -279,7 +281,7 @@ int Server::initialize_data_structures(){
 	return 0;
 }
 
-int Server::load_tables_from_files() {
+int RDMAServer::load_tables_from_files() {
 	FILE * fp;
 	char * line = NULL;
 	size_t len = 0;
@@ -289,40 +291,40 @@ int Server::load_tables_from_files() {
 	try{
 		fp = fopen(ITEM_FILENAME, "r");
 		if (fp == NULL){
-			cerr << "Cannot open file: " << ITEM_FILENAME << endl;
+			std::cerr << "Cannot open file: " << ITEM_FILENAME << std::endl;
 			exit(EXIT_FAILURE);
 		}		
 		int i = 0;
 		
 		while ((read = getline(&line, &len, fp)) != -1) {
-			if (i >= MAX_ITEM_CNT)
+			if (i >= ITEM_CNT)
 				// we don't want to read more data from file.
 				break;
 			
-			Server::items_region[i].item.I_ID = atoi(strtok(line,  "\t"));
-			strcpy(Server::items_region[i].item.I_TITLE,strtok(NULL, "\t"));
-			Server::items_region[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_PUB_DATE, strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_PUBLISHER, strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_SUBJECT, strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_DESC, strtok(NULL, "\t"));
-			Server::items_region[i].item.I_RELATED1 = atoi(strtok(NULL, "\t"));
-			Server::items_region[i].item.I_RELATED2 = atoi(strtok(NULL, "\t"));
-			Server::items_region[i].item.I_RELATED3 = atoi(strtok(NULL, "\t"));
-			Server::items_region[i].item.I_RELATED4 = atoi(strtok(NULL, "\t"));
-			Server::items_region[i].item.I_RELATED5 = atoi(strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_THUMBNAIL, strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_IMAGE, strtok(NULL, "\t"));
-			Server::items_region[i].item.I_SRP = atof(strtok(NULL, "\t"));
-			Server::items_region[i].item.I_COST = atof(strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_AVAIL, strtok(NULL, "\t"));
-			Server::items_region[i].item.I_STOCK = atoi(strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_ISBN, strtok(NULL, "\t"));
-			Server::items_region[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_BACKING, strtok(NULL, "\t"));
-			strcpy(Server::items_region[i].item.I_DIMENSION, strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_ID = atoi(strtok(line,  "\t")) - 1;		// because we want to start IDs from zero
+			strcpy(RDMAServer::items_region[i].item.I_TITLE,strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_PUB_DATE, strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_PUBLISHER, strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_SUBJECT, strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_DESC, strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_RELATED1 = atoi(strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_RELATED2 = atoi(strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_RELATED3 = atoi(strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_RELATED4 = atoi(strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_RELATED5 = atoi(strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_THUMBNAIL, strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_IMAGE, strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_SRP = atof(strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_COST = atof(strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_AVAIL, strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_STOCK = atoi(strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_ISBN, strtok(NULL, "\t"));
+			RDMAServer::items_region[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_BACKING, strtok(NULL, "\t"));
+			strcpy(RDMAServer::items_region[i].item.I_DIMENSION, strtok(NULL, "\t"));
 			
-			Server::items_region[i].write_timestamp = 0;	
+			RDMAServer::items_region[i].write_timestamp = 0;	
 			i++;
 		}
 
@@ -330,7 +332,7 @@ int Server::load_tables_from_files() {
 		
 	}
 	catch (std::exception& e){
-	    std::cerr << "exception caught: " << e.what() << '\n';
+	    std::cerr << "exception caught: " << e.what() << std::endl;
 	}	
 	if (line)
 		free(line);
@@ -338,35 +340,41 @@ int Server::load_tables_from_files() {
 	return 0;
 }
 
-void Server::die(const char *reason)
+void RDMAServer::die(const char *reason)
 {
 	fprintf(stderr, "%s\n", reason);
 	fprintf(stderr, "Errno: %s\n", strerror(errno));	
 	exit(EXIT_FAILURE);
 }
 
-void Server::usage (const char *argv0) {
-	cout << "Usage:" << endl;
-	cout << argv0 << " starts a server and wait for connection" << endl;
+void RDMAServer::usage (const char *argv0) {
+	std::cout << "Usage:" << std::endl;
+	std::cout << argv0 <<
+		" <i = server_num> starts a server and wait for connection on tcp port Config.TCP_PORT[i] and ib port Config.IB_PORT[i] " << std::endl;
+	std::cout << "valid range of i: 0, 1, ..., Config.SERVER_CNT-1" << std::endl;
 }
 
-int Server::start_server ()
+int RDMAServer::start_server (int server_num)
 {	
+	RDMAServer::tcp_port	= TCP_PORT[server_num];
+	RDMAServer::ib_port		= IB_PORT[server_num];
+	
 	TEST_NZ(initialize_data_structures());
+
+	std::cout << "Server " << server_num << " is waiting for " << CLIENTS_CNT
+		<< " client(s) on tcp port: " << RDMAServer::tcp_port << ", ib port: " << RDMAServer::ib_port << std::endl;
 	
-	cout << "waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!" << endl;
-	
-	Server::server_sockfd = -1;
+	RDMAServer::server_sockfd = -1;
 	struct sockaddr_in serv_addr, cli_addr;
 	socklen_t clilen;
 	pthread_t master_threads[CLIENTS_CNT];	
 	int client_socks[CLIENTS_CNT];
 	
 	// Open Socket
-	Server::server_sockfd = socket (AF_INET, SOCK_STREAM, 0);
-	if (Server::server_sockfd < 0)
+	RDMAServer::server_sockfd = socket (AF_INET, SOCK_STREAM, 0);
+	if (RDMAServer::server_sockfd < 0)
 	{
-		cerr << "Error opening socket" << endl;
+		std::cerr << "Error opening socket" << std::endl;
 		return -1;
 	}
 	
@@ -374,24 +382,24 @@ int Server::start_server ()
 	memset(&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(TCP_PORT);
-	TEST_NZ(bind(Server::server_sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
+	serv_addr.sin_port = htons(RDMAServer::tcp_port);
+	TEST_NZ(bind(RDMAServer::server_sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
 	
 	
 	// listen				  
-	TEST_NZ(listen (Server::server_sockfd, CLIENTS_CNT));
+	TEST_NZ(listen (RDMAServer::server_sockfd, CLIENTS_CNT));
 	
 	// accept connections
 	clilen = sizeof(cli_addr);
 	int i = 0;
 	while (i < CLIENTS_CNT){
-		client_socks[i]  = accept (Server::server_sockfd, (struct sockaddr *) &cli_addr, &clilen);
+		client_socks[i]  = accept (RDMAServer::server_sockfd, (struct sockaddr *) &cli_addr, &clilen);
 		if (client_socks[i] < 0){ 
-			cerr << "ERROR on accept" << endl;
+			std::cerr << "ERROR on accept" << std::endl;
 			return -1;
 		}
-		cout << "received client #" << i << endl;
-		pthread_create(&master_threads[i], NULL, Server::handle_client, &client_socks[i]);
+		std::cout << "received client #" << i << std::endl;
+		pthread_create(&master_threads[i], NULL, RDMAServer::handle_client, &client_socks[i]);
 		i++;
 	}
 	
@@ -401,7 +409,7 @@ int Server::start_server ()
 	}
 	
 	// close server socket
-	cout << "Server is done, now destroying resources!" << endl;
+	std::cout << "Server is done, now destroying resources!" << std::endl;
 	TEST_NZ(destroy_resources());
 }
 
@@ -421,13 +429,13 @@ int Server::start_server ()
 ******************************************************************************/
 int main (int argc, char *argv[])
 {
-	if (argc != 1) {
-		Server::usage(argv[0]);
+	if (argc != 2) {
+		RDMAServer::usage(argv[0]);
 		return 1;
 	}
 	
-	Server server;
-	server.start_server();
+	RDMAServer server;
+	server.start_server(atoi(argv[1]));
 	
 	return 0;
 }

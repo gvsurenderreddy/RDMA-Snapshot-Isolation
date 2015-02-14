@@ -5,9 +5,7 @@
  *	Author: erfanz
  */
 
-#include <iostream>
 #include "cc_xacts.hpp"
-using namespace std;
 
 class CCXactsVersion {
 public:

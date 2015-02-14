@@ -5,9 +5,6 @@
  *	Author: erfanz
  */
 
-#include <iostream>
-using namespace std;
-
 class CCXacts {
 public:
 	int CX_O_ID;

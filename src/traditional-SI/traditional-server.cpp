@@ -19,7 +19,6 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <iostream>
-using namespace std;
 
 
 ItemVersion*		Server::items_region			= new ItemVersion[MAX_ITEM_CNT * MAX_ITEM_VERSIONS];
@@ -137,7 +136,7 @@ void* Server::handle_client(void *param)
 	while (ctx.transaction_statement_number  <  TRANSACTION_CNT)
 	{
 		ctx.transaction_statement_number = ctx.transaction_statement_number + 1;
-		DEBUG_COUT (endl << "Waiting for transaction #" << ctx.transaction_statement_number);
+		DEBUG_COUT (std::endl << "Waiting for transaction #" << ctx.transaction_statement_number);
 		
 		// ************************************************************************
 		// Waits for user to post a ItemInfoRequest job
@@ -233,8 +232,8 @@ void* Server::handle_client(void *param)
 	
 	/* Sync so server will know that client is done mucking with its memory */
 	TEST_NZ (sock_sync_data (ctx.client_sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-	cout << "final value of the timestamp buffer " << Server::timestamp_region.timestamp << endl;
-	//cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << endl;
+	std::cout << "final value of the timestamp buffer " << Server::timestamp_region.timestamp << std::endl;
+	//std::cout << "final value of lock  " << Lock::get_lock_status(lock_items_region[0]) << " | " << Lock::get_version(lock_items_region[0]) << std::endl;
 	
 	TEST_NZ (destroy_context(&ctx));
 	return NULL;
@@ -350,7 +349,7 @@ int Server::load_tables_from_files() {
 	try{
 		fp = fopen(ITEM_FILENAME, "r");
 		if (fp == NULL){
-			cerr << "Cannot open file: " << ITEM_FILENAME << endl;
+			std::cerr << "Cannot open file: " << ITEM_FILENAME << std::endl;
 			exit(EXIT_FAILURE);
 		}		
 		int i = 0;
@@ -391,7 +390,7 @@ int Server::load_tables_from_files() {
 		
 	}
 	catch (std::exception& e){
-	    std::cerr << "exception caught: " << e.what() << '\n';
+	    std::std::cerr << "exception caught: " << e.what() << '\n';
 	}	
 	if (line)
 		free(line);
@@ -407,15 +406,15 @@ void Server::die(const char *reason)
 }
 
 void Server::usage (const char *argv0) {
-	cout << "Usage:" << endl;
-	cout << argv0 << " starts a server and wait for connection" << endl;
+	std::cout << "Usage:" << std::endl;
+	std::cout << argv0 << " starts a server and wait for connection" << std::endl;
 }
 
 int Server::start_server ()
 {	
 	TEST_NZ(initialize_data_structures());
 	
-	cout << "waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!" << endl;
+	std::cout << "waiting for " << CLIENTS_CNT << " client(s) on port " << TCP_PORT << " for TCP connection!" << std::endl;
 	
 	Server::server_sockfd = -1;
 	struct sockaddr_in serv_addr, cli_addr;
@@ -427,7 +426,7 @@ int Server::start_server ()
 	Server::server_sockfd = socket (AF_INET, SOCK_STREAM, 0);
 	if (Server::server_sockfd < 0)
 	{
-		cerr << "Error opening socket" << endl;
+		std::cerr << "Error opening socket" << std::endl;
 		return -1;
 	}
 	
@@ -448,10 +447,10 @@ int Server::start_server ()
 	while (i < CLIENTS_CNT){
 		client_socks[i]  = accept (Server::server_sockfd, (struct sockaddr *) &cli_addr, &clilen);
 		if (client_socks[i] < 0){ 
-			cerr << "ERROR on accept" << endl;
+			std::cerr << "ERROR on accept" << std::endl;
 			return -1;
 		}
-		cout << "received client #" << i << endl;
+		std::cout << "received client #" << i << std::endl;
 		pthread_create(&master_threads[i], NULL, Server::handle_client, &client_socks[i]);
 		i++;
 	}
@@ -462,7 +461,7 @@ int Server::start_server ()
 	}
 	
 	// close server socket
-	cout << "Server is done, now destroying resources!" << endl;
+	std::cout << "Server is done, now destroying resources!" << std::endl;
 	TEST_NZ(destroy_resources());
 }
 

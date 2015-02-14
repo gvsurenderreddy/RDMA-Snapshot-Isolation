@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include "../util/utils.hpp"
 #include <iostream>
-using namespace std;
 
 uint32_t Lock::get_lock_status(uint64_t lock)
 {
