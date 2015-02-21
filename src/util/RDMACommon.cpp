@@ -9,8 +9,9 @@
 #include "utils.hpp"
 #include <iostream>
 #include <cstring>
+#include <arpa/inet.h>
 
-int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length)
+int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length, bool signaled)
 {
 	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
@@ -26,7 +27,10 @@ int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t
 	wr.sg_list		= &sge;
 	wr.num_sge		= 1;
 	wr.opcode		= IBV_WR_SEND;
-	wr.send_flags	= IBV_SEND_SIGNALED;
+	if (signaled)
+		wr.send_flags 		= IBV_SEND_SIGNALED;
+	else
+		wr.send_flags 		= 0;
 	
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_send() failed" << std::endl;
@@ -161,7 +165,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	attr.pd = pd;
 	attr.send_cq = cq;
 	attr.recv_cq = cq;
-	attr.sq_sig_all = 0;	// In every WR, it must decided whether to generate a WC or not
+	attr.sq_sig_all = 0;	// In every WR, it must be decided whether to generate a WC or not
 	attr.cap.max_send_wr  = RDMA_MAX_WR;
 	attr.cap.max_send_sge = RDMA_MAX_SGE;
 	attr.cap.max_inline_data = 0;
@@ -181,7 +185,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 		std::cerr << "failed to create QP" << std::endl;
 		return -1;
 	}
-	DEBUG_COUT ("QP was created, QP number=0x" << (*qp)->qp_num);
+	DEBUG_COUT ("[Conn] QP created, QP number=0x" << (*qp)->qp_num);
 	//fprintf (stdout, "QP was created, QP number=0x%x\n", (*qp)->qp_num);
 	
 	return 0;
@@ -259,6 +263,8 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		ne = ibv_poll_cq(cq, 1, &wc);
 		if(wc.status != IBV_WC_SUCCESS) {
 			std::cerr << "RDMA completion event in CQ with error!" << std::endl;
+			std::cerr << "wc_status: " << wc.status << std::endl;
+			
 			return -1;
 		}
 	}while(ne==0);
@@ -267,5 +273,79 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		std::cerr << "RDMA polling from CQ failed!" << std::endl;
 		return -1;
 	}
+	return 0;
+}
+
+int RDMACommon::build_connection(int ib_port, struct ibv_context** ib_ctx,
+struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, int cq_size)
+{
+	struct	ibv_device **dev_list = NULL;
+	struct	ibv_device *ib_dev = NULL;
+	int		num_devices;
+	struct	ibv_comp_channel *comp_channel;
+
+	// get device names in the system
+	TEST_Z(dev_list = ibv_get_device_list (&num_devices));
+	TEST_Z(num_devices); // if there isn't any IB device in host
+
+	// select the first device
+	const char *dev_name = strdup (ibv_get_device_name (dev_list[0]));
+	TEST_Z(ib_dev = dev_list[0]);	// if the device wasn't found in host
+	
+	TEST_Z(*ib_ctx = ibv_open_device (ib_dev));		// get device handle
+
+	// We are now done with device list, free it
+	ibv_free_device_list (dev_list);
+	dev_list = NULL;
+	ib_dev = NULL;
+	
+	TEST_NZ (ibv_query_port (*ib_ctx, ib_port, port_attr));
+
+	TEST_Z(*pd = ibv_alloc_pd (*ib_ctx));		// allocate Protection Domain
+
+	// Create completion channel and completion queue
+	TEST_Z(comp_channel = ibv_create_comp_channel(*ib_ctx));
+	
+	TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, comp_channel, 0));
+	return 0;
+}
+
+int RDMACommon::connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int sockfd)
+{
+	struct CommExchData local_con_data, remote_con_data, tmp_con_data;
+	char temp_char;
+	union ibv_gid my_gid;
+	
+	memset (&my_gid, 0, sizeof my_gid);
+	
+	// exchange using TCP sockets info required to connect QPs
+	local_con_data.qp_num	= htonl ((*qp)->qp_num);
+	local_con_data.lid		= htons (lid);
+	
+	memcpy (local_con_data.gid, &my_gid, sizeof my_gid);
+	
+	TEST_NZ (sock_sync_data(sockfd, sizeof (struct CommExchData), (char *) &local_con_data, (char *) &tmp_con_data));
+	
+	remote_con_data.qp_num	= ntohl (tmp_con_data.qp_num);
+	remote_con_data.lid		= ntohs (tmp_con_data.lid);
+	memcpy (remote_con_data.gid, tmp_con_data.gid, 16);
+	
+	// save the remote side attributes, we will need it for the post SR
+	// this line might be needed:
+	// ctx->remote_props = remote_con_data;
+	// fprintf (stdout, "Remote QP number = 0x%x\n", remote_con_data.qp_num);
+	// fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
+	// modify the QP to init
+	TEST_NZ(RDMACommon::modify_qp_to_init (ib_port, *qp));
+	
+	// modify the QP to RTR
+	TEST_NZ(RDMACommon::modify_qp_to_rtr (ib_port, *qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
+	
+	// modify the QP to RTS
+	TEST_NZ(RDMACommon::modify_qp_to_rts (*qp));
+	
+	// sync to make sure that both sides are in states that they can connect to prevent packet loss
+	TEST_NZ(sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth
+	
 	return 0;
 }

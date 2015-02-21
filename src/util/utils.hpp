@@ -9,8 +9,26 @@
 #define UTILS_H_
 
 #include "../../config.hpp"
+#include "../tpcw-tables/item_version.hpp"
 #include <stdint.h>
 #include <byteswap.h>
+
+//#ifndef LOG_NAME
+//#define LOG_NAME "MUST BE REDEFINED BY ALL FILES"
+//#endif
+
+
+#if(DEBUG_ENABLED)
+# define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )
+# define DEBUG_CERR(x) do { std::cerr << x << std::endl; } while( false )
+#else
+# define DEBUG_COUT(x) do {} while (false)
+# define DEBUG_CERR(x) do {} while (false)
+#endif
+
+#define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
+#define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
+
 
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -39,13 +57,6 @@ static inline uint32_t hton32 (uint32_t x)
 #endif
 
 
-#if(DEBUG_ENABLED)
-# define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )
-# define DEBUG_CERR(x) do { std::cerr << x << std::endl; } while( false )
-#else
-# define DEBUG_COUT(x) do {} while (false)
-# define DEBUG_CERR(x) do {} while (false)
-#endif
 
 
 
@@ -95,7 +106,33 @@ int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data
 * indicated port for an incoming connection.
 *
 ******************************************************************************/
-int sock_connect (const char *servername, int port);
+int sock_connect (std::string servername, int port);
+
+
+/******************************************************************************
+* Function: establish_tcp_connection
+*
+* Input
+* - remote_ip:		ip of the remote machine
+* - remote_port:	port of the remote machine
+*
+* Output
+* - sockfd is filled with the socket description of the connection
+*	
+*
+* Returns
+* 0 on success, -1 failure
+*
+* Description
+* establishes a TCP connection
+*
+******************************************************************************/
+int establish_tcp_connection(std::string remote_ip, int remote_port, int *sockfd);
+
+void die(const char *reason);
+
+int load_tables_from_files(ItemVersion* items_region);
+
 
 #endif /* UTILS_H_ */
 
