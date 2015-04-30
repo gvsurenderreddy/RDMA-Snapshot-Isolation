@@ -6,7 +6,6 @@
  */
 
 #include "RDMAClient.hpp"
-
 #include "../util/utils.hpp"
 #include <stdio.h>
 #include <string.h>
@@ -73,13 +72,29 @@ void RDMAClient::fill_shopping_cart(RDMAClientContext *ctx) {
 	DEBUG_COUT ("[Info] Step 0: Cart contents: (Item ID,  Quantity)");
 	for (int i=0; i < ORDERLINE_PER_ORDER; i++) {
 		item_id		= (i * ITEM_PER_SERVER) + (rand() % ITEM_PER_SERVER);	// generating in the range 0 to ITEM_CNT
-		quantity	= (rand() % 1) + 1;			// the quanity of the item (not importatn)
+		quantity	= (rand() % 5) + 1;			// the quanity of the item (not importatn)
 		RDMAClient::cart.cart_lines[i].SCL_I_ID	= item_id;
-		RDMAClient::cart.cart_lines[i].SCL_QTY		= quantity;
+		RDMAClient::cart.cart_lines[i].SCL_QTY	= quantity;
 		DEBUG_COUT (".... " <<  item_id << '\t' << quantity);
 	
 		ctx[i].associated_cart_line = &RDMAClient::cart.cart_lines[i];
 	}
+}
+
+int RDMAClient::acquire_read_timestamp(RDMAClientContext *ctx, uint64_t *read_timestamp) {
+	// the first server is responsible for timestamps (timestamp oracle)
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+	ctx[0].qp,
+	ctx[0].read_ts_mr,
+	(uint64_t)&ctx[0].read_ts_region,
+	&(ctx[0].peer_mr_timestamp),
+	(uint64_t)ctx[0].peer_mr_timestamp.addr,
+	(uint32_t)sizeof(uint64_t),
+	true));
+	TEST_NZ (RDMACommon::poll_completion(ctx[0].cq));
+	
+	*read_timestamp = ctx[0].read_ts_region.value;
+	return 0;
 }
 
 void* RDMAClient::get_item_info(RDMAClientContext &ctx) {
@@ -205,8 +220,8 @@ void* RDMAClient::release_lock(RDMAClientContext &ctx) {
 	uint32_t		lock_status, version;
 	
 	lock_status		= (uint32_t) 0;
-	//version			= (uint32_t) shared_context.commit_timestamp;
-	version			= (uint32_t) 0;
+	version			= (uint32_t) shared_context.commit_timestamp;
+	//version			= (uint32_t) 0;
 	
 	ctx.lock_items_region[0] = Lock::set_lock(lock_status, version);	
 
@@ -235,67 +250,45 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 	uint32_t	lock_status, version;
 	uint64_t	expected_lock[SERVER_CNT], new_lock[SERVER_CNT];
 	
-	
 	DEBUG_COUT ("Transaction now gets started");
-	
-	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer
-	
-	
+	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer	
 	for (int trx_num = 1; trx_num <= TRANSACTION_CNT; trx_num++){
 		
 		// ************************************************
 		//	Acquiring read timestamp
 		// ************************************************
 		DEBUG_COUT (std::endl << "[Info] Handling transaction #" << trx_num);
-		
 		fill_shopping_cart(ctx);
 		
 		clock_gettime(CLOCK_REALTIME, &before_read_ts);
 		
-	
-		// the first server is responsible for timestamps (timestamp oracle)
-		TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-		ctx[0].qp,
-		ctx[0].read_ts_mr,
-		(uint64_t)&ctx[0].read_ts_region,
-		&(ctx[0].peer_mr_timestamp),
-		(uint64_t)ctx[0].peer_mr_timestamp.addr,
-		(uint32_t)sizeof(uint64_t),
-		true));
-		TEST_NZ (RDMACommon::poll_completion(ctx[0].cq));
-		
-		shared_context.read_timestamp = ctx[0].read_ts_region.value;	
+		TEST_NZ (acquire_read_timestamp(ctx, &shared_context.read_timestamp));
 		DEBUG_COUT ("[Read] Step 1: Received read timestamp from oracle with TID " << shared_context.read_timestamp);
 		
 		clock_gettime(CLOCK_REALTIME, &after_read_ts);
-		
 	
 	
 		// ************************************************
 		//	Fetching ITEMs information
 		// ************************************************
-		
 		// TODO: Should be fixed. multiple requests to the same server should be sent with only one signalled request 
 		for (int i = 0; i < ORDERLINE_PER_ORDER; i++) {
 			// first find which server the data corresponds to
 			server_num = cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
 			get_item_info(ctx[server_num]);
 		}
-		
 		for (int i = 0; i < ORDERLINE_PER_ORDER; i++) {
 			server_num = cart.cart_lines[i].SCL_I_ID / ITEM_PER_SERVER;
 			TEST_NZ (RDMACommon::poll_completion(ctx[server_num].cq));
 			DEBUG_COUT ("[Read] Step 2-" << i << ": Received information for item " << ctx[server_num].items_region->item.I_ID
 				<< " from " << ctx[server_num].server_address);
 		}
-		DEBUG_COUT ("[Info] Step 2: Received information for all items");
+		DEBUG_COUT ("[Info] Step 2: Received information for all items");	
 		
 		clock_gettime(CLOCK_REALTIME, &after_fetch_info);
 		
 		
-		
 		// Since we only have one version per item (and hence one version is read for each item), we simplify this section
-		
 		// int found_version_index = RDMAClient::check_if_version_is_in_block(ctx->read_ts_region[0].timestamp,
 		// ctx->items_region, MAX_ITEM_VERSIONS);
 		// if (found_version_index >= 0)
@@ -308,17 +301,14 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 				
 			// ************************************************
 			//	Commit begins
-			// ************************************************
-		
-		
+			// ************************************************	
 			// ************************************************
 			//	Acquiring commit timestamp
 			acquire_commit_timestamp(ctx[0], &shared_context.commit_timestamp);	
-			DEBUG_COUT ("[FTCH] Step 3: Acquired commit timestamp " << shared_context.commit_timestamp);
-			
+			DEBUG_COUT ("[FTCH] Step 3: Acquired commit timestamp " << shared_context.commit_timestamp);	
 			clock_gettime(CLOCK_REALTIME, &after_commit_ts);
-		
-	
+			
+			
 			// ************************************************
 			// First step, acquiring locks
 			for (int i = 0; i < ORDERLINE_PER_ORDER; i++) {
@@ -326,14 +316,14 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 
 				// lock expected before locking 
 				lock_status					= (uint32_t) 0;
-				//version						= (uint32_t) ctx[server_num].items_region[found_version_index].write_timestamp;
-				version						= (uint32_t) 0;
+				version						= (uint32_t) ctx[server_num].items_region[found_version_index].write_timestamp;
+				//version						= (uint32_t) 0;
 				expected_lock[server_num]	= Lock::set_lock(lock_status, version);
 
 				// new lock
 				lock_status					= (uint32_t) 1;
-				//version						= (uint32_t) shared_context.commit_timestamp;
-				version						= (uint32_t) 0;			
+				version						= (uint32_t) shared_context.commit_timestamp;
+				//version						= (uint32_t) 0;			
 				new_lock[server_num]		= Lock::set_lock(lock_status, version);
 			
 				acquire_item_lock(ctx[server_num], &expected_lock[server_num], &new_lock[server_num]);
@@ -384,10 +374,9 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 				continue;
 			}
 			else {
-				clock_gettime(CLOCK_REALTIME, &after_lock);
-		
+				clock_gettime(CLOCK_REALTIME, &after_lock);	
 				DEBUG_COUT ("[Info] Step 4: All locks successfully acquired");
-			
+		
 				// ************************************************
 				//	Decrementing the stock in ITEM table
 				for (int i = 0; i < ORDERLINE_PER_ORDER; i++) {
@@ -395,10 +384,8 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 					decrement_item_stock(ctx[server_num]);
 				}				
 				DEBUG_COUT ("[Writ] Step 5: Successfully decremented the stock in table ITEM (unsignaled)");
-				
 				clock_gettime(CLOCK_REALTIME, &after_decrement);
 		
-			
 			
 				// ************************************************
 				//	Releasing the lock
@@ -414,9 +401,7 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 						<< " released with commit timestamp " << shared_context.commit_timestamp);
 				}					
 				DEBUG_COUT ("[Info] Step 6: All locks successfully released");
-				
 				clock_gettime(CLOCK_REALTIME, &after_unlock);
-				
 				
 				double t = ( after_read_ts.tv_sec - before_read_ts.tv_sec ) * 1E9 + ( after_read_ts.tv_nsec - before_read_ts.tv_nsec );
 				avg_read_ts += t;
@@ -512,27 +497,30 @@ int RDMAClient::start_transaction(RDMAClientContext *ctx) {
 	
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
 	
-	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
-	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(nano_elapsed_time / 1000000));
-	std::cout << "Transaction per millisec: " <<  T_P_MILISEC << std::endl;
+	double micro_elapsed_time = ( ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
+	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(micro_elapsed_time / 1000));
+	
+	avg_read_ts /= 1000;
+	avg_fetch_info /= 1000;
+	avg_commit_ts /= 1000;
+	avg_lock /= 1000;
+	avg_decrement /= 1000;
+	avg_unlock /= 1000;
 	
 	int committed_cnt = TRANSACTION_CNT - abort_cnt;
 	double success_rate = (double)committed_cnt /  TRANSACTION_CNT;
-	std::cout << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
 	
-	
-	std::cout << "Avg read ts  : " << (double)avg_read_ts / committed_cnt << std::endl; 
-	std::cout << "Avg fetch    : " << (double)avg_fetch_info / committed_cnt << std::endl; 
-	std::cout << "Avg commit ts: " << (double)avg_commit_ts / committed_cnt << std::endl; 
-	std::cout << "Avg lock	   : " << (double)avg_lock / committed_cnt << std::endl; 
-	std::cout << "Avg decrement: " << (double)avg_decrement / committed_cnt << std::endl; 
-	std::cout << "Avg unlock   : " << (double)avg_unlock / committed_cnt << std::endl; 
-	std::cout << "Avg cumulative   : " << (double)nano_elapsed_time / TRANSACTION_CNT << std::endl; 
-	
-	
+	std::cout << "[Stat] Avg read ts (u sec):	" << (double)avg_read_ts / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg fetch (u sec): 	" << (double)avg_fetch_info / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg commit ts (u sec):	" << (double)avg_commit_ts / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg lock (u sec):  	" << (double)avg_lock / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg decrement (u sec):	" << (double)avg_decrement / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg unlock (u sec):	" << (double)avg_unlock / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg cumulative(u sec):	" << (double)micro_elapsed_time / TRANSACTION_CNT << std::endl; 
+	std::cout << "[Stat] " << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
+	std::cout << "[Stat] Transaction per millisec:	" <<  T_P_MILISEC << std::endl;
 	return 0;
 }
-
 
 int RDMAClient::start_client () {	
 	// Init RDMAClientContext
@@ -540,6 +528,8 @@ int RDMAClient::start_client () {
 	//struct TimestampRDMAClientContext ts_ctx;
 	char temp_char;
 	
+	srand (generate_random_seed());		// initialize random seed
+    
    	/*
 	// First, connect to Timestamp Server
 	strcpy(ts_ctx.server_address, TIMESTAMP_SERVER_ADDR.c_str());
@@ -565,20 +555,15 @@ int RDMAClient::start_client () {
 		
 		// Connect to servers
 		TEST_NZ (establish_tcp_connection(ctx[i].server_address, TCP_PORT[i], &ctx[i].sockfd));
-		
 		DEBUG_COUT("[Conn] Connection established to server " << i);
 	
 		TEST_NZ (ctx[i].create_context());
 		
-		DEBUG_COUT("TEMP: Context created");
-	
-	
 		// before connecting the queue pairs, we post the RECEIVE job to be ready for the server's message containing its memory locations
 		RDMACommon::post_RECEIVE(ctx[i].qp, ctx[i].recv_mr, (uintptr_t)&ctx[i].recv_msg, sizeof(struct MemoryKeys));
 	
 		TEST_NZ (RDMACommon::connect_qp (&(ctx[i].qp), ctx[i].ib_port, ctx[i].port_attr.lid, ctx[i].sockfd));
-		DEBUG_COUT("[Conn] QPed to server " << i);
-				
+		DEBUG_COUT("[Conn] QPed to server " << i);		
 	
 		TEST_NZ(RDMACommon::poll_completion(ctx[i].cq));
 		DEBUG_COUT("[Recv] buffers info from server " << i);
@@ -591,18 +576,14 @@ int RDMAClient::start_client () {
 		memcpy(&ctx[i].peer_mr_timestamp,	&ctx[i].recv_msg.mr_timestamp,	sizeof(struct ibv_mr));
 		memcpy(&ctx[i].peer_mr_lock_items,	&ctx[i].recv_msg.mr_lock_items,	sizeof(struct ibv_mr));
 	}
-	
-	DEBUG_COUT ("Successfully connected to all servers.");
-	
-    srand (time(NULL));		// initialize random seed
+	DEBUG_COUT ("[Info] Successfully connected to all servers");
 	
 	start_transaction(ctx);
 	
-	/* Sync so server will know that client is done mucking with its memory */
 	DEBUG_COUT("[Info] Client is done, and is ready to destroy its resources!");
 	for (int i = 0; i < SERVER_CNT; i++) {
 		TEST_NZ (sock_sync_data (ctx[i].sockfd, 1, "W", &temp_char));	/* just send a dummy char back and forth */
-		DEBUG_COUT("[Conn] Notified server" << i << " it's done");
+		DEBUG_COUT("[Conn] Notified server " << i << " it's done");
 		TEST_NZ ( ctx[i].destroy_context());
 	}
 }

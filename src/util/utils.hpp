@@ -29,6 +29,23 @@
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
+#if defined(__i386__)
+static __inline__ unsigned long long rdtsc(void)
+{
+    unsigned long long int x;
+    __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+    return x;
+}
+#elif defined(__x86_64__)
+static __inline__ unsigned long long rdtsc(void)
+{
+    unsigned hi, lo;
+    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+}
+#endif
+
+
 
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -57,8 +74,40 @@ static inline uint32_t hton32 (uint32_t x)
 #endif
 
 
+/******************************************************************************
+* Function: pin_to_CPU
+*
+* Input
+* Core number
+*
+* Returns
+* 0 on success
+*
+* Description
+* Pins the current process to the specified core
+******************************************************************************/
+int pin_to_CPU (int CPU_num);
+
+/******************************************************************************
+* Function: generate_random_seed
+*
+* Input
+* None
+*
+* Returns
+* a random number, which can be used an input to srand()
+*
+* Description
+* Generates a random seed to be used for srand() function
+******************************************************************************/
+unsigned long generate_random_seed();
 
 
+int sync_it (int sock, char *local_buffer, int xfer_size);
+
+
+int sock_write(int sock, char *buffer, int xfer_size);
+int sock_read(int sock, char *buffer, int xfer_size);
 
 /******************************************************************************
 * Function: sock_sync_data
@@ -82,7 +131,6 @@ static inline uint32_t hton32 (uint32_t x)
 *
 * Also note this is a blocking function and will wait for the full data to be
 * received from the remote.
-*
 ******************************************************************************/
 int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data);
 
@@ -124,10 +172,12 @@ int sock_connect (std::string servername, int port);
 * 0 on success, -1 failure
 *
 * Description
-* establishes a TCP connection
-*
+* establishes a TCP connection to server: "remote_ip" and port: "remote_port"
+* and puts the socket in "*sockfd"
 ******************************************************************************/
 int establish_tcp_connection(std::string remote_ip, int remote_port, int *sockfd);
+
+int server_socket_setup(int *server_sockfd, int backlog);
 
 void die(const char *reason);
 

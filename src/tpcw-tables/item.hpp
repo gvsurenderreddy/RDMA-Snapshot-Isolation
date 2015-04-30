@@ -28,5 +28,5 @@ public:
 	char I_ISBN[13];
 	int I_PAGE;
 	char I_BACKING[15];
-	char I_DIMENSION[25];	
+	char I_DIMENSION[25];
 };

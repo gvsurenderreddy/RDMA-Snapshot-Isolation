@@ -31,7 +31,7 @@ public:
 	struct LockResponse		lock_response;
 	struct WriteDataRequest	write_data_request;
 	
-	int register_memory();
+	int register_memory ();
 	int destroy_context ();
 	
 };

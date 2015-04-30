@@ -32,12 +32,13 @@ private:
 	//OrderLineVersion	*order_line_region;
 	//CCXactsVersion		*cc_xacts_region;
 
-	
+	/*
 	struct SharedContext {
-		struct ibv_context *ib_ctx;	/* device handle */
+		struct ibv_context *ib_ctx;	
 	};
+	*/
 	
-	static struct SharedContext s_ctx;
+	//static struct SharedContext s_ctx;
 
 	int initialize_data_structures();
 

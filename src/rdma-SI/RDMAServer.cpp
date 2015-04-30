@@ -69,7 +69,6 @@ int RDMAServer::initialize_data_structures(){
 
 int RDMAServer::initialize_context(RDMAServerContext &ctx) {
 	ctx.ib_port				= ib_port;
-	
 	ctx.items_region		= global_items_region;
 	ctx.orders_region		= global_orders_region;
 	ctx.order_line_region	= global_order_line_region;
@@ -78,7 +77,6 @@ int RDMAServer::initialize_context(RDMAServerContext &ctx) {
 	ctx.lock_items_region	= global_lock_items_region;
 	return 0;
 }
-
 
 void RDMAServer::usage (const char *argv0) {
 	std::cout << "Usage:" << std::endl;
@@ -93,7 +91,6 @@ int RDMAServer::start_server (int server_num) {
 	RDMAServerContext ctx[CLIENTS_CNT];
 	
 	char temp_char;
-	
 	
 	TEST_NZ(initialize_data_structures());
 
@@ -132,7 +129,6 @@ int RDMAServer::start_server (int server_num) {
 			return -1;
 		}
 		std::cout << "[Conn] Received client #" << i << " on socket " << ctx[i].sockfd << std::endl;
-		// pthread_create(&master_threads[i], NULL, RDMAServer::handle_client, &client_socks[i]);
 	
 		// create all resources
 		TEST_NZ (ctx[i].create_context());
@@ -152,7 +148,6 @@ int RDMAServer::start_server (int server_num) {
 	}
 	
 	for (int i = 0; i < CLIENTS_CNT; i++){
-	
 		// send memory locations using SEND 
 		TEST_NZ (RDMACommon::post_SEND (ctx[i].qp, ctx[i].send_mr, (uintptr_t)&ctx[i].send_msg, sizeof(struct MemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(ctx[i].cq));

@@ -66,4 +66,8 @@ struct WriteDataRequest {
 	} content;
 };
 
+struct WriteDataResponse {
+	int I_ID;
+};
+
 #endif /* TRAD_MESSAGE_H_ */

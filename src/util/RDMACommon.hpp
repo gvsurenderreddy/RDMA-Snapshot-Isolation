@@ -11,7 +11,7 @@
 #include <infiniband/verbs.h>
 
 
-#define RDMA_MAX_WR 1000
+#define RDMA_MAX_WR 2000
 #define RDMA_MAX_SGE 1
 
 
@@ -184,8 +184,12 @@ public:
 	******************************************************************************/
 	static int poll_completion(struct ibv_cq* cq);
 	
+	
+	static int event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq);
+	
+	
 	static int build_connection(int ib_port, struct ibv_context** ib_ctx,
-	struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, int cq_size);
+	struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct ibv_comp_channel **comp_channel, int cq_size);
 	
 	
 	/******************************************************************************

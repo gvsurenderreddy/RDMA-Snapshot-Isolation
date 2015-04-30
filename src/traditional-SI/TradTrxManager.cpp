@@ -36,7 +36,7 @@ std::mutex 	TradTrxManager::timestamp_mutex;
 
 
 
-struct TradTrxManager::SharedContext TradTrxManager::s_ctx;
+// struct TradTrxManager::SharedContext TradTrxManager::s_ctx;
 
 
 int TradTrxManager::open_device(struct ibv_context** ib_ctx) {
@@ -256,10 +256,10 @@ int TradTrxManager::start_transactions(TradTrxManagerContext &ctx) {
 			
 			
 			// Insert CCXACTS
-			// int cc_index = (commit_timestamp.value - 1);
-			int cc_index = (commit_timestamp.value - 1) % MAX_BUFFER_SIZE;
-			cc_xacts_region[cc_index].write_timestamp		= commit_timestamp.value;
-			cc_xacts_region[cc_index].cc_xacts.CX_O_ID		= orders_region[ol_index].orders.O_ID;
+			// int cc_index                            = (commit_timestamp.value - 1);
+			int cc_index                               = (commit_timestamp.value - 1) % MAX_BUFFER_SIZE;
+			cc_xacts_region[cc_index].write_timestamp  = commit_timestamp.value;
+			cc_xacts_region[cc_index].cc_xacts.CX_O_ID = orders_region[ol_index].orders.O_ID;
 			DEBUG_COUT("[Info] A new record to table CC_XACTS added");
 			*/
 			
@@ -313,17 +313,22 @@ int TradTrxManager::start_transactions(TradTrxManagerContext &ctx) {
 	}
 	
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
-	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
-	
-	std::cout << "Nano elapsed time: " << nano_elapsed_time << std::endl;
-	
+	double micro_elapsed_time = ( ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
 	int committed_cnt = TRANSACTION_CNT - abort_cnt;
-	std::cout << "[Stat] Avg fetch           : " << (double)avg_fetch_info / committed_cnt << std::endl; 
-	std::cout << "[Stat] Avg commit ts       : " << (double)avg_commit_ts / committed_cnt << std::endl; 
-	std::cout << "[Stat] Avg lock            : " << (double)avg_lock / committed_cnt << std::endl; 
-	std::cout << "[Stat] Avg decrement       : " << (double)avg_decrement / committed_cnt << std::endl; 
-	std::cout << "[Stat] Avg repond to client: " << (double)avg_respond  / committed_cnt << std::endl;
-	std::cout << "[Stat] Avg cumulative      : " << (double)nano_elapsed_time / TRANSACTION_CNT << std::endl; 
+	
+	avg_fetch_info	/= 1000;
+	avg_commit_ts	/= 1000;
+	avg_lock		/= 1000;
+	avg_decrement	/= 1000;
+	avg_respond		/= 1000;
+	
+	std::cout << std::endl; 
+	std::cout << "[Stat] Avg fetch (u sec):         	" << (double)avg_fetch_info / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg commit ts (u sec):      	" << (double)avg_commit_ts / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg lock (u sec):            	" << (double)avg_lock / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg decrement (u sec):       	" << (double)avg_decrement / committed_cnt << std::endl; 
+	std::cout << "[Stat] Avg repond to client (u sec):	" << (double)avg_respond  / committed_cnt << std::endl;
+	std::cout << "[Stat] Avg cumulative (u sec):     	" << (double)micro_elapsed_time / TRANSACTION_CNT << std::endl; 
 	
 	DEBUG_COUT (std::endl << "[Info] Successfully executed all transactions of client (" << get_full_desc(ctx.client_ctx) << ")");
 	return 0;
@@ -341,8 +346,8 @@ int TradTrxManager::destroy_resources () {
 		if (res_mng_socks[i] >= 0)
 			TEST_NZ (close (res_mng_socks[i]));
 	
-	if (s_ctx.ib_ctx)
-		TEST_NZ (ibv_close_device (s_ctx.ib_ctx));
+	//if (s_ctx.ib_ctx)
+	//	TEST_NZ (ibv_close_device (s_ctx.ib_ctx));
 	
 	close(server_sockfd);	// close the socket
 	return 0;
@@ -362,7 +367,7 @@ void TradTrxManager::usage (const char *argv0) {
 int TradTrxManager::start_server () {	
 	TEST_NZ(initialize_data_structures());
 	
-	struct sockaddr_in serv_addr, returned_addr;
+	struct sockaddr_in returned_addr;
 	socklen_t len = sizeof(returned_addr);
 	pthread_t master_threads[CLIENTS_CNT];
 	std::string res_mng_ip[SERVER_CNT];
@@ -371,25 +376,10 @@ int TradTrxManager::start_server () {
 	
 	
 	// Create the shared context
-	TEST_NZ (TradTrxManager::open_device(&s_ctx.ib_ctx));
+	// TEST_NZ (TradTrxManager::open_device(&s_ctx.ib_ctx));
 	
-	// Open Socket
-	server_sockfd = socket (AF_INET, SOCK_STREAM, 0);
-	if (server_sockfd < 0) {
-		std::cerr << "Error opening socket" << std::endl;
-		return -1;
-	}
-	
-	// Bind
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(TRX_MANAGER_TCP_PORT);
-	TEST_NZ(bind(server_sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
-	
-	// listen				  
-	TEST_NZ(listen (server_sockfd, SERVER_CNT + CLIENTS_CNT));
-	
+	// Call socket(), bing() and listen()
+	TEST_NZ (server_socket_setup(&server_sockfd, CLIENTS_CNT + SERVER_CNT));
 	
 	// accept connections from Resource-managers
 	std::cout << "[Info] Waiting for " << SERVER_CNT << " RM(s) on port " << TRX_MANAGER_TCP_PORT << std::endl;
@@ -402,7 +392,6 @@ int TradTrxManager::start_server () {
 		res_mng_ip[s] = "";
 		res_mng_ip[s] += std::string(inet_ntoa (returned_addr.sin_addr));
 		res_mng_port[s]	= (int) ntohs(returned_addr.sin_port);
-		
 		std::cout << "[Conn] Received RM #" << s <<  " (" << res_mng_ip[s] << ", " << res_mng_port[s] << ") on sock " << res_mng_socks[s] << std::endl;
 	}
 	std::cout << "[Info] Established connection to all " << SERVER_CNT << " resource-manager(s)." << std::endl; 
@@ -445,6 +434,7 @@ int TradTrxManager::start_server () {
 	TEST_NZ(destroy_resources());
 	std::cout << "[Info] Server is done and destroyed its resources!" << std::endl;
 }
+
 
 int main (int argc, char *argv[]) {
 	if (argc != 1) {

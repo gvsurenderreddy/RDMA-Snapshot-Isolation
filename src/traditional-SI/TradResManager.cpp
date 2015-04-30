@@ -105,7 +105,7 @@ void* TradResManager::handle_trx_mng_thread(void *param) {
 			ctx->lock_response.was_successful = true;
 			DEBUG_COUT("[Info] Successfully lock item " << ctx->lock_request.I_ID);
 			
-			// only when the lock got successfully acquired, the RM waits for a follow-up message: 
+			// TODO: should be this way: only when the lock got successfully acquired, the RM waits for a follow-up message: 
 			// either unlock (in case of abort), or install versions (in case of commit)
 		}
 		TEST_NZ (RDMACommon::post_RECEIVE(ctx->qp, ctx->write_data_req_mr, (uintptr_t)&ctx->write_data_request, sizeof(struct WriteDataRequest)));

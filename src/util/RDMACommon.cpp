@@ -276,13 +276,49 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 	return 0;
 }
 
+int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq) {
+	/* The following code will be called each time you need to read a Work Completion */
+	struct ibv_cq *ev_cq;
+	void *ev_ctx;
+	int ret;
+	int ne;
+	struct ibv_wc wc;
+
+	/* Wait for the Completion event */
+	TEST_NZ (ibv_get_cq_event(comp_channel, &ev_cq, &ev_ctx));
+
+	/* Ack the event */
+	ibv_ack_cq_events(ev_cq, 1);
+
+	/* Request notification upon the next completion event */
+	TEST_NZ (ibv_req_notify_cq(ev_cq, 0));
+
+	/* Empty the CQ: poll all of the completions from the CQ (if any exist) */
+	do {
+	    ne = ibv_poll_cq(cq, 1, &wc);
+	    if (ne < 0) {
+	            fprintf(stderr, "Failed to poll completions from the CQ: ret = %d\n", ne);
+	            return -1;
+	    }
+	    /* there may be an extra event with no completion in the CQ */
+	    if (ne == 0)
+	            continue;
+
+	    if (wc.status != IBV_WC_SUCCESS) {
+	            fprintf(stderr, "Completion with status 0x%x was found\n", wc.status);
+	            return -1;
+	    }
+	} while (ne);
+	return 0;
+}
+
 int RDMACommon::build_connection(int ib_port, struct ibv_context** ib_ctx,
-struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, int cq_size)
+struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct	ibv_comp_channel **comp_channel, int cq_size)
 {
 	struct	ibv_device **dev_list = NULL;
 	struct	ibv_device *ib_dev = NULL;
 	int		num_devices;
-	struct	ibv_comp_channel *comp_channel;
+	//struct	ibv_comp_channel *comp_channel;
 
 	// get device names in the system
 	TEST_Z(dev_list = ibv_get_device_list (&num_devices));
@@ -304,9 +340,15 @@ struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, int cq_
 	TEST_Z(*pd = ibv_alloc_pd (*ib_ctx));		// allocate Protection Domain
 
 	// Create completion channel and completion queue
-	TEST_Z(comp_channel = ibv_create_comp_channel(*ib_ctx));
+	//TEST_Z(comp_channel = ibv_create_comp_channel(*ib_ctx));
+	TEST_Z(*comp_channel = ibv_create_comp_channel(*ib_ctx));
 	
-	TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, comp_channel, 0));
+	
+	//TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, comp_channel, 0));
+	TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *comp_channel, 0));
+	
+	TEST_NZ (ibv_req_notify_cq(*cq, 0));
+	
 	return 0;
 }
 
@@ -346,6 +388,5 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int s
 	
 	// sync to make sure that both sides are in states that they can connect to prevent packet loss
 	TEST_NZ(sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth
-	
 	return 0;
 }

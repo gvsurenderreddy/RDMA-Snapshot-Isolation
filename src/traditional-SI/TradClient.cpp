@@ -36,7 +36,7 @@ void TradClient::fill_shopping_cart(struct Cart *cart) {
 	DEBUG_COUT ("[Info] Contents of the cart: (Item ID,  Quantity)");
 	for (int i=0; i < ORDERLINE_PER_ORDER; i++) {
 		item_id		= (i * ITEM_PER_SERVER) + (rand() % ITEM_PER_SERVER);	// generating in the range 0 to ITEM_CNT
-		quantity	= (rand() % 1) + 1;			// the quanity of the item (not importatn)
+		quantity	= (rand() % 5) + 1;			// the quanity of the item (not importatn)
 		cart->cart_lines[i].SCL_I_ID	= item_id;
 		cart->cart_lines[i].SCL_QTY		= quantity;
 		DEBUG_COUT (".... " <<  item_id << '\t' << quantity);
@@ -104,12 +104,13 @@ int TradClient::start_transaction(TradClientContext &ctx) {
 
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
 	
-	double nano_elapsed_time = ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec );
-	double T_P_MILISEC = (double)(TRANSACTION_CNT / (double)(nano_elapsed_time / 1000000));
-	std::cout << std::endl << "[Stat] Transaction per millisec: " <<  T_P_MILISEC << std::endl;
+	double micro_elapsed_time = ( ( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + ( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
+	double T_P_MILISEC        = (double)(TRANSACTION_CNT / (double)(micro_elapsed_time / 1000));
+	int committed_cnt         = TRANSACTION_CNT - abort_cnt;
+	double success_rate       = (double)committed_cnt /  TRANSACTION_CNT;
 	
-	int committed_cnt = TRANSACTION_CNT - abort_cnt;
-	double success_rate = (double)committed_cnt /  TRANSACTION_CNT;
+	std::cout << std::endl;
+	std::cout << "[Stat] Transaction per millisec:	" <<  T_P_MILISEC << std::endl;
 	std::cout << "[Stat] " << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
 	
 	return 0;
@@ -123,8 +124,8 @@ int TradClient::start_client () {
 	ctx.ib_port = TRX_MANAGER_IB_PORT;
 	
 	TEST_NZ (establish_tcp_connection(TRX_MANAGER_ADDR.c_str(), TRX_MANAGER_TCP_PORT, &ctx.sockfd));
-	TEST_NZ (ctx.create_context());
 	
+	TEST_NZ (ctx.create_context());
 	TEST_NZ (RDMACommon::connect_qp (&(ctx.qp), ctx.ib_port, ctx.port_attr.lid, ctx.sockfd));	
 	
 	srand (time(NULL));		// initialize random seed

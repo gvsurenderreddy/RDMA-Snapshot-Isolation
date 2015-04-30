@@ -52,6 +52,8 @@ private:
 	
 	static void		fill_shopping_cart(RDMAClientContext *ctx);
 	
+	static int		acquire_read_timestamp(RDMAClientContext *ctx, uint64_t *read_timestamp);
+	
 	static void*	get_item_info(RDMAClientContext &ctx);
 	
 	static int 		acquire_commit_timestamp(RDMAClientContext &ctx, uint64_t *commit_timestamp);

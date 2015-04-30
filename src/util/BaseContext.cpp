@@ -12,7 +12,7 @@
 #include <iostream>
 
 int BaseContext::create_context() {
-	TEST_NZ (RDMACommon::build_connection(ib_port, &ib_ctx, &port_attr, &pd, &cq, 10));
+	TEST_NZ (RDMACommon::build_connection(ib_port, &ib_ctx, &port_attr, &pd, &cq, &comp_channel, 10));
 	TEST_NZ (register_memory());
 	TEST_NZ (RDMACommon::create_queuepair(ib_ctx, pd, cq, &qp));
 	return 0;
