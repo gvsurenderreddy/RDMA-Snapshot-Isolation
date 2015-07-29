@@ -1,0 +1,19 @@
+[ ] Remove the bug for always-commit in RDMA
+[ ] Move timestamp to its folder
+[ ] Add IPoIB
+[ ] Read APOC
+[ ] In RDMA-SI, implement bulk-timestamp-acquisition  
+[ ] Be professional, make a makefile, god!!
+[ ] Take a look into Shared Receive Queues (SRQs)
+[+] Now, all WRITE posts require completion, fix that.
+[+] Add code for statistics collection 
+[+] Fix: each order contains multiple lineitem
+[+] Add Centralized-based Snapshot Isolation
+[+] Rename Client and Server class names  
+[+] Add a config flag for LOG level
+[+] Run the experiments
+[+] Find the bug why the program halts when #clients > 20 
+[+] Move TEST_NZ to a single file
+[+] Rename the project name
+[+] Upload to GitHub
+[+] Make a script folder and put send_... there
