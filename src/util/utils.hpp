@@ -2,7 +2,7 @@
  *	utils.hpp
  *
  *	Created on: 26.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef UTILS_H_
@@ -10,8 +10,11 @@
 
 #include "../../config.hpp"
 #include "../tpcw-tables/item_version.hpp"
+#include <iomanip>	// std::setw()
 #include <stdint.h>
 #include <byteswap.h>
+#include <endian.h>
+
 
 //#ifndef LOG_NAME
 //#define LOG_NAME "MUST BE REDEFINED BY ALL FILES"
@@ -19,32 +22,46 @@
 
 
 #if(DEBUG_ENABLED)
-# define DEBUG_COUT(x) do { std::cout << x << std::endl; } while( false )
-# define DEBUG_CERR(x) do { std::cerr << x << std::endl; } while( false )
-#else
-# define DEBUG_COUT(x) do {} while (false)
-# define DEBUG_CERR(x) do {} while (false)
-#endif
+	#define DEBUG_COUT(className,funcName,message) do { \
+			std::string header = std::string("[") + className + "::" + funcName + "] "; \
+			std::cout << std::setw(35) << std::left << header << message << std::endl; \
+		} while( false )
+	#define DEBUG_CERR(className,funcName,message) do { \
+			std::string header = std::string("[") + className + "::" + funcName + "] "; \
+			std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+		} while( false )
+	#else
+	#define DEBUG_COUT(className,funcName,message) do {} while (false)
+	#define DEBUG_CERR(className,funcName,message) do {} while (false)
+	#endif
 
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
 #if defined(__i386__)
-static __inline__ unsigned long long rdtsc(void)
+static __inline__ unsigned long long rdtscp(void)
 {
     unsigned long long int x;
     __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
     return x;
 }
 #elif defined(__x86_64__)
-static __inline__ unsigned long long rdtsc(void)
+static __inline__ unsigned long long rdtscp(void)
 {
     unsigned hi, lo;
-    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    __asm__ __volatile__ ("rdtscp" : "=a"(lo), "=d"(hi));
     return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
 }
 #endif
 
+
+static inline uint64_t bigEndianToHost(uint64_t be) {
+	return be64toh(be);
+}
+
+static inline uint64_t hostToBigEndian(uint64_t h) {
+	return htobe64(h);
+}
 
 
 
@@ -53,10 +70,12 @@ static __inline__ unsigned long long rdtsc(void)
 static inline uint64_t hton64 (uint64_t x)
 {
 	bswap_64 (x);
+	return x;
 }
 static inline uint32_t hton32 (uint32_t x)
 {
 	bswap_32 (x);
+	return x;
 }
 
 #elif __BYTE_ORDER == __BIG_ENDIAN
@@ -103,11 +122,11 @@ int pin_to_CPU (int CPU_num);
 unsigned long generate_random_seed();
 
 
-int sync_it (int sock, char *local_buffer, int xfer_size);
+int sync_it (int sock, char *local_buffer, ssize_t xfer_size);
 
 
-int sock_write(int sock, char *buffer, int xfer_size);
-int sock_read(int sock, char *buffer, int xfer_size);
+int sock_write(int sock, char *buffer, ssize_t xfer_size);
+int sock_read(int sock, char *buffer, ssize_t xfer_size);
 
 /******************************************************************************
 * Function: sock_sync_data
@@ -132,7 +151,12 @@ int sock_read(int sock, char *buffer, int xfer_size);
 * Also note this is a blocking function and will wait for the full data to be
 * received from the remote.
 ******************************************************************************/
-int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data);
+size_t sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remote_data);
+
+
+
+int open_socket();
+
 
 
 /******************************************************************************
@@ -154,7 +178,7 @@ int sock_sync_data (int sock, int xfer_size, char *local_data, char *remote_data
 * indicated port for an incoming connection.
 *
 ******************************************************************************/
-int sock_connect (std::string servername, int port);
+int sock_connect (std::string servername, uint16_t port);
 
 
 /******************************************************************************
@@ -175,7 +199,7 @@ int sock_connect (std::string servername, int port);
 * establishes a TCP connection to server: "remote_ip" and port: "remote_port"
 * and puts the socket in "*sockfd"
 ******************************************************************************/
-int establish_tcp_connection(std::string remote_ip, int remote_port, int *sockfd);
+int establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *sockfd);
 
 int server_socket_setup(int *server_sockfd, int backlog);
 

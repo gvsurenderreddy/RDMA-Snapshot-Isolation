@@ -2,8 +2,11 @@
  *	item.hpp
  *
  *	Created on: 22.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
+
+#ifndef ITEM_HPP_
+#define ITEM_HPP_
 
 class Item {
 public:
@@ -30,3 +33,5 @@ public:
 	char I_BACKING[15];
 	char I_DIMENSION[25];
 };
+
+#endif /* ITEM_HPP */

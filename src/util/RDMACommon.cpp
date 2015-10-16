@@ -2,7 +2,7 @@
  *	RDMACommon.cpp
  *
  *	Created on: 26.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "RDMACommon.hpp"
@@ -10,6 +10,9 @@
 #include <iostream>
 #include <cstring>
 #include <arpa/inet.h>
+
+#define CLASS_NAME "RDMACommon"
+
 
 int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, uint32_t length, bool signaled)
 {
@@ -149,7 +152,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expecte
 	return 0;
 }
 
-int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, struct ibv_cq *cq, struct ibv_qp **qp)
+int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, struct ibv_cq *send_cq, struct ibv_cq *recv_cq, struct ibv_qp **qp)
 {
 	struct ibv_exp_device_attr dev_attr;
 	struct ibv_exp_qp_init_attr	attr;
@@ -163,8 +166,8 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 
 	memset(&attr, 0, sizeof(struct ibv_exp_qp_init_attr));
 	attr.pd = pd;
-	attr.send_cq = cq;
-	attr.recv_cq = cq;
+	attr.send_cq = send_cq;
+	attr.recv_cq = recv_cq;
 	attr.sq_sig_all = 0;	// In every WR, it must be decided whether to generate a WC or not
 	attr.cap.max_send_wr  = RDMA_MAX_WR;
 	attr.cap.max_send_sge = RDMA_MAX_SGE;
@@ -185,14 +188,12 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 		std::cerr << "failed to create QP" << std::endl;
 		return -1;
 	}
-	DEBUG_COUT ("[Conn] QP created, QP number=0x" << (*qp)->qp_num);
-	//fprintf (stdout, "QP was created, QP number=0x%x\n", (*qp)->qp_num);
-	
+	DEBUG_COUT (CLASS_NAME, __func__, "[Conn] QP created, QP number=0x" << (*qp)->qp_num);
 	return 0;
 }
 
-int RDMACommon::modify_qp_to_init (int ib_port, struct ibv_qp *qp)
-{
+int RDMACommon::modify_qp_to_init (uint8_t ib_port, struct ibv_qp *qp)
+{	
 	struct ibv_qp_attr attr;
 	int flags;
 	int rc;
@@ -208,7 +209,7 @@ int RDMACommon::modify_qp_to_init (int ib_port, struct ibv_qp *qp)
 	return rc;
 }
 
-int RDMACommon::modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid, uint8_t * dgid)
+int RDMACommon::modify_qp_to_rtr (uint8_t ib_port, struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid)
 {
 	struct ibv_qp_attr attr;
 	int flags;
@@ -280,7 +281,6 @@ int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channe
 	/* The following code will be called each time you need to read a Work Completion */
 	struct ibv_cq *ev_cq;
 	void *ev_ctx;
-	int ret;
 	int ne;
 	struct ibv_wc wc;
 
@@ -313,7 +313,8 @@ int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channe
 }
 
 int RDMACommon::build_connection(int ib_port, struct ibv_context** ib_ctx,
-struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct	ibv_comp_channel **comp_channel, int cq_size)
+struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **send_cq, struct ibv_cq **recv_cq,
+struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp_channel, int cq_size)
 {
 	struct	ibv_device **dev_list = NULL;
 	struct	ibv_device *ib_dev = NULL;
@@ -325,7 +326,7 @@ struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct	
 	TEST_Z(num_devices); // if there isn't any IB device in host
 
 	// select the first device
-	const char *dev_name = strdup (ibv_get_device_name (dev_list[0]));
+	//const char *dev_name = strdup (ibv_get_device_name (dev_list[0]));
 	TEST_Z(ib_dev = dev_list[0]);	// if the device wasn't found in host
 	
 	TEST_Z(*ib_ctx = ibv_open_device (ib_dev));		// get device handle
@@ -339,20 +340,20 @@ struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct	
 
 	TEST_Z(*pd = ibv_alloc_pd (*ib_ctx));		// allocate Protection Domain
 
-	// Create completion channel and completion queue
-	//TEST_Z(comp_channel = ibv_create_comp_channel(*ib_ctx));
-	TEST_Z(*comp_channel = ibv_create_comp_channel(*ib_ctx));
+	// Create completion channel and completion queue for send queue
+	TEST_Z(*send_comp_channel = ibv_create_comp_channel(*ib_ctx));
+	TEST_Z(*send_cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *send_comp_channel, 0));
+	TEST_NZ (ibv_req_notify_cq(*send_cq, 0));
 	
-	
-	//TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, comp_channel, 0));
-	TEST_Z(*cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *comp_channel, 0));
-	
-	TEST_NZ (ibv_req_notify_cq(*cq, 0));
+	// Create completion channel and completion queue for receive queue
+	TEST_Z(*recv_comp_channel = ibv_create_comp_channel(*ib_ctx));
+	TEST_Z(*recv_cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *recv_comp_channel, 0));
+	TEST_NZ (ibv_req_notify_cq(*recv_cq, 0));
 	
 	return 0;
 }
 
-int RDMACommon::connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int sockfd)
+int RDMACommon::connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, int sockfd)
 {
 	struct CommExchData local_con_data, remote_con_data, tmp_con_data;
 	char temp_char;
@@ -367,7 +368,7 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int s
 	memcpy (local_con_data.gid, &my_gid, sizeof my_gid);
 	
 	TEST_NZ (sock_sync_data(sockfd, sizeof (struct CommExchData), (char *) &local_con_data, (char *) &tmp_con_data));
-	
+
 	remote_con_data.qp_num	= ntohl (tmp_con_data.qp_num);
 	remote_con_data.lid		= ntohs (tmp_con_data.lid);
 	memcpy (remote_con_data.gid, tmp_con_data.gid, 16);
@@ -381,11 +382,12 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int s
 	TEST_NZ(RDMACommon::modify_qp_to_init (ib_port, *qp));
 	
 	// modify the QP to RTR
-	TEST_NZ(RDMACommon::modify_qp_to_rtr (ib_port, *qp, remote_con_data.qp_num, remote_con_data.lid, remote_con_data.gid));
+	TEST_NZ(RDMACommon::modify_qp_to_rtr (ib_port, *qp, remote_con_data.qp_num, remote_con_data.lid));
 	
 	// modify the QP to RTS
 	TEST_NZ(RDMACommon::modify_qp_to_rts (*qp));
 	
+
 	// sync to make sure that both sides are in states that they can connect to prevent packet loss
 	TEST_NZ(sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth
 	return 0;

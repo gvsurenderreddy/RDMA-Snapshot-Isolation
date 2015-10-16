@@ -2,7 +2,7 @@
  *	Coordinator.cpp
  *
  *	Created on: 12.Apr.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "Coordinator.hpp"
@@ -173,7 +173,7 @@ int Coordinator::start () {
 	srand (generate_random_seed());		// initialize random seed
 	
 	
-	// Call socket(), bing() and listen()
+	// Call socket(), bind() and listen()
 	TEST_NZ (server_socket_setup(&server_sockfd, SERVER_CNT));
 	
 	// accept connections from Cohorts

@@ -2,7 +2,7 @@
  *	IPCoordinator.hpp
  *
  *	Created on: 12.Apr.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_COORDINATOR_H_

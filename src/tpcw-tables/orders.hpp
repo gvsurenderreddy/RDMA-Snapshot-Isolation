@@ -2,8 +2,11 @@
  *	orders.hpp
  *
  *	Created on: 22.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
+
+#ifndef ORDERS_HPP_
+#define ORDERS_HPP_
 
 class Orders {
 public:
@@ -20,3 +23,5 @@ public:
 	int O_SHIP_ADDR_ID;
 	char O_STATUS[15];
 };
+
+#endif /* ORDERS_HPP_ */

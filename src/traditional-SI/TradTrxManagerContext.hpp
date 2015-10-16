@@ -2,7 +2,7 @@
  *	TradTrxManagerContext.hpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TRAD_TRX_MANAGER_CONTEXT_H_

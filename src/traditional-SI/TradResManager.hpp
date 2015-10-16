@@ -2,7 +2,7 @@
  *	TradResManager.hpp
  *
  *	Created on: 13.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TRAD_RES_MANAGER_H_

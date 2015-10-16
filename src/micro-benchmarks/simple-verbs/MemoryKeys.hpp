@@ -2,7 +2,7 @@
  *	MemoryKeys.hpp
  *
  *	Created on: 19.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef MEMORY_KEYS_H_

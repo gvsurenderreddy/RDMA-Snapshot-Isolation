@@ -2,7 +2,7 @@
  *	IPTradTrxManager.hpp
  *
  *	Created on: 21.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_TRAD_TRX_MANAGER_H_

@@ -2,8 +2,11 @@
  *	cc_xacts.hpp
  *
  *	Created on: 22.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
+
+#ifndef CC_XACTS_HPP_
+#define CC_XACTS_HPP_
 
 class CCXacts {
 public:
@@ -17,3 +20,5 @@ public:
 	char CX_XACT_DATE[10];
 	int CX_CO_ID;
 };
+
+#endif // CC_XACTS_HPP_

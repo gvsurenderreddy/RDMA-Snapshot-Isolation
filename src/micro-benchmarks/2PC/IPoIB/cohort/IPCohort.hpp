@@ -2,7 +2,7 @@
  *	IPCohort.hpp
  *
  *	Created on: 25.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_COHORT_H_

@@ -2,7 +2,7 @@
  *	IPCohortContext.cpp
  *
  *	Created on: 26.Mar.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "IPCohortContext.hpp"

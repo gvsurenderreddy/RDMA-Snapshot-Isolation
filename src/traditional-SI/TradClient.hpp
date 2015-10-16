@@ -2,7 +2,7 @@
  *	TradClient.hpp
  *
  *	Created on: 25.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TRAD_CLIENT_H_

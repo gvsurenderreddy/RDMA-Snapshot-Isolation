@@ -2,7 +2,7 @@
  *	benchmark-config.hpp
  *
  *  Created on: 27.Mar.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef BENCHMARK_CONFIG_HPP_

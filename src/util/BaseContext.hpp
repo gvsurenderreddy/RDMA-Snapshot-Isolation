@@ -2,7 +2,7 @@
  *	BaseContext.hpp
  *
  *	Created on: 19.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef BASE_CONTEXT_H_
@@ -18,11 +18,13 @@ public:
 	struct	ibv_port_attr port_attr;			/* IB port attributes */
 	struct	ibv_context *ib_ctx;				/* device handle */
 	struct	ibv_pd *pd;							/* PD handle */
-	struct	ibv_cq *cq;							/* CQ handle */
+	struct	ibv_cq *send_cq;					/* send CQ handle */
+	struct	ibv_cq *recv_cq;					/* receive CQ handle */
 	struct	ibv_qp *qp;							/* QP handle */
-	struct	ibv_comp_channel *comp_channel;		/* CQ channel */
-	
-	int		ib_port;
+	struct	ibv_comp_channel *send_comp_channel;	/* send CQ channel */
+	struct	ibv_comp_channel *recv_comp_channel;	/* receive CQ channel */
+
+	uint8_t	ib_port;
 	int 	sockfd = -1;			
 	
 	

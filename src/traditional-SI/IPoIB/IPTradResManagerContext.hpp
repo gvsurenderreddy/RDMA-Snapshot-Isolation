@@ -2,7 +2,7 @@
  *	IPTradResManagerContext.hpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_TRAD_RES_MANAGER_CONTEXT_H_

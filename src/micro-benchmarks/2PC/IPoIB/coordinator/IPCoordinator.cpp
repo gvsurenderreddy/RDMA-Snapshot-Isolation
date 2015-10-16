@@ -2,7 +2,7 @@
  *	IPCoordinator.cpp
  *
  *	Created on: 12.Apr.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "IPCoordinator.hpp"

@@ -2,7 +2,7 @@
  *	IPTradClientContext.cpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "IPTradClientContext.hpp"

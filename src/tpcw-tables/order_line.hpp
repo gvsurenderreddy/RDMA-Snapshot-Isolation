@@ -2,8 +2,11 @@
  *	order_line.hpp
  *
  *	Created on: 22.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
+
+#ifndef ORDER_LINE_HPP_
+#define ORDER_LINE_HPP_
 
 class OrderLine {
 public:
@@ -14,3 +17,5 @@ public:
 	double OL_DISCOUNT;
 	char OL_COMMENTS [110];
 };
+
+#endif /* ORDER_LINE_HPP */

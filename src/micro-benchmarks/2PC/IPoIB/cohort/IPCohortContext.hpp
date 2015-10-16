@@ -2,7 +2,7 @@
  *	IPCohortContext.hpp
  *
  *	Created on: 26.Mar.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_COHORT_CONTEXT_H_

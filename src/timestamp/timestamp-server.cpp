@@ -2,7 +2,7 @@
  *	timestamp-server.cpp
  *
  *	Created on: 19.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "timestamp-server.hpp"

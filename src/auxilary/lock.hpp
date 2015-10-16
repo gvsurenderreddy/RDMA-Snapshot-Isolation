@@ -2,8 +2,11 @@
  *	lock.hpp
  *
  *	Created on: 5.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
+
+#ifndef LOCK_HPP_
+#define LOCK_HPP_
 
 #include <stdint.h>
 
@@ -15,3 +18,5 @@ public:
 	static bool		are_equals		(uint64_t lock_1,		uint64_t lock_2);
 	
 };
+
+#endif // LOCK_HPP_

@@ -2,7 +2,7 @@
  *	IPTradClientContext.hpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IP_TRAD_CLIENT_CONTEXT_H_

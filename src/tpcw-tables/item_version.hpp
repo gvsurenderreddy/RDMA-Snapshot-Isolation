@@ -2,18 +2,19 @@
  *	item_version.hpp
  *
  *	Created on: 22.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef ITEM_VERSION_H_
 #define ITEM_VERSION_H_
 
 #include "item.hpp"
+#include "../auxilary/timestamp.hpp"
 
 class ItemVersion {
 public:
-	int write_timestamp;
-	Item item;
+	Timestamp	write_timestamp;
+	Item		item;
 };
 
 #endif // ITEM_VERSION_H_

@@ -2,7 +2,7 @@
  *	Coordinator.hpp
  *
  *	Created on: 12.Apr.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef COORDINATOR_H_

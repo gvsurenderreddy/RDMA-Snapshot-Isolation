@@ -2,7 +2,7 @@
  *	TradTrxManager.cpp
  *
  *	Created on: 9.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "TradTrxManager.hpp"

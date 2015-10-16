@@ -2,7 +2,7 @@
  *	TradMessage.hpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TRAD_MESSAGE_H_

@@ -2,7 +2,7 @@
  *	TradClientContext.hpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TRAD_CLIENT_CONTEXT_H_

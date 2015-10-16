@@ -2,7 +2,7 @@
  *	RDMACommon.hpp
  *
  *	Created on: 26.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef RDMACOMMON_H_
@@ -42,7 +42,7 @@ public:
 	* Description
 	* Transition a QP from the RESET to INIT state
 	******************************************************************************/
-	static int modify_qp_to_init (int ib_port, struct ibv_qp *qp);
+	static int modify_qp_to_init (uint8_t ib_port, struct ibv_qp *qp);
 	
 	
 	/******************************************************************************
@@ -63,7 +63,7 @@ public:
 	* Description
 	* Transition a QP from the INIT to RTR state, using the specified QP number
 	******************************************************************************/
-	static int modify_qp_to_rtr (int ib_port, struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid, uint8_t * dgid);
+	static int modify_qp_to_rtr (uint8_t ib_port, struct ibv_qp *qp, uint32_t remote_qpn, uint16_t dlid);
 	
 	
 	/******************************************************************************
@@ -164,7 +164,7 @@ public:
 	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint64_t addition, uint32_t length);
 	
 	
-	static int create_queuepair(struct ibv_context *context, struct ibv_pd *pd, struct ibv_cq *cq, struct ibv_qp **qp);
+	static int create_queuepair(struct ibv_context *context, struct ibv_pd *pd, struct ibv_cq *send_cq, struct ibv_cq *recv_cq, struct ibv_qp **qp);
 	
 	
 	/******************************************************************************
@@ -189,7 +189,7 @@ public:
 	
 	
 	static int build_connection(int ib_port, struct ibv_context** ib_ctx,
-	struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **cq, struct ibv_comp_channel **comp_channel, int cq_size);
+	struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **send_cq, struct ibv_cq **recv_cq, struct ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp_channel, int cq_size);
 	
 	
 	/******************************************************************************
@@ -208,6 +208,6 @@ public:
 	* Connect the QP. Transition the server side to RTR, sender side to RTS
 	*
 	******************************************************************************/
-	static int connect_qp (struct ibv_qp **qp, int ib_port, uint16_t lid, int sockfd);
+	static int connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, int sockfd);
 };
 #endif /* RDMACOMMON_H_ */

@@ -2,7 +2,7 @@
  *	lock.cpp
  *
  *	Created on: 5.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "lock.hpp"

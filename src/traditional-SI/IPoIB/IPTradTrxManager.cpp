@@ -2,7 +2,7 @@
  *	IPTradTrxManager.cpp
  *
  *	Created on: 21.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "IPTradTrxManager.hpp"

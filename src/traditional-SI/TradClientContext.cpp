@@ -2,7 +2,7 @@
  *	TradClientContext.cpp
  *
  *	Created on: 20.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "TradClientContext.hpp"

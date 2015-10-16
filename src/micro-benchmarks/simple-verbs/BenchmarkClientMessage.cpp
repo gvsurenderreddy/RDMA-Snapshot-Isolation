@@ -2,7 +2,7 @@
  *	BenchmarkClient.cpp
  *
  *	Created on: 26.March.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "BenchmarkClient.hpp"

@@ -2,7 +2,7 @@
  *	ServerContext.cpp
  *
  *	Created on: 26.Mar.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #include "ServerContext.hpp"
@@ -53,4 +53,5 @@ int ServerContext::destroy_context () {
 	if (sockfd >= 0){
 		TEST_NZ (close (sockfd));
 	}
+	return 0;
 }

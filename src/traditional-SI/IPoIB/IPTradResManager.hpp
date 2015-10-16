@@ -2,7 +2,7 @@
  *	IPTradResManager.hpp
  *
  *	Created on: 21.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef IPTRAD_RES_MANAGER_H_

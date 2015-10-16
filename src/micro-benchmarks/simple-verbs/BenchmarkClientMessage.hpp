@@ -2,7 +2,7 @@
  *	BenchmarkClient.hpp
  *
  *	Created on: 26.March.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef BENCHMARK_CLIENT_H_

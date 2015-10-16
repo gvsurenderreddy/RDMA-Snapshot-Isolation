@@ -2,7 +2,7 @@
  *	BenchmarkServerRDMA.hpp
  *
  *	Created on: 25.Jan.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef BENCHMARK_SERVER_RMDA_H_

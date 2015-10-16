@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ $# -ne 2 ]; then
-	echo "Usage: $0 <RDMA | Trad | IPTrad | BenchmarkClient> <#threads_per_client>"
+	echo "Usage: $0 <RDMA | Trad | IPTrad | Benchmark> <#threads_per_client>"
 	exit 0
 fi
 
@@ -18,17 +18,17 @@ do
   #echo "Launching transaction $x at $(date +%s%N | cut -b1-13)..." 
   if [ $1 == "RDMA" ]; then
 	  echo "Launching RDMA client $x ..."
-	  ./RDMAClient &
+	  ./exe/test.exe client &
   elif [ $1 == "Trad" ]; then
 	  echo "Launching Traditional client $x ..."
-	  ./TradClient &
+	  ./exe/Trad-SI/TradClient &
   elif [ $1 == "IPTrad" ]; then
 	  echo "Launching IP Traditional client $x ..."
-	  ./IPTradClient &
+	  ./exe/IPTrad/IPTradClient &
   else
 	  echo "Launching Benchmark client $x ..."
-	  ./BenchmarkClient &
+	  ./exe/cache-effect/Client &
   fi
   x=$(( $x + 1 ))
-  sleep 0.001
+  sleep 0.0001
 done

@@ -2,7 +2,7 @@
  *	IPTradResManager.hpp
  *
  *	Created on: 13.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 

@@ -2,7 +2,7 @@
  *	BaseTradClient.hpp
  *
  *	Created on: 21.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef BASE_TRAD_CLIENT_H_

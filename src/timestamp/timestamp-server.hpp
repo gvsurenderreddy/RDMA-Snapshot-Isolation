@@ -2,7 +2,7 @@
  *	timestamp-server.hpp
  *
  *	Created on: 19.Feb.2015
- *	Author: erfanz
+ *	Author: Erfan Zamanian
  */
 
 #ifndef TIMESTAMPSERVER_H_
