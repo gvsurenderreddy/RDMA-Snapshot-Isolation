@@ -27,14 +27,14 @@ public:
 	ShoppingCartLine	*associated_cart_line;	
 	
 	// local handler
-	struct ibv_mr *recv_mr;			
-	struct ibv_mr *items_mr;	
-	struct ibv_mr *orders_mr;	
-	struct ibv_mr *order_line_mr;	
-	struct ibv_mr *cc_xacts_mr;	
-	struct ibv_mr *read_ts_mr;	
-	struct ibv_mr *commit_ts_mr;	
-	struct ibv_mr *lock_items_mr;	
+	struct ibv_mr *mr_recv;
+	struct ibv_mr *mr_items;
+	struct ibv_mr *mr_orders;
+	struct ibv_mr *mr_order_line;
+	struct ibv_mr *mr_cc_xacts;
+	struct ibv_mr *mr_read_ts;
+	struct ibv_mr *mr_commit_ts;
+	struct ibv_mr *mr_lock_items;
 	
 	// remote memory handlers
 	struct ibv_mr peer_mr_items;

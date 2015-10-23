@@ -20,14 +20,11 @@ int ServerContext::register_memory() {
 					| IBV_ACCESS_REMOTE_ATOMIC;
 	
 		
-	send_data_msg = new char[BUFFER_SIZE];
-	local_buffer = new char[BUFFER_SIZE];
-		
 	TEST_Z(send_message_mr	= ibv_reg_mr(pd, &send_message_msg, sizeof(struct MemoryKeys), mr_flags));
 	//TEST_Z(local_mr	= ibv_reg_mr(pd, local_buffer, SERVER_REGION_SIZE * sizeof(char), mr_flags));
-	TEST_Z(local_mr	= ibv_reg_mr(pd, local_buffer, 1 * sizeof(uint64_t), mr_flags));
-	TEST_Z(send_data_mr	= ibv_reg_mr(pd, send_data_msg, BUFFER_SIZE * sizeof(char), mr_flags));
-	TEST_Z(recv_data_mr	= ibv_reg_mr(pd, &recv_data_msg, sizeof(int), mr_flags));
+	TEST_Z(global_buffer_mr		= ibv_reg_mr(pd, global_buffer, benchmark_config::SERVER_REGION_SIZE * sizeof(char), mr_flags));
+	TEST_Z(send_data_mr	= ibv_reg_mr(pd, send_data_msg, benchmark_config::SERVER_REGION_SIZE * sizeof(char), mr_flags));
+	TEST_Z(recv_data_mr	= ibv_reg_mr(pd, recv_data_msg, benchmark_config::SERVER_REGION_SIZE * sizeof(char), mr_flags));
 	
 	return 0;
 }
@@ -37,21 +34,9 @@ int ServerContext::destroy_context () {
 		TEST_NZ(ibv_destroy_qp (qp));
 	
 	if (send_message_mr) TEST_NZ (ibv_dereg_mr (send_message_mr));
-	if (local_mr) TEST_NZ (ibv_dereg_mr (local_mr));
+	if (global_buffer_mr) TEST_NZ (ibv_dereg_mr (global_buffer_mr));
 	if (send_data_mr) TEST_NZ (ibv_dereg_mr (send_data_mr));
 	if (recv_data_mr) TEST_NZ (ibv_dereg_mr (recv_data_mr));
-	
-	if (cq)
-		TEST_NZ (ibv_destroy_cq (cq));
-	
-	if (pd)
-		TEST_NZ (ibv_dealloc_pd (pd));
-	
-	if (ib_ctx)
-		TEST_NZ (ibv_close_device (ib_ctx));
-
-	if (sockfd >= 0){
-		TEST_NZ (close (sockfd));
-	}
+	this->BaseContext::destroy_context();
 	return 0;
 }

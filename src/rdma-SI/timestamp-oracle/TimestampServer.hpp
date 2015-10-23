@@ -16,12 +16,7 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <infiniband/verbs.h>
-#include <mutex>
-#include <vector>
-#include <queue>          // std::priority_queue
-#include <utility>      // std::pair, std::make_pair
-#include <mutex>
-#include <condition_variable>
+
 
 typedef message::TransactionResult::Result Result;
 typedef std::pair <Timestamp,  Result> TimestampResultPair;
@@ -33,20 +28,14 @@ struct QueueEntryComparator  {
 	}
 };
 
-
 class TimestampServer{
 private:
-	int	server_sockfd;		// Server's socket file descriptor
-	std::priority_queue<TimestampResultPair, std::vector<TimestampResultPair>, QueueEntryComparator> finishedTrxs;
+	const uint32_t	clients_cnt_;	// coming from the command line.
+	int				server_sockfd_;	// Server's socket file descriptor
 
-	double avg_queue_size = 0;
-	int sample_size = 0;
-
-	std::mutex mu;
-	std::condition_variable cond;
-
-	Timestamp	read_timestamp;
-	Timestamp	commit_timestamp;
+	uint8_t 	finished_trxs_hash_[config::TIMESTAMP_SERVER_QUEUE_SIZE];
+	Timestamp	read_timestamp_;
+	Timestamp	commit_timestamp_;
 
 	struct WorkerContext  {
 		struct	ibv_device_attr device_attr;
@@ -67,106 +56,37 @@ private:
 		int trx_num;
 
 		// memory handlers
-		struct ibv_mr *send_mr;		// for the SEND message
-		struct ibv_mr *mr_transaction_result;
-		struct ibv_mr *mr_transaction_result_ack;
+		struct ibv_mr *mr_send;		// for the SEND message
+		struct ibv_mr *mr_finished_trxs_hash;
 		struct ibv_mr *mr_read_timestamp;
 		struct ibv_mr *mr_commit_timestamp;
 
-
 		// memory buffers
 		struct message::TimestampServerMemoryKeys send_msg;
-		struct message::TransactionResult transaction_result;
-		struct message::TransactionResult transaction_result_ack;
-
 	};
-
-	int initialize_data_structures();
 
 	int registerGlobalMemoryRegions();
 
+	int	create_context(struct WorkerContext &ctx);
 
-
-	/******************************************************************************
-	* Function: create_context
-	*
-	* Input
-	* pointer to the resources structure for the client
-	*
-	* Returns
-	* 0 on success, 1 on failure
-	*
-	* Description
-	*
-	* This function creates and allocates all necessary system resources. These
-	* are stored in res (the input argument).
-	*****************************************************************************/
-	int	create_context(struct WorkerContext *ctx);
-
-	void handle_client(struct WorkerContext *ctx);
+	void handle_client(struct WorkerContext &ctx);
 	
-	int	register_memory(struct WorkerContext *ctx);
+	int	register_memory(struct WorkerContext &ctx);
 		
-	std::string	get_full_desc(struct WorkerContext *ctx);
+	std::string	get_full_desc(struct WorkerContext &ctx);
 	
-	int appendTidToUnresolved(Timestamp &ts, Result &result);
-
 	int cleanUpFinishedTransactions();
 
-
-
-
-	/******************************************************************************
-	* Function: destroy_resources
-	*
-	* Input
-	* res pointer to resources structure
-	*
-	* Output
-	* none
-	*
-	* Returns
-	* 0 on success, 1 on failure
-	*
-	* Description
-	* Cleanup and deallocate all resources used
-	******************************************************************************/
-	int destroy_client_context (struct WorkerContext *ctx);
+	int destroy_client_context (struct WorkerContext &ctx);
 	
 	int destroy_resources ();
 	
 public:
 	
-	/******************************************************************************
-	* Function: start_server
-	*
-	* Input
-	* nothing
-	*
-	* Returns
-	* socket (fd) on success, negative error code on failure
-	*
-	* Description
-	* Starts the server. 
-	*
-	******************************************************************************/
+	TimestampServer(uint32_t clients_cnt);
+
 	int start_server ();
 	
-	/******************************************************************************
-	* Function: usage
-	*
-	* Input
-	* argv0 command line arguments
-	*
-	* Output
-	* none
-	*
-	* Returns
-	* none
-	*
-	* Description
-	* print a description of command line syntax
-	******************************************************************************/
 	static void usage (const char *argv0);
 };
 #endif /* TIMESTAMPSERVER_H_ */

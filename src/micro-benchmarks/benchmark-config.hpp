@@ -11,10 +11,15 @@
 #include <stdint.h>
 #include <string>
 
+namespace benchmark_config {
+	static const size_t BUFFER_SIZE 		= 8;	// in Byte
+	static const size_t SERVER_REGION_SIZE 	= 8000;	// in Byte
+	static const int OPERATIONS_CNT			= 100000;
 
-static const int BUFFER_SIZE = 8;	// in Byte
-static const int SERVER_REGION_SIZE = 8;	// in Byte
+	enum VERB_TYPE_ENUM {READ, WRITE, CAS, FA};
+	static const VERB_TYPE_ENUM VERB_TYPE 	= CAS;
 
-static const int OPERATIONS_CNT = 1000000;
-
+	enum MEMORY_ACCESS_ENUM {SHARED, DEDICATED};
+	static const MEMORY_ACCESS_ENUM MEMORY_ACCESS = SHARED;
+}
 #endif /* BENCHMARK_CONFIG_H_ */

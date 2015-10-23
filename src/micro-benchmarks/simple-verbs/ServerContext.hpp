@@ -9,6 +9,7 @@
 #define SERVER_CONTEXT_H_
 
 #include "../../util/BaseContext.hpp"
+#include "../benchmark-config.hpp"
 #include "MemoryKeys.hpp"
 #include "../../util/RDMACommon.hpp"
 #include <iostream>
@@ -19,7 +20,7 @@ public:
 	
 	// memory handlers
 	struct ibv_mr *send_message_mr;
-	struct ibv_mr *local_mr;
+	struct ibv_mr *global_buffer_mr;
 	
 	struct ibv_mr *send_data_mr;
 	struct ibv_mr *recv_data_mr;
@@ -28,10 +29,10 @@ public:
 	// memory buffers
 	struct MemoryKeys send_message_msg;
 	
-	char *local_buffer;
+	char *global_buffer;
 	
-	char *send_data_msg;
-	int recv_data_msg;
+	char send_data_msg[benchmark_config::SERVER_REGION_SIZE];
+	char recv_data_msg[benchmark_config::SERVER_REGION_SIZE];
 	
 	
 	int register_memory();

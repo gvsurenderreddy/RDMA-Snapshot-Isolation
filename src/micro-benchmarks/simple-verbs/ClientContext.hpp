@@ -10,6 +10,7 @@
 
 #include "../../util/BaseContext.hpp"
 #include "../../util/RDMACommon.hpp"
+#include "../benchmark-config.hpp"
 #include "MemoryKeys.hpp"
 #include <iostream>
 
@@ -23,10 +24,10 @@ public:
 	struct ibv_mr *send_data_mr;	
 	struct ibv_mr *recv_data_mr;	
 	
-	// memory bufferes
+	// memory buffers
 	struct MemoryKeys	recv_memory_msg;
-	int send_data_msg;
-	char *recv_data_msg;
+	char send_data_msg[benchmark_config::BUFFER_SIZE];
+	char recv_data_msg[benchmark_config::BUFFER_SIZE];
 	
 	// remote memory handlers
 	struct ibv_mr peer_data_mr;

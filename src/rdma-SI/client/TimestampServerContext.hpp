@@ -20,20 +20,19 @@ public:
 	std::string	server_address;
 
 	// local memory handlers
-	struct ibv_mr *recv_mr;						// handler for the RECEIVE message
-	struct ibv_mr *transaction_result_mr;
-	struct ibv_mr *transaction_result_ack_mr;
-	struct ibv_mr *read_timestamp_mr;			// not sure if it is needed
-	struct ibv_mr *commit_timestamp_mr;			// not sure if it is needed
+	struct ibv_mr *mr_recv;					// handler for the RECEIVE message
+	struct ibv_mr *mr_read_timestamp;
+	struct ibv_mr *mr_commit_timestamp;
+	struct ibv_mr *mr_trx_status;
 
 	// local memory buffers
 	struct message::TimestampServerMemoryKeys recv_msg;	// buffer for the RECEIVE message
-	Timestamp read_timestamp;
-	Timestamp commit_timestamp;
-	struct message::TransactionResult transaction_result;
-	struct message::TransactionResult transaction_result_ack;
+	Timestamp	read_timestamp;
+	Timestamp	commit_timestamp;
+	uint8_t		trx_status;
 
 	// remote memory handlers
+	struct ibv_mr peer_mr_finished_trxs_hash;
 	struct ibv_mr peer_mr_read_timestamp;
 	struct ibv_mr peer_mr_commit_timestamp;
 

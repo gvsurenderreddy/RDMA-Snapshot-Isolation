@@ -12,6 +12,7 @@
 
 struct MemoryKeys {
 	struct ibv_mr peer_mr;
+	uint16_t client_num;
 };
 
 

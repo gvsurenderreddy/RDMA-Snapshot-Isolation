@@ -25,7 +25,7 @@ do
   elif [ $1 == "IPTrad" ]; then
 	  echo "Launching IP Traditional client $x ..."
 	  ./exe/IPTrad/IPTradClient &
-  else
+  else [ $1 == "IPTrad" ]
 	  echo "Launching Benchmark client $x ..."
 	  ./exe/cache-effect/Client &
   fi

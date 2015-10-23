@@ -4,15 +4,17 @@ LD = g++
 CPPFLAGS	= -std=gnu++11 -g -Wall -Wconversion -Wextra -Wno-ignored-qualifiers -Wno-write-strings
 LIBS		= -libverbs -lpthread 
 
-# all the test modules (including subfloders) should go here
-TEST_MODULES	:=  unit_tests unit_tests/base_types_test unit_tests/region_test unit_tests/execution_test unit_tests/agents_test unit_tests/complete_test
 
 # all the agents (including subfolders) should go here
-AGENTS_MODULES	:= rdma-SI rdma-SI/client rdma-SI/server rdma-SI/timestamp-oracle
+AGENTS_MODULES		:= rdma-SI rdma-SI/client rdma-SI/server rdma-SI/timestamp-oracle 
+
+# agents for benchmarking
+BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
+
 
 # the rest of the modules should go here.
-# MODULES		:= util errors memory-region  $(AGENTS_MODULES) $(TEST_MODULES)
-MODULES		:= util auxilary executor $(AGENTS_MODULES)
+# MODULES		:= util auxilary executor $(AGENTS_MODULES)
+MODULES		:= util auxilary $(BENCHMARK_MODULES)
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))
