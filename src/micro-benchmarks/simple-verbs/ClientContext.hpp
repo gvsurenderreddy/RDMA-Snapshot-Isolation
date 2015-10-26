@@ -26,8 +26,11 @@ public:
 	
 	// memory buffers
 	struct MemoryKeys	recv_memory_msg;
-	char send_data_msg[benchmark_config::BUFFER_SIZE];
-	char recv_data_msg[benchmark_config::BUFFER_SIZE];
+	uint64_t send_data_msg[benchmark_config::BUFFER_WORDS];
+	uint64_t recv_data_msg[benchmark_config::BUFFER_WORDS];
+	//uint64_t send_data_msg;
+	//uint64_t recv_data_msg;
+
 	
 	// remote memory handlers
 	struct ibv_mr peer_data_mr;

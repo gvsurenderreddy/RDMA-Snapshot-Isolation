@@ -19,10 +19,10 @@ int ClientContext::register_memory() {
 				| IBV_ACCESS_REMOTE_WRITE;
 	
 	TEST_Z(recv_memory_mr	= ibv_reg_mr(pd, &recv_memory_msg, sizeof(struct MemoryKeys), mr_flags));
-	TEST_Z(send_data_mr		= ibv_reg_mr(pd, send_data_msg, benchmark_config::BUFFER_SIZE * sizeof(char), mr_flags));
-	TEST_Z(recv_data_mr		= ibv_reg_mr(pd, recv_data_msg, benchmark_config::BUFFER_SIZE * sizeof(char), mr_flags));
-	
-
+	TEST_Z(send_data_mr		= ibv_reg_mr(pd, send_data_msg, benchmark_config::BUFFER_WORDS * sizeof(uint64_t), mr_flags));
+	TEST_Z(recv_data_mr		= ibv_reg_mr(pd, recv_data_msg, benchmark_config::BUFFER_WORDS * sizeof(uint64_t), mr_flags));
+	//TEST_Z(send_data_mr		= ibv_reg_mr(pd, &send_data_msg, sizeof(uint64_t), mr_flags));
+	//TEST_Z(recv_data_mr		= ibv_reg_mr(pd, &recv_data_msg, sizeof(uint64_t), mr_flags));
 	return 0;
 }
 

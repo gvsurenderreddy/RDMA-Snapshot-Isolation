@@ -24,7 +24,8 @@ private:
 	uint8_t		ib_port;
 	
 	// memory buffers
-	char local_buffer[benchmark_config::SERVER_REGION_SIZE];
+	uint64_t local_buffer[benchmark_config::SERVER_REGION_WORDS];
+	//uint64_t local_buffer[1];
 	
 	static void* handle_client(void *param);
 	

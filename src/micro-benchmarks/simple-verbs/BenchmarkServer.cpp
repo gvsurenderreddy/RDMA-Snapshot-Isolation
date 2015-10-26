@@ -80,7 +80,6 @@ int BenchmarkServer::start_server () {
 	socklen_t clilen = sizeof(cli_addr);
 	char temp_char;
 	
-	
 	std::cout << "[Info] Server is waiting for " << client_cnt_ << " client(s) on tcp port: " << tcp_port << ", ib port: " << ib_port << std::endl;
 	
 	// Open Socket
@@ -115,7 +114,6 @@ int BenchmarkServer::start_server () {
 	
 		// create all resources
 		TEST_NZ (ctx[i].create_context());
-
 
 
 		DEBUG_COUT(CLASS_NAME, __func__, "[Info] Context for client " << i << " created");
@@ -174,7 +172,7 @@ int BenchmarkServer::start_server () {
 		std::cout << "[Info] Destroying client " << i << " resources" << std::endl;
 	}
 
-	std::cout << "[Info] Server's ready to gracefully get destroyed" << std::endl;	
+	std::cout << "[Info] Server's ready to gracefully get destroyed" << std::endl;
 
 	return 0;
 }
@@ -184,6 +182,7 @@ BenchmarkServer::BenchmarkServer(uint32_t client_cnt)
 	tcp_port	= config::TCP_PORT[0];
 	ib_port		= config::IB_PORT[0];
 	server_sockfd = -1;
-	for (size_t i = 0; i < benchmark_config::SERVER_REGION_SIZE; i++)
+	for (size_t i = 0; i < benchmark_config::SERVER_REGION_WORDS; i++)
 		local_buffer[i] = 0;
+	//local_buffer[0] = 0ULL;
 }

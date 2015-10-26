@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $# -ne 2 ]; then
+if [ $# -lt 2 ]; then
 	echo "Usage: $0 <RDMA | Trad | IPTrad | Benchmark> <#threads_per_client>"
 	exit 0
 fi
@@ -25,10 +25,10 @@ do
   elif [ $1 == "IPTrad" ]; then
 	  echo "Launching IP Traditional client $x ..."
 	  ./exe/IPTrad/IPTradClient &
-  else [ $1 == "IPTrad" ]
+  else [ $1 == "Benchmark" ]
 	  echo "Launching Benchmark client $x ..."
-	  ./exe/cache-effect/Client &
+	  ./exe/test.exe client $3 $4 $5 $6 &
   fi
   x=$(( $x + 1 ))
-  sleep 0.0001
+  sleep 0.00001
 done

@@ -12,7 +12,7 @@
 #include <string>
 
 namespace config {
-	#define DEBUG_ENABLED (true)
+	#define DEBUG_ENABLED (false)
 
 	static const int	SERVER_CNT		= 1;
 	//static 		 int	CLIENTS_CNT;			// this is set in run-time

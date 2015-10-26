@@ -132,39 +132,39 @@ int BenchmarkClient::start_benchmark(ClientContext *ctx) {
  */
 
 int BenchmarkClient::perform_operation() {
-	 uint64_t *lookup_add;
-	if (benchmark_config::MEMORY_ACCESS == benchmark_config::MEMORY_ACCESS_ENUM::SHARED)
+	 uintptr_t lookup_add;
+	if (memory_access_ == MEM_ACC_ENUM::SHARED)
 		// In SHARED memory access, all clients access the same memory region (the first 8 bytes)
-		lookup_add =  (uint64_t *)((uint64_t)ctx.peer_data_mr.addr);
+		lookup_add =  (uintptr_t)((uint64_t)ctx.peer_data_mr.addr);
 	else {
 		// In DEDICATED memory access, each client accesses a dedicated memory region on the server
-		size_t offset = client_num * sizeof(uint64_t);
-		lookup_add =  (uint64_t *)(offset + ((uint64_t)ctx.peer_data_mr.addr));
+		size_t offset = client_num * benchmark_config::BUFFER_WORDS * sizeof(uint64_t);
+		lookup_add =  (uintptr_t)(offset + ((uint64_t)ctx.peer_data_mr.addr));
 	}
 
-	if (benchmark_config::VERB_TYPE == benchmark_config::VERB_TYPE_ENUM::READ){
+	if (verb_type_ == VERB_TYPE_ENUM::READ){
 		TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 				ctx.qp,
 				ctx.recv_data_mr,
 				(uint64_t)ctx.recv_data_msg,
 				&(ctx.peer_data_mr),
-				(uint64_t)lookup_add,
-				benchmark_config::BUFFER_SIZE,
+				lookup_add,
+				benchmark_config::BUFFER_WORDS * sizeof(uint64_t),
 				true));
 		DEBUG_COUT(CLASS_NAME, __func__, "[READ] Server's buffer read");
 	}
-	else if (benchmark_config::VERB_TYPE == benchmark_config::VERB_TYPE_ENUM::WRITE) {
+	else if (verb_type_ == VERB_TYPE_ENUM::WRITE) {
 		TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 				ctx.qp,
 				ctx.send_data_mr,
 				(uint64_t)ctx.send_data_msg,
 				&(ctx.peer_data_mr),
-				(uint64_t)lookup_add,
-				benchmark_config::BUFFER_SIZE,
+				lookup_add,
+				benchmark_config::BUFFER_WORDS * sizeof(uint64_t),
 				true));
 		DEBUG_COUT(CLASS_NAME, __func__, "[WRIT] Server's buffer written to");
 	}
-	else if (benchmark_config::VERB_TYPE == benchmark_config::VERB_TYPE_ENUM::CAS) {
+	else if (verb_type_ == VERB_TYPE_ENUM::CAS) {
 		uint64_t	expected_value = 0ULL;
 		uint64_t	new_value = 0ULL;
 
@@ -173,19 +173,19 @@ int BenchmarkClient::perform_operation() {
 				ctx.send_data_mr,
 				(uint64_t)ctx.send_data_msg,
 				&(ctx.peer_data_mr),
-				(uint64_t)lookup_add,
+				lookup_add,
 				(uint32_t)sizeof(uint64_t),
 				(uint64_t)expected_value,
 				(uint64_t)new_value));
 		DEBUG_COUT(CLASS_NAME, __func__, "[CAS] Server's buffer CASed");
 	}
-	else if (benchmark_config::VERB_TYPE == benchmark_config::VERB_TYPE_ENUM::FA) {
+	else if (verb_type_ == VERB_TYPE_ENUM::FA) {
 		TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
 				ctx.qp,
 				ctx.send_data_mr,
-				(uint64_t)ctx.send_data_mr,
+				(uint64_t)ctx.send_data_msg,
 				&(ctx.peer_data_mr),
-				(uint64_t)lookup_add,
+				lookup_add,
 				(uint64_t)1ULL,
 				(uint32_t)sizeof(uint64_t)));
 		DEBUG_COUT(CLASS_NAME, __func__, "[FADD] Server's buffer FADDed");
@@ -229,7 +229,7 @@ int BenchmarkClient::start_benchmark() {
 	double latency_in_micro = (double)(micro_elapsed_time / benchmark_config::OPERATIONS_CNT);
 	//double latency_in_micro = (double)(cumulative_latency / signaledPosts) / 1000;
 
-	double mega_byte_per_sec = ((benchmark_config::BUFFER_SIZE * benchmark_config::OPERATIONS_CNT / 1E6 ) / (micro_elapsed_time / 1E6) );
+	double mega_byte_per_sec = ((benchmark_config::BUFFER_WORDS * sizeof(uint64_t) * benchmark_config::OPERATIONS_CNT / 1E6 ) / (micro_elapsed_time / 1E6) );
 	double operations_per_sec = benchmark_config::OPERATIONS_CNT / (micro_elapsed_time / 1E6);
 	//double cpu_utilization = (user_cpu_microtime + kernel_cpu_microtime) / micro_elapsed_time;
 
@@ -281,7 +281,10 @@ int BenchmarkClient::start_client () {
 	return 0;
 }
 
-BenchmarkClient::BenchmarkClient() {
+BenchmarkClient::BenchmarkClient(VERB_TYPE_ENUM verb_type, MEM_ACC_ENUM memory_access)
+: verb_type_(verb_type),
+  memory_access_(memory_access){
+	client_num = -1;
 	ctx.server_address = "";
 	ctx.server_address += config::SERVER_ADDR[0];
 	ctx.ib_port		  = config::IB_PORT[0];

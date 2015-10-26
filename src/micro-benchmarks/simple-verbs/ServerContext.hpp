@@ -22,19 +22,12 @@ public:
 	struct ibv_mr *send_message_mr;
 	struct ibv_mr *global_buffer_mr;
 	
-	struct ibv_mr *send_data_mr;
-	struct ibv_mr *recv_data_mr;
-	
-
 	// memory buffers
 	struct MemoryKeys send_message_msg;
 	
-	char *global_buffer;
-	
-	char send_data_msg[benchmark_config::SERVER_REGION_SIZE];
-	char recv_data_msg[benchmark_config::SERVER_REGION_SIZE];
-	
-	
+	//char *global_buffer;
+	uint64_t *global_buffer;
+
 	int register_memory();
 	int destroy_context ();
 };
