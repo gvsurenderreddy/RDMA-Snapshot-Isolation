@@ -12,8 +12,8 @@
 #include <string>
 
 namespace benchmark_config {
-	static const size_t BUFFER_WORDS 		= 1;	// # words (8 bytes)
-	static const size_t SERVER_REGION_WORDS = 1000;	// # words (8 bytes)
+	static const size_t BUFFER_WORDS 		= 125;	// # words (8 bytes)
+	static const size_t SERVER_REGION_WORDS = 125000;	// # words (8 bytes)
 	static const int OPERATIONS_CNT			= 5000000;
 
 	enum VERB_TYPE_ENUM {READ, WRITE, CAS, FA};

@@ -2,6 +2,9 @@
 
 if [ $# -lt 2 ]; then
 	echo "Usage: $0 <RDMA | Trad | IPTrad | Benchmark> <#threads_per_client>"
+	echo '\n'
+	echo "For Benchmarking:"
+	echo "./scripts/run_clients.sh Benchmark 40 -v READ -m SHARED"
 	exit 0
 fi
 

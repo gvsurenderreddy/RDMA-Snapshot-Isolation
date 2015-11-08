@@ -13,8 +13,8 @@ BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
 
 
 # the rest of the modules should go here.
-# MODULES		:= util auxilary executor $(AGENTS_MODULES)
-MODULES		:= util auxilary $(BENCHMARK_MODULES)
+MODULES		:= util auxilary executor $(AGENTS_MODULES)
+#MODULES		:= util auxilary $(BENCHMARK_MODULES)
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))

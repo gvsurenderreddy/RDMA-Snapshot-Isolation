@@ -233,17 +233,17 @@ int RDMAClient::startTransactions() {
 	
 	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer	
 	for (int trx_num = 1; trx_num <= config::TRANSACTION_CNT; trx_num++){
-		//if (trx_num % 100 == 0)
-		//	std::cout << "Handling trx #" << trx_num << std::endl;
-
 		DEBUG_COUT (CLASS_NAME, __func__, std::endl << "[Info] Handling transaction #" << trx_num);
+
+		// ************************************************
+		//	Constructing the shopping cart
+		// ************************************************
+		fill_shopping_cart();
 
 
 		// ************************************************
 		//	Acquire read timestamp
 		// ************************************************
-		fill_shopping_cart();
-		
 		clock_gettime(CLOCK_REALTIME, &before_read_ts);
 		
 		TEST_NZ (acquire_read_ts());
@@ -253,7 +253,7 @@ int RDMAClient::startTransactions() {
 	
 	
 		// ************************************************
-		//	Read records in read-set (fetch ITEMs information
+		//	Read records in read-set (fetch ITEMs information)
 		// ************************************************
 		// TODO: Should be fixed. multiple requests to the same server should be sent with only one signalled request 
 
@@ -285,9 +285,11 @@ int RDMAClient::startTransactions() {
 				
 			// ************************************************
 			//	Acquire Commit timestamp
-			// ************************************************	
-			acquire_commit_ts();
-			DEBUG_COUT (CLASS_NAME, __func__, "[FTCH] Step 3: Acquired commit timestamp " << ts_ctx_.commit_timestamp.value);
+			// ************************************************
+			//if (trx_num % 1000 == 0) {
+				acquire_commit_ts();
+				DEBUG_COUT (CLASS_NAME, __func__, "[FTCH] Step 3: Acquired commit timestamp " << ts_ctx_.commit_timestamp.value);
+			//}
 			clock_gettime(CLOCK_REALTIME, &after_commit_ts);
 			
 			

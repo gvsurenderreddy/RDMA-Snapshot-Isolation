@@ -14,7 +14,7 @@
 namespace config {
 	#define DEBUG_ENABLED (false)
 
-	static const int	SERVER_CNT		= 1;
+	static const int	SERVER_CNT		= 2;
 	//static 		 int	CLIENTS_CNT;			// this is set in run-time
 
 
@@ -26,22 +26,21 @@ namespace config {
 //	static const uint16_t		TCP_PORT[SERVER_CNT]	= {45678, 45678, 45678};
 //	static const uint8_t		IB_PORT[SERVER_CNT]		= {1, 1, 1};
 
-	static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.0.1"};
-	static const uint16_t		TCP_PORT[SERVER_CNT]	= {45678};
-	static const uint8_t		IB_PORT[SERVER_CNT]		= {1};
+	static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.0.1", "192.168.1.1"};
+	static const uint16_t		TCP_PORT[SERVER_CNT]	= {45678, 45678};
+	static const uint8_t		IB_PORT[SERVER_CNT]		= {1, 1};
 
 
 	static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.0.1";	// only relevant for Tranditional-SI
 	static const uint16_t		TIMESTAMP_SERVER_PORT		= 56789;			// only relevant for Tranditional-SI
 	static const int			TIMESTAMP_SERVER_IB_PORT	= 1;	// only relevant for Tranditional-SI
-	static const size_t			TIMESTAMP_SERVER_QUEUE_SIZE = 100000;
+	static const size_t			TIMESTAMP_SERVER_QUEUE_SIZE = 1000000;
 	static const useconds_t		TIMESTAMP_CLEANUP_SLEEP_MICROSEC = 2;
-
 
 	static const char	ITEM_FILENAME[50]		= "./data/big_item.data";
 	static const double	SKEWNESS_IN_ITEM_ACCESS	= 0;		// 0 means no skew (random access). 1 is zipf law. Could be arbitrariliy large.
 
-	static const int	TRANSACTION_CNT 		= 500000;
+	static const int	TRANSACTION_CNT 		= 1000000;
 
 	static const int	ITEM_CNT				= 100000;			// Number of Items
 	static const int	ITEM_PER_SERVER			= ITEM_CNT / SERVER_CNT;

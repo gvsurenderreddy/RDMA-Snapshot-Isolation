@@ -41,7 +41,7 @@ int main (int argc, char *argv[]) {
 		server.start_server();
 	}
 	else if(strcmp(argv[1], "timestamp") == 0) {
-		if (argc != 4 || strcmp(argv[3], "-n") != 0) {
+		if (argc != 4 || strcmp(argv[2], "-n") != 0) {
 			std::cerr << "Usage:" << std::endl;
 			std::cerr << argv[0] << " timestamp  -n NUM_OF_CLIENTS" << std::endl;
 			std::cerr << "connects to the timestamp server specified in the config file" << std::endl;
