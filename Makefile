@@ -6,7 +6,9 @@ LIBS		= -libverbs -lpthread
 
 
 # all the agents (including subfolders) should go here
-AGENTS_MODULES		:= rdma-SI rdma-SI/client rdma-SI/server rdma-SI/timestamp-oracle 
+#AGENTS_MODULES		:= rdma-SI rdma-SI/client rdma-SI/server rdma-SI/timestamp-oracle
+AGENTS_MODULES		:= TSM-SI TSM-SI/client TSM-SI/server TSM-SI/timestamp-oracle
+
 
 # agents for benchmarking
 BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
