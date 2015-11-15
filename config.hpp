@@ -31,16 +31,16 @@ namespace config {
 	static const uint8_t		IB_PORT[SERVER_CNT]		= {1};
 
 
-	static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.0.1";	// only relevant for Tranditional-SI
+	static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
 	static const uint16_t		TIMESTAMP_SERVER_PORT		= 56789;			// only relevant for Tranditional-SI
 	static const int			TIMESTAMP_SERVER_IB_PORT	= 1;	// only relevant for Tranditional-SI
-	static const size_t			TIMESTAMP_SERVER_QUEUE_SIZE = 3000000;	// has to be a multiple of  number of clients
+	static const size_t			TIMESTAMP_SERVER_QUEUE_SIZE = 400000;	// has to be a multiple of  number of clients
 	static const useconds_t		TIMESTAMP_CLEANUP_SLEEP_MICROSEC = 2;
 
 	static const char	ITEM_FILENAME[50]		= "./data/big_item.data";
 	static const double	SKEWNESS_IN_ITEM_ACCESS	= 0;		// 0 means no skew (random access). 1 is zipf law. Could be arbitrariliy large.
 
-	static const int	TRANSACTION_CNT 		= 1000000;
+	static const int	TRANSACTION_CNT 		= 5000000;//1000000;
 
 	static const int	ITEM_CNT				= 100000;			// Number of Items
 	static const int	ITEM_PER_SERVER			= ITEM_CNT / SERVER_CNT;
@@ -57,7 +57,6 @@ namespace config {
 	static const int	TIMEOUT_IN_MS			= 500;		/* ms */
 
 	static const int	FETCH_BLOCK_SIZE		= 1;		// Number of items fetched at each RDMA READ
-
 
 	// To avoid allocating more memory than is allowed by InfiniBand, we "overwrite" new ORDER_LINEs/CC_XACTS/ORDERS
 	// on the old ones, e.g. (MAX_BUFFER_SIZE + 1)'th order_line will be overwritten on the first one

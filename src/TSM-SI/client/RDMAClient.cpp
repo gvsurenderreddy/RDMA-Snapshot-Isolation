@@ -32,6 +32,8 @@ void RDMAClient::fill_shopping_cart() {
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 0: Cart contents: (Item ID,  Quantity)");
 	for (int i=0; i < config::ORDERLINE_PER_ORDER; i++) {
 		item_id		= (i * config::ITEM_PER_SERVER) + (rand() % config::ITEM_PER_SERVER);	// generating in the range 0 to ITEM_CNT
+		//item_id	= (i * config::ITEM_PER_SERVER) + (rand() % (config::ITEM_PER_SERVER / 40) + client_id_ * (config::ITEM_PER_SERVER / 40) );	// generating in the range 0 to ITEM_CNT
+
 		// item_id		= (i * ITEM_PER_SERVER) + zipf_get_sample(SKEWNESS_IN_ITEM_ACCESS, ITEM_PER_SERVER) - 1;	// generating in the range 0 to ITEM_CNT
 		quantity	= (rand() % 5) + 1;			// the quantity of the item (not important)
 		cart_.cart_lines[i].SCL_I_ID	= item_id;
@@ -305,19 +307,19 @@ int RDMAClient::startTransactions() {
 		abort_flag = false;
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
-			if (ds_ctx_[server_num].items_region->write_timestamp.value > ts_ctx_.read_epoch.value * client_cnt_ - 1) {
+			if (ds_ctx_[server_num].items_region->write_timestamp.value > (ts_ctx_.read_epoch.value * client_cnt_ - 1) ) {
 				// from a later snapshot, so not useful
 				abort_flag = true;
 				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: Inconsistent version for item " << ds_ctx_[server_num].items_region->item.I_ID);
 			}
 		}
-//		if (abort_flag == true) {
-//			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: NOT all received versions are consistent with READ snapshot. Has to abort");
-//			abort_cnt++;
-//			submit_trx_result(message::TransactionResult::ABORTED, trx_num);
-//			continue;
-//		}
-//		else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: All received versions are consistent with READ snapshot");
+		if (abort_flag == true) {
+			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: NOT all received versions are consistent with READ snapshot. Has to abort");
+			abort_cnt++;
+			submit_trx_result(message::TransactionResult::ABORTED, trx_num);
+			continue;
+		}
+		else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: All received versions are consistent with READ snapshot");
 		
 		
 		size_t found_version_index = 0;
@@ -525,9 +527,12 @@ int RDMAClient::startTransactions() {
 	
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
 	
+	int committed_cnt = config::TRANSACTION_CNT - abort_cnt;
 	double micro_elapsed_time = ( (double)( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + (double)( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
-	double T_P_MILISEC = (double)(config::TRANSACTION_CNT / (double)(micro_elapsed_time / 1000));
 	
+	// double T_P_MILISEC = (double)(config::TRANSACTION_CNT / (double)(micro_elapsed_time / 1000));
+	double T_P_MILISEC = (double)(committed_cnt / (double)(micro_elapsed_time / 1000));
+
 	avg_read_ts /= 1000;
 	avg_fetch_info /= 1000;
 	avg_commit_ts /= 1000;
@@ -537,7 +542,6 @@ int RDMAClient::startTransactions() {
 	avg_result_submission /= 1000;
 
 	
-	int committed_cnt = config::TRANSACTION_CNT - abort_cnt;
 	double success_rate = (double)committed_cnt / config:: TRANSACTION_CNT;
 	
 	std::cout << "[Stat] Avg read ts (u sec):	" << (double)avg_read_ts / committed_cnt << std::endl;
@@ -549,11 +553,9 @@ int RDMAClient::startTransactions() {
 	std::cout << "[Stat] Avg res subm (u sec):	" << (double)avg_result_submission / committed_cnt << std::endl;
 	std::cout << "[Stat] Avg cumulative(u sec):	" << (double)micro_elapsed_time / config::TRANSACTION_CNT << std::endl;
 	std::cout << "[Stat] Avg RTS attemps:	" << (double)sum_attemps / config::TRANSACTION_CNT << std::endl;
+	std::cout << "[Stat] " << committed_cnt << " committed, " << abort_cnt << " aborted. success rate:	" << success_rate << std::endl;
 
-
-
-	std::cout << "[Stat] " << committed_cnt << " committed, " << abort_cnt << " aborted (success rate = " << success_rate << ")." << std::endl;
-	std::cout << "[Stat] Transaction per millisec:	" <<  T_P_MILISEC << std::endl;
+	std::cout << "[Stat] Committed Trx per millisec:	" <<  T_P_MILISEC << std::endl;
 	return 0;
 }
 
