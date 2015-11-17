@@ -48,7 +48,7 @@ int TimestampServer::register_memory(struct WorkerContext &ctx) {
 int TimestampServer::cleanUpFinishedTransactions() {
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Cleanup thread started.");
 	bool finish_current_epoch;
-	while (read_epoch_.value < config::TRANSACTION_CNT) {
+	while (read_epoch_.getCID() < config::TRANSACTION_CNT) {
 		//usleep(config::TIMESTAMP_CLEANUP_SLEEP_MICROSEC);
 
 		// check if the all the clients are done with the current epoch. If so, advance RTS. If not, wait.
@@ -56,17 +56,17 @@ int TimestampServer::cleanUpFinishedTransactions() {
 		while (true) {
 			finish_current_epoch = true;
 			for (size_t c = 0; c < clients_cnt_; c++){
-				ind = (read_epoch_.value  * clients_cnt_ + c) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
+				ind = (read_epoch_.getCID() * clients_cnt_ + c) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
 				if (finished_trxs_hash_[ind] != 1)
 					finish_current_epoch = false;
 			}
 			if (finish_current_epoch) {
 				for (size_t c = 0; c < clients_cnt_; c++){
-					ind = (read_epoch_.value * clients_cnt_ + c ) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
+					ind = (read_epoch_.getCID() * clients_cnt_ + c ) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
 					finished_trxs_hash_[ind] = 0;
 				}
-				read_epoch_.value += 1;
-				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Increment epoch to " << read_epoch_.value);
+				read_epoch_.setCID(read_epoch_.getCID() + 1);
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Increment epoch to " << read_epoch_.getCID());
 				break;
 			}
 		}
@@ -184,8 +184,9 @@ int TimestampServer::start_server () {
 	}
 	std::cout << "[Info] Established connection to all " << clients_cnt_ << " client(s)." << std::endl;
 	
-	//wait for the cleanup thread to finish
-	cleanupThread.join();
+	// wait for the cleanup thread to finish
+	// update: we don't want to do that, since the the thread's loop termination might not be met.
+	// cleanupThread.join();
 
 
 	// Destroy clients' resources
@@ -204,14 +205,16 @@ int TimestampServer::start_server () {
 TimestampServer::TimestampServer(uint32_t clients_cnt)
 : clients_cnt_ (clients_cnt),
   server_sockfd_ (-1) {
-	read_epoch_.value = 0ULL;
+	// initialize the read epoch to 0
+	read_epoch_.setCID(0ULL);
+
+	// initialize the finished_trxs_hash
 	finished_trxs_hash_ = new uint8_t[config::TIMESTAMP_SERVER_QUEUE_SIZE];
 	for (size_t i = 0; i < config::TIMESTAMP_SERVER_QUEUE_SIZE; i++)
 		finished_trxs_hash_[i] = 0;
-
-	// set the first C bits to 1, since clients all start from the next epoch
+	// set the first C bits to 1, since clients all start from the next epoch (the first epoch is for setting the initial values)
 	for (size_t i = 0; i < clients_cnt_; i++)
 		finished_trxs_hash_[i] = 1;
 
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Read epoch set to " << read_epoch_.value);
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Read epoch set to " << read_epoch_.getCID());
 }

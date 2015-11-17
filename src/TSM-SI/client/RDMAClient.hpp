@@ -43,15 +43,15 @@ private:
 	
 	int 	acquire_commit_ts();
 	
-	int		acquire_item_lock(const size_t server_num, uint64_t *expected_lock, uint64_t *new_lock);
+	int		acquire_item_lock(const size_t server_num, Timestamp &expectedTS, Timestamp &newTS);
 	
-	int		revert_lock(const size_t server_num, uint64_t *new_lock);
+	int		revert_lock(const size_t server_num, Timestamp &new_lock);
 	
 	int		update_item_stock(const size_t server_num);
 	
 	int		release_lock(const size_t server_num);
 	
-	int 	submit_trx_result(Result result, int transactionNum);
+	int 	submit_trx_result();
 
 	int		startTransactions();
 

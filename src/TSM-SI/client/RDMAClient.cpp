@@ -93,12 +93,12 @@ int RDMAClient::acquire_commit_ts() {
 	// Byte swapping, since values read by atomic operations are in Big Endian order
 	ts_ctx_.commit_timestamp.value = bigEndianToHost(ts_ctx_.commit_timestamp.value);
 	*/
-	ts_ctx_.commit_timestamp.value = (next_epoch_.value * client_cnt_) + client_id_;
-	next_epoch_.value++;
+	ts_ctx_.commit_timestamp.setCID( (uint32_t)(next_epoch_.getCID() * client_cnt_) + (uint32_t)client_id_);
+	next_epoch_.setCID(next_epoch_.getCID() + 1);
 	return 0;
 }
 
-int RDMAClient::acquire_item_lock(const size_t server_num, uint64_t *expected_lock, uint64_t *new_lock) {
+int RDMAClient::acquire_item_lock(const size_t server_num, Timestamp &expected_lock, Timestamp &new_lock) {
 	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
 	
 	// and the actual content of the lock (before being swapped) will be stored in the following variable
@@ -113,16 +113,17 @@ int RDMAClient::acquire_item_lock(const size_t server_num, uint64_t *expected_lo
 	&(ds_ctx_[server_num].peer_mr_lock_items),
 	(uint64_t)lock_lookup_addr,
 	(uint32_t)sizeof(uint64_t),
-	(uint64_t)expected_lock,
-	(uint64_t)new_lock));
+	expected_lock.toUUL(),
+	new_lock.toUUL()));
 	
 	return 0;
 }
 
-int RDMAClient::revert_lock(const size_t server_num, uint64_t *new_lock) {
+int RDMAClient::revert_lock(const size_t server_num, Timestamp &new_lock) {
 	int item_id		= ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
 	
-	memcpy(ds_ctx_[server_num].lock_items_region, new_lock, sizeof(uint64_t));
+	uint64_t ull = new_lock.toUUL();
+	memcpy(ds_ctx_[server_num].lock_items_region, &ull , sizeof(uint64_t));
 		
 	size_t lock_offset			= item_id * sizeof(uint64_t);
 	uint64_t *lock_lookup_addr	= (uint64_t *)(lock_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_lock_items.addr));
@@ -146,7 +147,8 @@ int RDMAClient::update_item_stock(const size_t server_num) {
 	
 	int fetch_block_num = 0;
 	
-	ds_ctx_[server_num].items_region[0].write_timestamp.value = ts_ctx_.commit_timestamp.value;
+	//ds_ctx_[server_num].items_region[0].write_timestamp.setCID(ts_ctx_.commit_timestamp.getCID());
+	ds_ctx_[server_num].items_region[0].write_timestamp.copy(ts_ctx_.commit_timestamp);
 	ds_ctx_[server_num].items_region[0].item.I_STOCK 	-= quantity;
 	
 	if (ds_ctx_[server_num].items_region[0].item.I_STOCK < 10)
@@ -168,20 +170,24 @@ int RDMAClient::update_item_stock(const size_t server_num) {
 	false));
 
 	DEBUG_COUT (CLASS_NAME, __func__, "[WRIT] ... Successfully updated the stock for item " << item_id
-		<< " (with commit timestamp " << ts_ctx_.commit_timestamp.value << ")");
+		<< " (with commit timestamp " << ts_ctx_.commit_timestamp.getCID() << ")");
 	
 	return 0;
 }
 
 int RDMAClient::release_lock(const size_t server_num) {
 	int item_id		= ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
-	uint32_t		lock_status, version;
+	uint16_t	lock_status, pointer;
+	uint32_t	version;
 	
-	lock_status		= (uint32_t) 0;
-	version			= (uint32_t) ts_ctx_.commit_timestamp.value;
+	lock_status	= (uint16_t) 0;
+	pointer 	= (uint16_t) 0;
+	version		= (uint32_t) ts_ctx_.commit_timestamp.getCID();
 	//version			= (uint32_t) 0;
-	
-	ds_ctx_[server_num].lock_items_region[0] = Lock::set_lock(lock_status, version);
+	Timestamp ts(lock_status, pointer, version);
+	//ds_ctx_[server_num].lock_items_region[0] = Lock::set_lock(lock_status, version);
+	ds_ctx_[server_num].lock_items_region[0] = ts.toUUL();
+
 
 	size_t lock_offset					= item_id * sizeof(uint64_t);
 	uint64_t *lock_lookup_addr	= (uint64_t *)(lock_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_lock_items.addr));
@@ -198,7 +204,8 @@ int RDMAClient::release_lock(const size_t server_num) {
 	return 0;
 }
 
-int RDMAClient::submit_trx_result(Result result, int transactionNum) {
+//int RDMAClient::submit_trx_result(Result result, int transactionNum) {
+int RDMAClient::submit_trx_result() {
 	bool signaled = false;
 	// if (transactionNum % 5000 == 0)
 	//	signaled = true;
@@ -206,7 +213,7 @@ int RDMAClient::submit_trx_result(Result result, int transactionNum) {
 
 	ts_ctx_.trx_status = 1;
 
-	size_t offset			= (ts_ctx_.commit_timestamp.value * sizeof(uint8_t)) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
+	size_t offset			= (ts_ctx_.commit_timestamp.getCID() * sizeof(uint8_t)) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
 	uint64_t *write_addr	= (uint64_t *)(offset + (uint64_t)ts_ctx_.peer_mr_finished_trxs_hash.addr);
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
@@ -221,7 +228,7 @@ int RDMAClient::submit_trx_result(Result result, int transactionNum) {
 	if (signaled)
 		TEST_NZ (RDMACommon::poll_completion(ts_ctx_.send_cq));
 
-	DEBUG_COUT (CLASS_NAME, __func__, "[Sent] Transaction result for CTS " << ts_ctx_.commit_timestamp.value << " sent to the TS server");
+	DEBUG_COUT (CLASS_NAME, __func__, "[Sent] Transaction result for CTS " << ts_ctx_.commit_timestamp.getCID() << " sent to the TS server");
 	return 0;
 }
 
@@ -234,8 +241,12 @@ int RDMAClient::startTransactions() {
 	struct timespec before_read_ts, after_read_ts, after_fetch_info, after_commit_ts, after_lock, after_decrement, after_unlock, after_result_submission;
 	double avg_read_ts = 0, avg_fetch_info = 0, avg_commit_ts = 0, avg_lock = 0, avg_decrement = 0, avg_unlock = 0, avg_result_submission = 0;
 	
-	uint32_t	lock_status, version;
-	uint64_t	expected_lock[config::SERVER_CNT], new_lock[config::SERVER_CNT];
+	uint16_t	lock_status;
+	uint16_t	pointer;
+	uint32_t	version;
+
+	//uint64_t	expected_lock[config::SERVER_CNT], new_lock[config::SERVER_CNT];
+	Timestamp	expected_lock[config::SERVER_CNT], new_lock[config::SERVER_CNT];
 	
 	int sum_attemps = 0;
 	clock_gettime(CLOCK_REALTIME, &firstRequestTime);	// Fire the  timer	
@@ -256,8 +267,8 @@ int RDMAClient::startTransactions() {
 
 		while (true) {
 			TEST_NZ (acquire_read_ts());
-			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Received read timestamp from oracle with TID " << ts_ctx_.read_epoch.value);
-			if (ts_ctx_.read_epoch.value + epoch_cnt_ <= next_epoch_.value ) {
+			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Received read timestamp from oracle with TID " << ts_ctx_.read_epoch.getCID());
+			if (ts_ctx_.read_epoch.getCID() + epoch_cnt_ <= next_epoch_.getCID()) {
 				attemps++;
 				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Has to wait for the Sweeper");
 				//usleep(10);
@@ -284,20 +295,11 @@ int RDMAClient::startTransactions() {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 			TEST_NZ (RDMACommon::poll_completion(ds_ctx_[server_num].send_cq));
 			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 2-" << i << ": Received information for item " << ds_ctx_[server_num].items_region->item.I_ID
-					<< "(ts: " << ds_ctx_[server_num].items_region->write_timestamp.value << ") from " << ds_ctx_[server_num].server_address);
+					<< "(ts: " << ds_ctx_[server_num].items_region->write_timestamp.getCID() << ") from " << ds_ctx_[server_num].server_address);
 		}
 
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 2: Received information for all items");
 		clock_gettime(CLOCK_REALTIME, &after_fetch_info);
-
-
-		// ************************************************
-		//	Acquire Commit timestamp
-		// ************************************************
-		acquire_commit_ts();
-		DEBUG_COUT (CLASS_NAME, __func__, "[LOCL] Step 3: Acquired commit timestamp " << ts_ctx_.commit_timestamp.value);
-		clock_gettime(CLOCK_REALTIME, &after_commit_ts);
-
 
 
 		// ************************************************
@@ -307,21 +309,32 @@ int RDMAClient::startTransactions() {
 		abort_flag = false;
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
-			if (ds_ctx_[server_num].items_region->write_timestamp.value > (ts_ctx_.read_epoch.value * client_cnt_ - 1) ) {
+			if (ds_ctx_[server_num].items_region->write_timestamp.getCID() > (ts_ctx_.read_epoch.getCID() * client_cnt_ - 1) ) {
 				// from a later snapshot, so not useful
 				abort_flag = true;
-				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: Inconsistent version for item " << ds_ctx_[server_num].items_region->item.I_ID);
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: Inconsistent version for item " << ds_ctx_[server_num].items_region->item.I_ID
+						<< " (Expected: " << ts_ctx_.read_epoch.getCID() * client_cnt_ - 1 << " or lower."
+						<< " Received: " << ds_ctx_[server_num].items_region->write_timestamp.getCID() << ")" );
 			}
 		}
 		if (abort_flag == true) {
-			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: NOT all received versions are consistent with READ snapshot. Has to abort");
+			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: NOT all received versions are consistent with READ snapshot --> ** ABORT **");
 			abort_cnt++;
-			submit_trx_result(message::TransactionResult::ABORTED, trx_num);
+			//submit_trx_result(message::TransactionResult::ABORTED, trx_num);
+			//submit_trx_result();
 			continue;
 		}
 		else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: All received versions are consistent with READ snapshot");
 		
 		
+		// ************************************************
+		//	Acquire Commit timestamp
+		// ************************************************
+		acquire_commit_ts();
+		DEBUG_COUT (CLASS_NAME, __func__, "[LOCL] Step 3: Acquired commit timestamp " << ts_ctx_.commit_timestamp.getCID());
+		clock_gettime(CLOCK_REALTIME, &after_commit_ts);
+
+
 		size_t found_version_index = 0;
 
 		// ************************************************
@@ -331,16 +344,21 @@ int RDMAClient::startTransactions() {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 
 			// lock expected before locking
-			lock_status					= (uint32_t) 0;
-			version						= (uint32_t) ds_ctx_[server_num].items_region[found_version_index].write_timestamp.value;
-			expected_lock[server_num]	= Lock::set_lock(lock_status, version);
+			lock_status					= (uint16_t) 0;
+			pointer						= (uint16_t) 0;
+			version						= (uint32_t) ds_ctx_[server_num].items_region[found_version_index].write_timestamp.getCID();
+			expected_lock[server_num].setAll(lock_status, pointer, version);
+			//expected_lock[server_num]	= Lock::set_lock(lock_status, version);
+
 
 			// new lock
-			lock_status					= (uint32_t) 1;
-			version						= (uint32_t) ts_ctx_.commit_timestamp.value;
-			new_lock[server_num]		= Lock::set_lock(lock_status, version);
+			lock_status					= (uint16_t) 1;
+			pointer						= (uint16_t) 0;
+			version						= (uint32_t) ts_ctx_.commit_timestamp.getCID();
+			new_lock[server_num].setAll(lock_status, pointer, version);
+			//new_lock[server_num]		= Lock::set_lock(lock_status, version);
 
-			acquire_item_lock(server_num, &expected_lock[server_num], &new_lock[server_num]);
+			acquire_item_lock(server_num, expected_lock[server_num], new_lock[server_num]);
 		}
 
 		abort_flag = false;
@@ -352,16 +370,17 @@ int RDMAClient::startTransactions() {
 			ds_ctx_[server_num].lock_items_region[0] = bigEndianToHost(ds_ctx_[server_num].lock_items_region[0]);
 
 			// Check if CASing the lock was successful
-			if (Lock::are_equals(ds_ctx_[server_num].lock_items_region[0], expected_lock[server_num])) {
+
+			Timestamp received_ts (ds_ctx_[server_num].lock_items_region[0]);
+
+			if (expected_lock[server_num].isEqual(received_ts)) {
 				DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Step 5-" << i << ": Lock on item " << cart_.cart_lines[i].SCL_I_ID << " successfully acquired.");
 				successful_locking_servers[server_num] = true;
 			}
 			else {
 				DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Step 5-" << i << ": Failed to lock item " << cart_.cart_lines[i].SCL_I_ID);
-				DEBUG_COUT (CLASS_NAME, __func__, "........ Expected lock: " << Lock::get_lock_status(expected_lock[server_num])
-					<< " | " << Lock::get_version(expected_lock[server_num]));
-				DEBUG_COUT (CLASS_NAME, __func__, "........ Existing lock: " << Lock::get_lock_status(ds_ctx_[server_num].lock_items_region[0])
-					<< " | " << Lock::get_version(ds_ctx_[server_num].lock_items_region[0]));
+				DEBUG_COUT (CLASS_NAME, __func__, "........ Expected lock: " << expected_lock[server_num]);
+				DEBUG_COUT (CLASS_NAME, __func__, "........ Existing lock: " << received_ts);
 		
 				successful_locking_servers[server_num] = false;
 				abort_flag = true;
@@ -373,7 +392,7 @@ int RDMAClient::startTransactions() {
 			for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 				server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 				if (successful_locking_servers[server_num] == true)
-					TEST_NZ(revert_lock(server_num, &expected_lock[server_num]));
+					TEST_NZ(revert_lock(server_num, expected_lock[server_num]));
 			}
 			for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 				server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
@@ -382,9 +401,10 @@ int RDMAClient::startTransactions() {
 					DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Step 5: Lock reverted on item " << ds_ctx_[server_num].items_region->item.I_ID);
 				}
 			}
-			DEBUG_CERR (CLASS_NAME, __func__, "[Info] Step 5: Lock on all items could not be acquired :(");
+			DEBUG_CERR (CLASS_NAME, __func__, "[Info] Step 5: Lock on all items could not be acquired --> ** ABORT **");
 			abort_cnt++;
-			submit_trx_result(message::TransactionResult::ABORTED, trx_num);
+			//submit_trx_result(message::TransactionResult::ABORTED, trx_num);
+			submit_trx_result();
 			continue;
 		}
 		else {
@@ -414,7 +434,7 @@ int RDMAClient::startTransactions() {
 
 				TEST_NZ (RDMACommon::poll_completion(ds_ctx_[server_num].send_cq));
 				DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Lock on item " << cart_.cart_lines[i].SCL_I_ID
-					<< " released with commit timestamp " << ts_ctx_.commit_timestamp.value);
+					<< " released with commit timestamp " << ts_ctx_.commit_timestamp.getCID());
 			}
 			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 7: All locks successfully released");
 			clock_gettime(CLOCK_REALTIME, &after_unlock);
@@ -423,7 +443,8 @@ int RDMAClient::startTransactions() {
 			// ************************************************
 			//	Submit the result to the timestamp server
 			// ************************************************
-			submit_trx_result(message::TransactionResult::COMMITTED, trx_num);
+			//submit_trx_result(message::TransactionResult::COMMITTED, trx_num);
+			submit_trx_result();
 			clock_gettime(CLOCK_REALTIME, &after_result_submission);
 
 
@@ -635,7 +656,7 @@ RDMAClient::RDMAClient() {
 	srand ((unsigned int)generate_random_seed());		// initialize random seed
 	zipf_initialize(config::SKEWNESS_IN_ITEM_ACCESS, config::ITEM_PER_SERVER);
 
-	next_epoch_.value = 1;
+	next_epoch_.setCID(1);
 
 	ts_ctx_.server_address = "";
 	ts_ctx_.server_address += config::TIMESTAMP_SERVER_ADDR;
