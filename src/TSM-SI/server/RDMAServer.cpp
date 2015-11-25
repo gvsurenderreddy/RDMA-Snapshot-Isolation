@@ -28,9 +28,27 @@ RDMAServer::~RDMAServer () {
 	delete[](global_orders_region);
 	delete[](global_order_line_region);
 	delete[](global_cc_xacts_region);
-	delete[](global_lock_items_region);
 
 	close(server_sockfd_);
+}
+
+int RDMAServer::initialize_data_structures() {
+	global_items_region			= new ItemVersion[config::ITEM_CNT];
+	global_orders_region		= new OrdersVersion[config::MAX_ORDERS_CNT];	// TODO
+	global_order_line_region	= new OrderLineVersion[config::ORDERLINE_PER_ORDER * config::MAX_ORDERS_CNT];			// TODO
+	global_cc_xacts_region		= new CCXactsVersion[config::MAX_CCXACTS_CNT];
+
+	TEST_NZ(load_tables_from_files(global_items_region));
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Tables loaded successfully");
+
+	uint16_t lock_status = 0, pointer = 0;
+	uint32_t cID = 0;
+
+	for (int i = 0; i < config::ITEM_CNT; i++)
+		global_items_region[i].write_timestamp.setAll(lock_status, pointer, cID);
+
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] All locks set to free");
+	return 0;
 }
 
 int RDMAServer::initialize_context(RDMAServerContext &ctx) {
@@ -39,7 +57,6 @@ int RDMAServer::initialize_context(RDMAServerContext &ctx) {
 	ctx.orders_region		= global_orders_region;
 	ctx.order_line_region	= global_order_line_region;
 	ctx.cc_xacts_region		= global_cc_xacts_region;
-	ctx.lock_items_region	= global_lock_items_region;
 	return 0;
 }
 
@@ -93,7 +110,6 @@ int RDMAServer::start_server () {
 		memcpy(&(ctx[i].send_msg.mr_orders),	ctx[i].mr_orders,		sizeof(struct ibv_mr));
 		memcpy(&(ctx[i].send_msg.mr_order_line),ctx[i].mr_order_line,	sizeof(struct ibv_mr));
 		memcpy(&(ctx[i].send_msg.mr_cc_xacts),	ctx[i].mr_cc_xacts,		sizeof(struct ibv_mr));
-		memcpy(&(ctx[i].send_msg.mr_lock_items),ctx[i].mr_lock_items,	sizeof(struct ibv_mr));
 	}
 
 	for (size_t i = 0; i < clients_cnt_; i++){
@@ -127,27 +143,5 @@ RDMAServer::RDMAServer(uint32_t server_num, uint32_t clients_cnt)
 	tcp_port_	= config::TCP_PORT[server_num];
 	ib_port_	= config::IB_PORT[server_num];
 
-	global_items_region			= new ItemVersion[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
-
-	//OrdersVersion*		RDMAServer::orders_region		= new OrdersVersion[MAX_ORDERS_CNT * MAX_ORDERS_VERSIONS];
-	global_orders_region		= new OrdersVersion[config::MAX_BUFFER_SIZE];	// TODO
-
-	//OrderLineVersion*	RDMAServer::order_line_region	= new OrderLineVersion[ORDERLINE_PER_ORDER * MAX_ORDERS_CNT * MAX_ORDERLINE_VERSIONS];
-	global_order_line_region	= new OrderLineVersion[config::MAX_BUFFER_SIZE];			// TODO
-
-	//CCXactsVersion*		RDMAServer::cc_xacts_region		= new CCXactsVersion[MAX_CCXACTS_CNT * MAX_CCXACTS_VERSIONS];
-	global_cc_xacts_region		= new CCXactsVersion[config::MAX_BUFFER_SIZE];	// TODO
-
-	global_lock_items_region	= new uint64_t[config::ITEM_CNT];
-
-	TEST_NZ(load_tables_from_files(global_items_region));
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Tables loaded successfully");
-
-	uint32_t stat, version;
-	for (int i = 0; i < config::ITEM_CNT; i++) {
-		stat = (uint32_t)0;	// 0 for free, 1 for locked
-		version = (uint32_t)0;	// the first version of each item is 0
-		global_lock_items_region[i] = Lock::set_lock(stat, version);
-	}
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] All locks set free");
+	initialize_data_structures();
 }

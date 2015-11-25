@@ -60,6 +60,10 @@ const uint64_t Timestamp::toUUL() const {
 	return uul;
 }
 
+void Timestamp::increment() {
+	cID_++;
+}
+
 const bool Timestamp::isEqual(const Timestamp& ts) const {
 	if (
 			this->lockStatus_ == ts.lockStatus_ &&

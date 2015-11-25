@@ -40,33 +40,23 @@ int TimestampServer::register_memory(struct WorkerContext &ctx) {
 
 	TEST_Z(ctx.mr_send				= ibv_reg_mr(ctx.pd, &ctx.send_msg, 		sizeof(struct message::TimestampServerMemoryKeys), IBV_ACCESS_LOCAL_WRITE));
 	TEST_Z(ctx.mr_finished_trxs_hash= ibv_reg_mr(ctx.pd, finished_trxs_hash_,	sizeof(uint8_t) * config::TIMESTAMP_SERVER_QUEUE_SIZE, atomicFlag));
-	TEST_Z(ctx.mr_read_epoch		= ibv_reg_mr(ctx.pd, &read_epoch_,			sizeof(Timestamp), readFlag));
+	TEST_Z(ctx.mr_read_trx			= ibv_reg_mr(ctx.pd, &read_trx_,			sizeof(Timestamp), readFlag));
 
 	return 0;
 }
 
 int TimestampServer::cleanUpFinishedTransactions() {
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Cleanup thread started.");
-	bool finish_current_epoch;
-	while (read_epoch_.getCID() < config::TRANSACTION_CNT) {
+	while (read_trx_.getCID() < (config::TRANSACTION_CNT + 1) * clients_cnt_) {
 		//usleep(config::TIMESTAMP_CLEANUP_SLEEP_MICROSEC);
 
-		// check if the all the clients are done with the current epoch. If so, advance RTS. If not, wait.
 		size_t ind;
 		while (true) {
-			finish_current_epoch = true;
-			for (size_t c = 0; c < clients_cnt_; c++){
-				ind = (read_epoch_.getCID() * clients_cnt_ + c) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
-				if (finished_trxs_hash_[ind] != 1)
-					finish_current_epoch = false;
-			}
-			if (finish_current_epoch) {
-				for (size_t c = 0; c < clients_cnt_; c++){
-					ind = (read_epoch_.getCID() * clients_cnt_ + c ) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
-					finished_trxs_hash_[ind] = 0;
-				}
-				read_epoch_.setCID(read_epoch_.getCID() + 1);
-				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Increment epoch to " << read_epoch_.getCID());
+			ind = read_trx_.getCID() % config::TIMESTAMP_SERVER_QUEUE_SIZE;
+			if (finished_trxs_hash_[ind] == 1) {
+				finished_trxs_hash_[ind] = 0;
+				read_trx_.increment();
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Increment read trx to " << read_trx_.getCID());
 				break;
 			}
 		}
@@ -84,7 +74,7 @@ void TimestampServer::handle_client(struct WorkerContext &ctx, size_t client_id)
 	
 	// send memory locations using SEND
 	memcpy(&(ctx.send_msg.mr_finished_trxs_hash),	ctx.mr_finished_trxs_hash,	sizeof(struct ibv_mr));
-	memcpy(&(ctx.send_msg.mr_read_epoch),		ctx.mr_read_epoch,	sizeof(struct ibv_mr));
+	memcpy(&(ctx.send_msg.mr_read_trx),				ctx.mr_read_trx,			sizeof(struct ibv_mr));
 	ctx.send_msg.client_id = client_id;
 	ctx.send_msg.client_cnt = clients_cnt_;
 
@@ -110,8 +100,8 @@ int TimestampServer::destroy_client_context (struct WorkerContext &ctx) {
 	if (ctx.mr_finished_trxs_hash)
 		TEST_NZ (ibv_dereg_mr (ctx.mr_finished_trxs_hash));
 
-	if (ctx.mr_read_epoch)
-		TEST_NZ (ibv_dereg_mr (ctx.mr_read_epoch));
+	if (ctx.mr_read_trx)
+		TEST_NZ (ibv_dereg_mr (ctx.mr_read_trx));
 
 	if (ctx.send_cq)
 		TEST_NZ (ibv_destroy_cq (ctx.send_cq));
@@ -205,16 +195,18 @@ int TimestampServer::start_server () {
 TimestampServer::TimestampServer(uint32_t clients_cnt)
 : clients_cnt_ (clients_cnt),
   server_sockfd_ (-1) {
-	// initialize the read epoch to 0
-	read_epoch_.setCID(0ULL);
+	// initialize the read trx to 0
+	read_trx_.setCID(0ULL);
 
 	// initialize the finished_trxs_hash
 	finished_trxs_hash_ = new uint8_t[config::TIMESTAMP_SERVER_QUEUE_SIZE];
 	for (size_t i = 0; i < config::TIMESTAMP_SERVER_QUEUE_SIZE; i++)
 		finished_trxs_hash_[i] = 0;
-	// set the first C bits to 1, since clients all start from the next epoch (the first epoch is for setting the initial values)
+
+	// the initial version of all items are set to 0. Therefore, clients cannot start their CID from zero (and thus they won't set these bits to one)
+	// That's why TS server manually sets these bits to one so that the sweeper can make progress.
 	for (size_t i = 0; i < clients_cnt_; i++)
 		finished_trxs_hash_[i] = 1;
 
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Read epoch set to " << read_epoch_.getCID());
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Read trx set to " << read_trx_.getCID());
 }

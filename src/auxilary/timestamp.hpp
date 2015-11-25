@@ -29,6 +29,7 @@ public:
 	void setCID(const uint32_t cID);
 	void setAll(const uint16_t lockStatus, const uint16_t pointer, const uint32_t cID);
 	const uint64_t toUUL() const;
+	void increment();
 	const bool isEqual(const Timestamp& ts) const;
 	void copy(const Timestamp& original);
 

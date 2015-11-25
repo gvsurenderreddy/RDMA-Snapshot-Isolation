@@ -34,7 +34,7 @@ private:
 	int				server_sockfd_;	// Server's socket file descriptor
 
 	uint8_t 	*finished_trxs_hash_;
-	Timestamp	read_epoch_;
+	Timestamp	read_trx_;
 
 	struct WorkerContext  {
 		struct	ibv_device_attr device_attr;
@@ -57,7 +57,7 @@ private:
 		// memory handlers
 		struct ibv_mr *mr_send;		// for the SEND message
 		struct ibv_mr *mr_finished_trxs_hash;
-		struct ibv_mr *mr_read_epoch;
+		struct ibv_mr *mr_read_trx;
 
 		// memory buffers
 		struct message::TimestampServerMemoryKeys send_msg;

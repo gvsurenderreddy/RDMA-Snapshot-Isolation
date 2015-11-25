@@ -17,7 +17,7 @@ int TimestampServerContext::register_memory() {
 
 	TEST_Z(mr_recv			= ibv_reg_mr(pd, &recv_msg, sizeof(struct message::TimestampServerMemoryKeys), mr_flags));
 	TEST_Z(mr_trx_status	= ibv_reg_mr(pd, &trx_status, sizeof(uint8_t), mr_flags));
-	TEST_Z(mr_read_epoch	= ibv_reg_mr(pd, &read_epoch, sizeof(Timestamp), mr_flags));
+	TEST_Z(mr_read_trx		= ibv_reg_mr(pd, &read_trx, sizeof(Timestamp), mr_flags));
 	return 0;
 }
 
@@ -25,7 +25,7 @@ int TimestampServerContext::destroy_context () {
 	if (qp)				TEST_NZ (ibv_destroy_qp (qp));
 	if (mr_recv)		TEST_NZ (ibv_dereg_mr (mr_recv));
 	if (mr_trx_status)	TEST_NZ (ibv_dereg_mr (mr_trx_status));
-	if (mr_read_epoch)	TEST_NZ (ibv_dereg_mr (mr_read_epoch));
+	if (mr_read_trx)	TEST_NZ (ibv_dereg_mr (mr_read_trx));
 
 	this->BaseContext::destroy_context();
 	return 0;

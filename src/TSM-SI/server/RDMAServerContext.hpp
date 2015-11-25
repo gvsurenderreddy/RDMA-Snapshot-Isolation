@@ -17,15 +17,12 @@
 #include "../../tpcw-tables/cc_xacts_version.hpp"
 #include "../../tpcw-tables/shopping_cart_line.hpp"
 #include "../../auxilary/timestamp.hpp"
-#include "../../auxilary/lock.hpp"
 #include "../shared/newRDMAMessage.hpp"
 
 class RDMAServerContext : public BaseContext {
 public:
 	std::string	server_address;
-	
 	ShoppingCartLine	*associated_cart_line;	
-	
 	
 	// memory handlers
 	struct ibv_mr *send_mr;
@@ -33,7 +30,6 @@ public:
 	struct ibv_mr *mr_orders;		
 	struct ibv_mr *mr_order_line;
 	struct ibv_mr *mr_cc_xacts;
-	struct ibv_mr *mr_lock_items;
 
 	// memory buffers
 	struct message::DataServerMemoryKeys send_msg;
@@ -42,9 +38,6 @@ public:
 	OrderLineVersion	*order_line_region;
 	CCXactsVersion		*cc_xacts_region;
 
-	uint64_t			*lock_items_region;
-	
-	
 	int register_memory();
 	int destroy_context ();
 };

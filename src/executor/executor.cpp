@@ -5,9 +5,9 @@
  *      Author: Erfan Zamanian
  */
 
-#include "../rdma-SI/server/RDMAServer.hpp"
-#include "../rdma-SI/timestamp-oracle/TimestampServer.hpp"
-#include "../rdma-SI/client/RDMAClient.hpp"
+#include "../TSM-SI/server/RDMAServer.hpp"
+#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
+#include "../TSM-SI/client/RDMAClient.hpp"
 #include <iostream>
 #include <cstring>
 #include <unistd.h>		// getopt()

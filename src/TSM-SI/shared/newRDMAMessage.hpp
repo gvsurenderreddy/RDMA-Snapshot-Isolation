@@ -19,13 +19,12 @@ namespace message {
 		struct ibv_mr mr_order_line;
 		struct ibv_mr mr_cc_xacts;
 		struct ibv_mr mr_timestamp;
-		struct ibv_mr mr_lock_items;
 	};
 
 	struct TimestampServerMemoryKeys {
 		// We’ll use this to pass RDMA memory region (MR) keys between nodes
 		struct ibv_mr mr_finished_trxs_hash;
-		struct ibv_mr mr_read_epoch;
+		struct ibv_mr mr_read_trx;
 		size_t client_id;
 		size_t client_cnt;
 	};

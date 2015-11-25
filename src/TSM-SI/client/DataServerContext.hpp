@@ -17,13 +17,11 @@
 #include "../../tpcw-tables/cc_xacts_version.hpp"
 #include "../../tpcw-tables/shopping_cart_line.hpp"
 #include "../../auxilary/timestamp.hpp"
-#include "../../auxilary/lock.hpp"
 #include "../shared/newRDMAMessage.hpp"
 
 class DataServerContext : public BaseContext {
 public:
 	std::string	server_address;
-
 	ShoppingCartLine	*associated_cart_line;	
 	
 	// local handler
@@ -34,7 +32,7 @@ public:
 	struct ibv_mr *mr_cc_xacts;
 	struct ibv_mr *mr_read_ts;
 	struct ibv_mr *mr_commit_ts;
-	struct ibv_mr *mr_lock_items;
+	struct ibv_mr *mr_lock_item;
 	
 	// remote memory handlers
 	struct ibv_mr peer_mr_items;
@@ -42,7 +40,6 @@ public:
 	struct ibv_mr peer_mr_order_line;
 	struct ibv_mr peer_mr_cc_xacts;
 	struct ibv_mr peer_mr_timestamp;
-	struct ibv_mr peer_mr_lock_items;
 	
 	// memory buffers
 	struct message::DataServerMemoryKeys recv_msg;
@@ -52,7 +49,7 @@ public:
 	CCXactsVersion		cc_xacts_region;
 	Timestamp			read_ts_region;		
 	Timestamp			commit_ts_region;
-	uint64_t			*lock_items_region;
+	uint64_t			lock_item_region;
 	
 	
 	int register_memory();

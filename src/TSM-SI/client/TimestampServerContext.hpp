@@ -22,18 +22,18 @@ public:
 
 	// local memory handlers
 	struct ibv_mr *mr_recv;					// handler for the RECEIVE message
-	struct ibv_mr *mr_read_epoch;
+	struct ibv_mr *mr_read_trx;
 	struct ibv_mr *mr_trx_status;
 
 	// local memory buffers
 	struct message::TimestampServerMemoryKeys recv_msg;	// buffer for the RECEIVE message
-	Timestamp	read_epoch;
+	Timestamp	read_trx;
 	Timestamp	commit_timestamp;
 	uint8_t		trx_status;
 
 	// remote memory handlers
 	struct ibv_mr peer_mr_finished_trxs_hash;
-	struct ibv_mr peer_mr_read_epoch;
+	struct ibv_mr peer_mr_read_trx;
 
 	int register_memory();
 	int destroy_context ();

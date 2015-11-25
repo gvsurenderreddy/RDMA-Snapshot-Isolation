@@ -31,7 +31,6 @@ private:
 	OrdersVersion		*global_orders_region;
 	OrderLineVersion	*global_order_line_region;
 	CCXactsVersion		*global_cc_xacts_region;
-	uint64_t			*global_lock_items_region;
 	
 	int initialize_data_structures();
 		
