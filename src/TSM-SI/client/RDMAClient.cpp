@@ -75,7 +75,7 @@ int RDMAClient::get_head_version(const size_t server_num) {
 	&(ds_ctx_[server_num].peer_mr_items_head),
 	(uint64_t)item_lookup_address,
 	(uint32_t)(sizeof(ItemVersion)),
-	false));
+	true));
 	return 0;
 }
 
@@ -94,7 +94,7 @@ int RDMAClient::get_versions_pointers(const size_t server_num) {
 	&(ds_ctx_[server_num].peer_mr_items_pointer_list),
 	(uint64_t)pointer_list_lookup_addr,
 	(uint32_t)(config::MAX_ITEM_VERSIONS * sizeof(Timestamp)),
-	true));
+	false));
 	return 0;
 }
 
@@ -338,8 +338,8 @@ int RDMAClient::startTransactions() {
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			// first find which server the data corresponds to
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
-			TEST_NZ(get_head_version(server_num));
 			TEST_NZ(get_versions_pointers(server_num));
+			TEST_NZ(get_head_version(server_num));
 		}
 
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
