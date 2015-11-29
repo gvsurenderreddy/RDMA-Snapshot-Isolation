@@ -14,11 +14,13 @@
 namespace message {
 	struct DataServerMemoryKeys {
 		// We’ll use this to pass RDMA memory region (MR) keys between nodes
-		struct ibv_mr mr_items;
-		struct ibv_mr mr_orders;
-		struct ibv_mr mr_order_line;
-		struct ibv_mr mr_cc_xacts;
-		struct ibv_mr mr_timestamp;
+		struct ibv_mr mr_items_head;
+		//struct ibv_mr mr_orders;
+		//struct ibv_mr mr_order_line;
+		//struct ibv_mr mr_cc_xacts;
+		//struct ibv_mr mr_timestamp;
+		struct ibv_mr mr_items_pointer_list;
+		struct ibv_mr mr_items_older_versions;
 	};
 
 	struct TimestampServerMemoryKeys {

@@ -27,11 +27,13 @@ private:
 
 	
 	// memory buffers
-	ItemVersion			*global_items_region;
-	OrdersVersion		*global_orders_region;
-	OrderLineVersion	*global_order_line_region;
-	CCXactsVersion		*global_cc_xacts_region;
+	ItemVersion			*global_items_head;
+	//OrdersVersion		*global_orders_head;
+	//OrderLineVersion	*global_order_line_region;
+	//CCXactsVersion		*global_cc_xacts_region;
 	
+	Timestamp			*global_items_pointer_list;
+	ItemVersion			*global_items_older_versions;
 	int initialize_data_structures();
 		
 	int initialize_context(RDMAServerContext &ctx);

@@ -22,6 +22,8 @@
 #include <netdb.h>
 #include <iostream>
 #include <time.h>	// for struct timespec
+#include <sstream>
+
 
 #define CLASS_NAME	"RDMAClient"
 
@@ -58,24 +60,44 @@ int RDMAClient::acquire_read_ts() {
 	return 0;
 }
 
-int RDMAClient::get_item_info(const size_t server_num) {
+int RDMAClient::get_head_version(const size_t server_num) {
 	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
-	
+
 	// Find the lookup address on the server remote memory
 	size_t item_offset = (size_t)(item_id * sizeof(ItemVersion));
-	ItemVersion *item_lookup_address =  (ItemVersion *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items.addr));
+	ItemVersion *item_lookup_address =  (ItemVersion *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_head.addr));
 
 	// RDMA READ it from the server
 	TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 	ds_ctx_[server_num].qp,
-	ds_ctx_[server_num].mr_items,
-	(uint64_t)ds_ctx_[server_num].items_region,
-	&(ds_ctx_[server_num].peer_mr_items),
+	ds_ctx_[server_num].mr_items_head,
+	(uint64_t)ds_ctx_[server_num].items_head,
+	&(ds_ctx_[server_num].peer_mr_items_head),
 	(uint64_t)item_lookup_address,
 	(uint32_t)(sizeof(ItemVersion)),
+	false));
+	return 0;
+}
+
+int RDMAClient::get_versions_pointers(const size_t server_num) {
+	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
+	
+	// Find the lookup address on the server remote memory
+	size_t item_offset = (size_t)(item_id * config::MAX_ITEM_VERSIONS * sizeof(Timestamp));
+	Timestamp *pointer_list_lookup_addr =  (Timestamp *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_pointer_list.addr));
+
+	// RDMA READ it from the server
+	TEST_NZ( RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+	ds_ctx_[server_num].qp,
+	ds_ctx_[server_num].mr_items_pointer,
+	(uint64_t)ds_ctx_[server_num].items_pointer,
+	&(ds_ctx_[server_num].peer_mr_items_pointer_list),
+	(uint64_t)pointer_list_lookup_addr,
+	(uint32_t)(config::MAX_ITEM_VERSIONS * sizeof(Timestamp)),
 	true));
 	return 0;
 }
+
 
 int RDMAClient::acquire_commit_ts() {
 	ts_ctx_.commit_timestamp.setCID((uint32_t)(next_epoch_.getCID() * client_cnt_ + client_id_));
@@ -87,15 +109,15 @@ int RDMAClient::acquire_item_lock(const size_t server_num, Timestamp &expected_l
 	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
 	
 	// and the actual content of the lock (before being swapped) will be stored in the following variable
-	ds_ctx_[server_num].lock_item_region = ds_ctx_[server_num].items_region->write_timestamp.toUUL();
+	ds_ctx_[server_num].lock_item_region = ds_ctx_[server_num].items_head->write_timestamp.toUUL();
 
 	size_t item_offset = (size_t)(item_id * sizeof(ItemVersion));
-	uint64_t *lock_lookup_addr	= (uint64_t *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items.addr));
+	uint64_t *lock_lookup_addr	= (uint64_t *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_head.addr));
 
 	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(ds_ctx_[server_num].qp,
 	ds_ctx_[server_num].mr_lock_item,
 	(uint64_t)&ds_ctx_[server_num].lock_item_region,
-	&(ds_ctx_[server_num].peer_mr_items),
+	&(ds_ctx_[server_num].peer_mr_items_head),
 	(uint64_t)lock_lookup_addr,
 	(uint32_t)sizeof(uint64_t),
 	expected_lock.toUUL(),
@@ -110,13 +132,13 @@ int RDMAClient::revert_lock(const size_t server_num, Timestamp &new_lock) {
 	ds_ctx_[server_num].lock_item_region = new_lock.toUUL();
 
 	size_t item_offset = (size_t)(item_id * sizeof(ItemVersion));
-	uint64_t *lock_lookup_addr	= (uint64_t *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items.addr));
+	uint64_t *lock_lookup_addr	= (uint64_t *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_head.addr));
 		
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 	ds_ctx_[server_num].qp,
 	ds_ctx_[server_num].mr_lock_item,
 	(uint64_t)&ds_ctx_[server_num].lock_item_region,
-	&(ds_ctx_[server_num].peer_mr_items),
+	&(ds_ctx_[server_num].peer_mr_items_head),
 	(uint64_t)lock_lookup_addr,
 	(uint32_t)sizeof(uint64_t),
 	true));
@@ -124,32 +146,91 @@ int RDMAClient::revert_lock(const size_t server_num, Timestamp &new_lock) {
 	return 0;
 }
 
+int RDMAClient::append_pointer_to_pointer_list(const size_t server_num) {
+	// first, shift the pointers one to the right (this effectively drops the last element)
+	for (int i = config::MAX_ITEM_VERSIONS - 2; i >= 0; i--)
+		ds_ctx_[server_num].items_pointer[i+1] = ds_ctx_[server_num].items_pointer[i];
+
+	// second, set the head of the pointer list to point to the head of the old versions
+	ds_ctx_[server_num].items_pointer[0] = ds_ctx_[server_num].items_head->write_timestamp;
+
+	// write changes to the remote server
+	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
+	size_t item_offset = (size_t)(item_id * config::MAX_ITEM_VERSIONS * sizeof(Timestamp));
+	Timestamp *pointer_list_lookup_addr =  (Timestamp *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_pointer_list.addr));
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	ds_ctx_[server_num].qp,
+	ds_ctx_[server_num].mr_items_pointer,
+	(uint64_t)ds_ctx_[server_num].items_pointer,
+	&(ds_ctx_[server_num].peer_mr_items_pointer_list),
+	(uint64_t)pointer_list_lookup_addr,
+	(uint32_t)(config::MAX_ITEM_VERSIONS * sizeof(Timestamp)),
+	false));
+
+	return 0;
+}
+
+int	RDMAClient::append_version_to_versions(const size_t server_num) {
+	// find where should the head pointer be written to.
+	uint16_t pointer = ds_ctx_[server_num].items_head->write_timestamp.getPointer();
+	uint64_t pointer_offset = (uint64_t) pointer;
+
+	// copy the version to the local RDMA buffer
+	memcpy(ds_ctx_[server_num].items_older_version, ds_ctx_[server_num].items_head, sizeof(ItemVersion));
+
+	// write the corresponding version to the versin list
+	int item_id = ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
+	size_t item_offset = (size_t)(item_id * config::MAX_ITEM_VERSIONS * sizeof(ItemVersion));
+	ItemVersion *version_lookup_addr =
+			(ItemVersion *)(
+					item_offset +
+					pointer_offset +
+					((uint64_t)ds_ctx_[server_num].peer_mr_items_older_versions.addr)
+					);
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	ds_ctx_[server_num].qp,
+	ds_ctx_[server_num].mr_items_older_version,
+	(uint64_t)ds_ctx_[server_num].items_older_version,
+	&(ds_ctx_[server_num].peer_mr_items_older_versions),
+	(uint64_t)version_lookup_addr ,
+	(uint32_t)sizeof(ItemVersion),
+	false));
+
+	return 0;
+}
+
+
 int RDMAClient::install_and_unlock(const size_t server_num) {
 	int item_id		= ds_ctx_[server_num].associated_cart_line->SCL_I_ID;
 	int quantity	= ds_ctx_[server_num].associated_cart_line->SCL_QTY;
-	uint16_t	lock_status = 0, pointer = 0;
 
-	ds_ctx_[server_num].items_region[0].write_timestamp.setAll(lock_status, pointer, ts_ctx_.commit_timestamp.getCID());
-	ds_ctx_[server_num].items_region[0].item.I_STOCK 	-= quantity;
+	uint16_t	lock_status = 0;
+	uint16_t	pointer = (uint16_t)(ds_ctx_[server_num].items_head->write_timestamp.getPointer() + 1) % config::MAX_ITEM_VERSIONS;
+	uint32_t	cID	= ts_ctx_.commit_timestamp.getCID();
+
+	ds_ctx_[server_num].items_head[0].write_timestamp.setAll(lock_status, pointer, cID);
+	ds_ctx_[server_num].items_head[0].item.I_STOCK 	-= quantity;
 	
-	if (ds_ctx_[server_num].items_region[0].item.I_STOCK < 10)
-		ds_ctx_[server_num].items_region[0].item.I_STOCK += 20;
+	if (ds_ctx_[server_num].items_head[0].item.I_STOCK < 10)
+		ds_ctx_[server_num].items_head[0].item.I_STOCK += 20;
 	
 	// Find the lookup address on the server remote memory 
 	size_t item_offset = (item_id * sizeof(ItemVersion));
-	ItemVersion *item_lookup_addr =  (ItemVersion *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items.addr));
+	ItemVersion *item_lookup_addr =  (ItemVersion *)(item_offset + ((uint64_t)ds_ctx_[server_num].peer_mr_items_head.addr));
 	
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 	ds_ctx_[server_num].qp,
-	ds_ctx_[server_num].mr_items,
-	(uint64_t)ds_ctx_[server_num].items_region,
-	&(ds_ctx_[server_num].peer_mr_items),
+	ds_ctx_[server_num].mr_items_head,
+	(uint64_t)ds_ctx_[server_num].items_head,
+	&(ds_ctx_[server_num].peer_mr_items_head),
 	(uint64_t)item_lookup_addr,
 	(uint32_t)sizeof(ItemVersion),
 	true));
 
 	DEBUG_COUT (CLASS_NAME, __func__, "[WRIT] ... (Client " << client_id_ << ") Successfully install and unlock a new version for item " << item_id
-		<< " (with commit timestamp " << ts_ctx_.commit_timestamp.getCID() << ")");
+		<< " ("<< ds_ctx_[server_num].items_head[0].write_timestamp <<")");
 
 	return 0;
 }
@@ -190,6 +271,14 @@ bool RDMAClient::check_if_wrapped_sweeper() const{
 		)
 		return true;
 	else return false;
+}
+
+inline
+std::string RDMAClient::pointer_to_stream(const size_t server_num) const{
+	std::ostringstream stream;
+	for (size_t i = 0; i < config::MAX_ITEM_VERSIONS; i++)
+		stream << ds_ctx_[server_num].items_pointer[i] << ", ";
+	return stream.str();
 }
 
 int RDMAClient::startTransactions() {
@@ -243,19 +332,24 @@ int RDMAClient::startTransactions() {
 	
 	
 		// ************************************************
-		//	Read records in read-set (fetch ITEMs information)
+		//	Read records in read-set + Read Pointers
 		// ************************************************
 		// TODO: Should be fixed. multiple requests to the same server should be sent with only one signalled request 
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			// first find which server the data corresponds to
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
-			TEST_NZ(get_item_info(server_num));
+			TEST_NZ(get_head_version(server_num));
+			TEST_NZ(get_versions_pointers(server_num));
 		}
+
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 			TEST_NZ (RDMACommon::poll_completion(ds_ctx_[server_num].send_cq));
-			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 2-" << i << ": Client " << client_id_ << " received information for item " << ds_ctx_[server_num].items_region->item.I_ID
-					<< "(ts: " << ds_ctx_[server_num].items_region->write_timestamp.getCID() << ") from " << ds_ctx_[server_num].server_address);
+			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 2-" << i << ": Client " << client_id_ << " received information for item " << ds_ctx_[server_num].items_head->item.I_ID
+					<< "(ts: " << ds_ctx_[server_num].items_head->write_timestamp.getCID() << ") from " << ds_ctx_[server_num].server_address);
+
+			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 2: Client " << client_id_ << " received the following pointer list for item "
+					<< ds_ctx_[server_num].items_head->item.I_ID << ": " << pointer_to_stream(server_num));
 		}
 
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 2: Client " << client_id_ << " received information for all items");
@@ -282,17 +376,17 @@ int RDMAClient::startTransactions() {
 		abort_flag = false;
 		for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
 			server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
-			if (ds_ctx_[server_num].items_region->write_timestamp.getCID() > (ts_ctx_.read_trx.getCID() - 1) ) {
-				// from a later snapshot, so not useful
-				abort_flag = true;
-				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: (Client " << client_id_ << ") Inconsistent version for item " << ds_ctx_[server_num].items_region->item.I_ID
-						<< " (Expected: " << ts_ctx_.read_trx.getCID() * client_cnt_ - 1 << " or lower."
-						<< " Received: " << ds_ctx_[server_num].items_region->write_timestamp.getCID() << ")" );
-			}
-			else if (ds_ctx_[server_num].items_region->write_timestamp.getLockStatus() != 0) {
+			if (ds_ctx_[server_num].items_head->write_timestamp.getLockStatus() != 0) {
 				// item is already locked
 				abort_flag = true;
-				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: Client " << client_id_ << " locked version for item " << ds_ctx_[server_num].items_region->item.I_ID);
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: Client " << client_id_ << " locked version for item " << ds_ctx_[server_num].items_head->item.I_ID);
+			}
+			else if (ds_ctx_[server_num].items_head->write_timestamp.getCID() > (ts_ctx_.read_trx.getCID() - 1) ) {
+				// from a later snapshot, so not useful
+				abort_flag = true;
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: (Client " << client_id_ << ") Inconsistent version for item " << ds_ctx_[server_num].items_head->item.I_ID
+						<< " (Expected: " << ts_ctx_.read_trx.getCID() * client_cnt_ - 1 << " or lower."
+						<< " Received: " << ds_ctx_[server_num].items_head->write_timestamp.getCID() << ")" );
 			}
 		}
 		if (abort_flag == true) {
@@ -303,7 +397,6 @@ int RDMAClient::startTransactions() {
 			continue;
 		}
 		else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: (Client " << client_id_ << ") All received versions are consistent with READ snapshot, and all are unlocked");
-		
 
 
 		size_t found_version_index = 0;
@@ -316,13 +409,13 @@ int RDMAClient::startTransactions() {
 
 			// lock expected before locking
 			lock_status					= (uint16_t) 0;
-			pointer						= (uint16_t) 0;
-			version						= (uint32_t) ds_ctx_[server_num].items_region[found_version_index].write_timestamp.getCID();
+			pointer						= (uint16_t) ds_ctx_[server_num].items_head[found_version_index].write_timestamp.getPointer();
+			version						= (uint32_t) ds_ctx_[server_num].items_head[found_version_index].write_timestamp.getCID();
 			expected_lock[server_num].setAll(lock_status, pointer, version);
 
 			// new lock
 			lock_status					= (uint16_t) 1;
-			pointer						= (uint16_t) 0;
+			pointer						= (uint16_t) (uint16_t)(ds_ctx_[server_num].items_head->write_timestamp.getPointer() + 1) % config::MAX_ITEM_VERSIONS;
 			version						= (uint32_t) ts_ctx_.commit_timestamp.getCID();
 			new_lock[server_num].setAll(lock_status, pointer, version);
 
@@ -365,7 +458,7 @@ int RDMAClient::startTransactions() {
 				server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 				if (successful_locking_servers[server_num] == true) {
 					TEST_NZ (RDMACommon::poll_completion(ds_ctx_[server_num].send_cq));
-					DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Step 5: (Client " << client_id_ << ") Lock reverted on item " << ds_ctx_[server_num].items_region->item.I_ID);
+					DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Step 5: (Client " << client_id_ << ") Lock reverted on item " << ds_ctx_[server_num].items_head->item.I_ID);
 				}
 			}
 			DEBUG_CERR (CLASS_NAME, __func__, "[Info] Step 5: (Client " << client_id_ << ") Lock on all items could not be acquired --> ** ABORT **");
@@ -379,6 +472,18 @@ int RDMAClient::startTransactions() {
 			clock_gettime(CLOCK_REALTIME, &after_lock);
 			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 5: (Client " << client_id_ << ") All locks successfully acquired");
 
+
+			// ************************************************
+			//	Append old version to the versions list, and update the pointers list
+			// ************************************************
+			for (int i = 0; i < config::ORDERLINE_PER_ORDER; i++) {
+				server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
+				append_pointer_to_pointer_list(server_num);
+				append_version_to_versions(server_num);
+			}
+			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 6 : Client " << client_id_ << " added the pointers and pointers");
+
+
 			// ************************************************
 			//	Install and unlock the new versions
 			// ************************************************
@@ -390,7 +495,7 @@ int RDMAClient::startTransactions() {
 				server_num = cart_.cart_lines[i].SCL_I_ID / config::ITEM_PER_SERVER;
 				TEST_NZ (RDMACommon::poll_completion(ds_ctx_[server_num].send_cq));
 			}
-			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 6: Client " << client_id_ << " installed and unlocked the new versions");
+			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 7: Client " << client_id_ << " installed and unlocked the new versions");
 			clock_gettime(CLOCK_REALTIME, &after_unlock);
 
 
@@ -578,11 +683,13 @@ int RDMAClient::start_client () {
 		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] buffers info from server " << i);
 	
 		// after receiving the message from the server, let's store its addresses in the context
-		memcpy(&ds_ctx_[i].peer_mr_items,		&ds_ctx_[i].recv_msg.mr_items,		sizeof(struct ibv_mr));
-		memcpy(&ds_ctx_[i].peer_mr_orders,		&ds_ctx_[i].recv_msg.mr_orders,		sizeof(struct ibv_mr));
-		memcpy(&ds_ctx_[i].peer_mr_order_line,	&ds_ctx_[i].recv_msg.mr_order_line,	sizeof(struct ibv_mr));
-		memcpy(&ds_ctx_[i].peer_mr_cc_xacts,	&ds_ctx_[i].recv_msg.mr_cc_xacts,	sizeof(struct ibv_mr));
-		memcpy(&ds_ctx_[i].peer_mr_timestamp,	&ds_ctx_[i].recv_msg.mr_timestamp,	sizeof(struct ibv_mr));
+		memcpy(&ds_ctx_[i].peer_mr_items_head,				&ds_ctx_[i].recv_msg.mr_items_head,				sizeof(struct ibv_mr));
+		memcpy(&ds_ctx_[i].peer_mr_items_older_versions,	&ds_ctx_[i].recv_msg.mr_items_older_versions,	sizeof(struct ibv_mr));
+		memcpy(&ds_ctx_[i].peer_mr_items_pointer_list,		&ds_ctx_[i].recv_msg.mr_items_pointer_list,		sizeof(struct ibv_mr));
+
+		//memcpy(&ds_ctx_[i].peer_mr_orders,		&ds_ctx_[i].recv_msg.mr_orders,		sizeof(struct ibv_mr));
+		//memcpy(&ds_ctx_[i].peer_mr_order_line,	&ds_ctx_[i].recv_msg.mr_order_line,	sizeof(struct ibv_mr));
+		//memcpy(&ds_ctx_[i].peer_mr_cc_xacts,	&ds_ctx_[i].recv_msg.mr_cc_xacts,	sizeof(struct ibv_mr));
 	}
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Successfully connected to all servers");
 	

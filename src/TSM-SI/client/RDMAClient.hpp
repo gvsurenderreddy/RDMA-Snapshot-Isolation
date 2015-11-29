@@ -35,15 +35,20 @@ private:
 
 	void	fill_shopping_cart();
 	int		acquire_read_ts();
-	int		get_item_info(const size_t server_num);
+	int		get_head_version(const size_t server_num);
+	int		get_versions_pointers(const size_t server_num);
 	int 	acquire_commit_ts();
 	int		acquire_item_lock(const size_t server_num, Timestamp &expectedTS, Timestamp &newTS);
 	int		revert_lock(const size_t server_num, Timestamp &new_lock);
+	int		append_pointer_to_pointer_list(const size_t server_num);
+	int		append_version_to_versions(const size_t server_num);
 	int		install_and_unlock(const size_t server_num);
 	int		release_lock(const size_t server_num);
 	int 	submit_trx_result();
+
 	int		startTransactions();
 	bool 	check_if_wrapped_sweeper() const;
+	std::string pointer_to_stream(const size_t server_num) const;
 
 public:
 	int start_client ();

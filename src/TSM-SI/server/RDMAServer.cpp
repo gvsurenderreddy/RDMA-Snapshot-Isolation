@@ -24,39 +24,48 @@
 #define CLASS_NAME	"RDMAServer"
 
 RDMAServer::~RDMAServer () {
-	delete[](global_items_region);
-	delete[](global_orders_region);
-	delete[](global_order_line_region);
-	delete[](global_cc_xacts_region);
+	delete[](global_items_head);
+	//delete[](global_orders_region);
+	//delete[](global_order_line_region);
+	//delete[](global_cc_xacts_region);
 
 	close(server_sockfd_);
 }
 
 int RDMAServer::initialize_data_structures() {
-	global_items_region			= new ItemVersion[config::ITEM_CNT];
-	global_orders_region		= new OrdersVersion[config::MAX_ORDERS_CNT];	// TODO
-	global_order_line_region	= new OrderLineVersion[config::ORDERLINE_PER_ORDER * config::MAX_ORDERS_CNT];			// TODO
-	global_cc_xacts_region		= new CCXactsVersion[config::MAX_CCXACTS_CNT];
+	global_items_head			= new ItemVersion[config::ITEM_CNT];
+	//global_orders_region		= new OrdersVersion[config::MAX_ORDERS_CNT];	// TODO
+	//global_order_line_region	= new OrderLineVersion[config::ORDERLINE_PER_ORDER * config::MAX_ORDERS_CNT];			// TODO
+	//global_cc_xacts_region		= new CCXactsVersion[config::MAX_CCXACTS_CNT];
 
-	TEST_NZ(load_tables_from_files(global_items_region));
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Tables loaded successfully");
+	global_items_older_versions	= new ItemVersion[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
+	global_items_pointer_list	= new Timestamp[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
+//	global_items_older_versions	= new ItemVersion*[config::ITEM_CNT];
+//	global_items_pointer_list	= new Timestamp*[config::ITEM_CNT];
+	for (int i = 0; i < config::ITEM_CNT; i++) {
+		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
+			global_items_pointer_list[i*config::MAX_ITEM_VERSIONS * j].setAll(0,0,0);
+	}
+//	for (int i = 0; i < config::ITEM_CNT; i++) {
+//		global_items_older_versions[i] = new ItemVersion[config::MAX_ITEM_VERSIONS];
+//		global_items_pointer_list[i] = new Timestamp[config::MAX_ITEM_VERSIONS];
+//		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
+//			global_items_pointer_list[i][j].setAll(0,0,0);
+//	}
 
-	uint16_t lock_status = 0, pointer = 0;
-	uint32_t cID = 0;
-
-	for (int i = 0; i < config::ITEM_CNT; i++)
-		global_items_region[i].write_timestamp.setAll(lock_status, pointer, cID);
-
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] All locks set to free");
+	TEST_NZ(load_tables_from_files(global_items_head));
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Tables loaded successfully, with all locks set to free");
 	return 0;
 }
 
 int RDMAServer::initialize_context(RDMAServerContext &ctx) {
 	ctx.ib_port				= ib_port_;
-	ctx.items_region		= global_items_region;
-	ctx.orders_region		= global_orders_region;
-	ctx.order_line_region	= global_order_line_region;
-	ctx.cc_xacts_region		= global_cc_xacts_region;
+	ctx.items_head			= global_items_head;
+	ctx.items_pointer_list	= global_items_pointer_list;
+	ctx.items_older_versions= global_items_older_versions;
+	//ctx.orders_region		= global_orders_region;
+	//ctx.order_line_region	= global_order_line_region;
+	//ctx.cc_xacts_region		= global_cc_xacts_region;
 	return 0;
 }
 
@@ -106,10 +115,13 @@ int RDMAServer::start_server () {
 		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] QPed to client " << i);
 
 		// prepare server buffer with read message
-		memcpy(&(ctx[i].send_msg.mr_items),		ctx[i].mr_items,		sizeof(struct ibv_mr));
-		memcpy(&(ctx[i].send_msg.mr_orders),	ctx[i].mr_orders,		sizeof(struct ibv_mr));
-		memcpy(&(ctx[i].send_msg.mr_order_line),ctx[i].mr_order_line,	sizeof(struct ibv_mr));
-		memcpy(&(ctx[i].send_msg.mr_cc_xacts),	ctx[i].mr_cc_xacts,		sizeof(struct ibv_mr));
+		memcpy(&(ctx[i].send_msg.mr_items_head),		ctx[i].mr_items_head,		sizeof(struct ibv_mr));
+		//memcpy(&(ctx[i].send_msg.mr_orders),	ctx[i].mr_orders,		sizeof(struct ibv_mr));
+		//memcpy(&(ctx[i].send_msg.mr_order_line),ctx[i].mr_order_line,	sizeof(struct ibv_mr));
+		//memcpy(&(ctx[i].send_msg.mr_cc_xacts),	ctx[i].mr_cc_xacts,		sizeof(struct ibv_mr));
+		memcpy(&(ctx[i].send_msg.mr_items_older_versions),		ctx[i].mr_items_older_versions,		sizeof(struct ibv_mr));
+		memcpy(&(ctx[i].send_msg.mr_items_pointer_list),		ctx[i].mr_items_pointer_list,		sizeof(struct ibv_mr));
+
 	}
 
 	for (size_t i = 0; i < clients_cnt_; i++){
@@ -122,7 +134,6 @@ int RDMAServer::start_server () {
 	/*
 		Server waits for the client to muck with its memory
 	 */
-
 
 	char temp_char;
 	for (size_t i = 0; i < clients_cnt_; i++) {

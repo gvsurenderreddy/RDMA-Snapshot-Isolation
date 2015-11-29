@@ -26,29 +26,33 @@ public:
 	
 	// local handler
 	struct ibv_mr *mr_recv;
-	struct ibv_mr *mr_items;
-	struct ibv_mr *mr_orders;
-	struct ibv_mr *mr_order_line;
-	struct ibv_mr *mr_cc_xacts;
-	struct ibv_mr *mr_read_ts;
-	struct ibv_mr *mr_commit_ts;
+	struct ibv_mr *mr_items_head;
+	struct ibv_mr *mr_items_older_version;
+	struct ibv_mr *mr_items_pointer;
+
+	//struct ibv_mr *mr_orders;
+	//struct ibv_mr *mr_order_line;
+	//struct ibv_mr *mr_cc_xacts;
 	struct ibv_mr *mr_lock_item;
 	
 	// remote memory handlers
-	struct ibv_mr peer_mr_items;
-	struct ibv_mr peer_mr_orders;
-	struct ibv_mr peer_mr_order_line;
-	struct ibv_mr peer_mr_cc_xacts;
-	struct ibv_mr peer_mr_timestamp;
+	struct ibv_mr peer_mr_items_head;
+	//struct ibv_mr peer_mr_orders;
+	//struct ibv_mr peer_mr_order_line;
+	//struct ibv_mr peer_mr_cc_xacts;
+	struct ibv_mr peer_mr_items_older_versions;
+	struct ibv_mr peer_mr_items_pointer_list;
+
 	
 	// memory buffers
 	struct message::DataServerMemoryKeys recv_msg;
-	ItemVersion			*items_region;
-	OrdersVersion		orders_region;
-	OrderLineVersion	*order_line_region;
-	CCXactsVersion		cc_xacts_region;
-	Timestamp			read_ts_region;		
-	Timestamp			commit_ts_region;
+	ItemVersion		*items_head;
+	ItemVersion		*items_older_version;
+	Timestamp		*items_pointer;
+
+	//OrdersVersion		orders_region;
+	//OrderLineVersion	*order_line_region;
+	//CCXactsVersion		cc_xacts_region;
 	uint64_t			lock_item_region;
 	
 	
