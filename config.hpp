@@ -37,9 +37,9 @@ namespace config {
 	static const double	SKEWNESS_IN_ITEM_ACCESS	= 0;		// 0 means no skew (random access). 1 is zipf law. Could be arbitrariliy large.
 
 	static const int	TRANSACTION_CNT 		= 1000000;
-	static const int	ITEM_CNT				= 100000 * SERVER_CNT; 	// Number of Items
+	static const int	ITEM_CNT				= 50000 * SERVER_CNT; 	// Number of Items
 	static const int	ITEM_PER_SERVER			= ITEM_CNT / SERVER_CNT;
-	static const int	ORDERLINE_PER_ORDER		= MIN(SERVER_CNT, 2);
+	static const int	ORDERLINE_PER_ORDER		= MIN(SERVER_CNT, 3);
 
 	static const int	MAX_ORDERS_CNT			= TRANSACTION_CNT; // TODO TRANSACTION_CNT * CLIENTS_CNT;	// Number of Orders
 	static const int	MAX_CCXACTS_CNT			= MAX_ORDERS_CNT;	// Number of CCXacts
