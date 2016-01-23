@@ -8,8 +8,8 @@
 #ifndef ITEM_VERSION_H_
 #define ITEM_VERSION_H_
 
+#include "../basic-types/timestamp.hpp"
 #include "item.hpp"
-#include "../auxilary/timestamp.hpp"
 
 class ItemVersion {
 public:

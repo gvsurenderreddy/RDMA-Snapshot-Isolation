@@ -12,6 +12,7 @@ class ShoppingCartLine {
 public:
 	int SCL_I_ID;
 	int SCL_QTY;
+	int SERVER_NUM;
 };
 
 #endif /* SHOPPING_CART_LINE_HPP_ */

@@ -13,8 +13,9 @@
 #include <arpa/inet.h>
 #include <infiniband/verbs.h>
 #include "../../config.hpp"
-#include "../auxilary/timestamp.hpp"
 #include <mutex>
+
+#include "../basic-types/timestamp.hpp"
 
 
 class TimestampServer{

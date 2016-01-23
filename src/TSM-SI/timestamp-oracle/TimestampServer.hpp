@@ -9,13 +9,15 @@
 #define TIMESTAMPSERVER_H_
 
 #include "../../../config.hpp"
-#include "../../auxilary/timestamp.hpp"
 #include "../shared/newRDMAMessage.hpp"
 #include "../../util/BaseContext.hpp"
+#include <string>
 #include <stdint.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <infiniband/verbs.h>
+#include "../../basic-types/timestamp.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
 
 
 typedef message::TransactionResult::Result Result;
@@ -30,11 +32,13 @@ struct QueueEntryComparator  {
 
 class TimestampServer{
 private:
-	const uint32_t	clients_cnt_;	// coming from the command line.
+	const size_t	clients_cnt_;	// coming from the command line.
 	int				server_sockfd_;	// Server's socket file descriptor
 
-	uint8_t 	*finished_trxs_hash_;
-	Timestamp	read_trx_;
+	//uint8_t 	*finished_trxs_hash_;
+	//Timestamp	read_trx_;
+
+	primitive::timestamp_t *last_trx_timestamp_per_client_;
 
 	struct WorkerContext  {
 		struct	ibv_device_attr device_attr;
@@ -56,8 +60,9 @@ private:
 
 		// memory handlers
 		struct ibv_mr *mr_send;		// for the SEND message
-		struct ibv_mr *mr_finished_trxs_hash;
-		struct ibv_mr *mr_read_trx;
+		//struct ibv_mr *mr_finished_trxs_hash;
+		//struct ibv_mr *mr_read_trx;
+		struct ibv_mr *mr_last_trx_timestamp_per_client;
 
 		// memory buffers
 		struct message::TimestampServerMemoryKeys send_msg;
@@ -67,7 +72,7 @@ private:
 
 	int	create_context(struct WorkerContext &ctx);
 
-	void handle_client(struct WorkerContext &ctx, size_t client_id);
+	void handle_client(struct WorkerContext &ctx, primitive::client_id_t client_id);
 	
 	int	register_memory(struct WorkerContext &ctx);
 		
@@ -81,7 +86,7 @@ private:
 	
 public:
 	
-	TimestampServer(uint32_t clients_cnt);
+	TimestampServer(size_t clients_cnt);
 
 	int start_server ();
 	

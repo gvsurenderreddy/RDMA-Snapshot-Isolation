@@ -40,20 +40,19 @@ int RDMAServer::initialize_data_structures() {
 
 	global_items_older_versions	= new ItemVersion[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
 	global_items_pointer_list	= new Timestamp[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
-//	global_items_older_versions	= new ItemVersion*[config::ITEM_CNT];
-//	global_items_pointer_list	= new Timestamp*[config::ITEM_CNT];
+
+	//	global_items_older_versions	= new ItemVersion*[config::ITEM_CNT];
+	//	global_items_pointer_list	= new Timestamp*[config::ITEM_CNT];
 	for (int i = 0; i < config::ITEM_CNT; i++) {
 		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
-			global_items_pointer_list[i*config::MAX_ITEM_VERSIONS * j].setAll(0,0,0);
+			global_items_pointer_list[i * config::MAX_ITEM_VERSIONS + j].setAll(0,0,0,0);
 	}
-//	for (int i = 0; i < config::ITEM_CNT; i++) {
-//		global_items_older_versions[i] = new ItemVersion[config::MAX_ITEM_VERSIONS];
-//		global_items_pointer_list[i] = new Timestamp[config::MAX_ITEM_VERSIONS];
-//		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
-//			global_items_pointer_list[i][j].setAll(0,0,0);
-//	}
 
 	TEST_NZ(load_tables_from_files(global_items_head));
+
+	for (int i = 0; i < config::ITEM_CNT; i++)
+		global_items_head[i].write_timestamp.setAll(0,0,0,0);
+
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Tables loaded successfully, with all locks set to free");
 	return 0;
 }
@@ -143,6 +142,13 @@ int RDMAServer::start_server () {
 		std::cout << "[Info] Destroying client " << i << " resources" << std::endl;
 	}
 	std::cout << "[Info] Server's ready to gracefully get destroyed" << std::endl;
+
+//	for (int i = 0; i < config::ITEM_CNT; i++) {
+//		std::cout << global_items_head[i].write_timestamp << "  ";
+//		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
+//			std::cout << global_items_pointer_list[i * config::MAX_ITEM_VERSIONS + j] << "  ";
+//		std::cout << std::endl;
+//	}
 	return 0;
 }
 
@@ -153,6 +159,5 @@ RDMAServer::RDMAServer(uint32_t server_num, uint32_t clients_cnt)
 	server_sockfd_ = -1;
 	tcp_port_	= config::TCP_PORT[server_num];
 	ib_port_	= config::IB_PORT[server_num];
-
 	initialize_data_structures();
 }

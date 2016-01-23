@@ -236,8 +236,8 @@ int load_tables_from_files(ItemVersion* items_region) {
 			items_region[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
 			strcpy(items_region[i].item.I_BACKING, strtok(NULL, "\t"));
 			strcpy(items_region[i].item.I_DIMENSION, strtok(NULL, "\t"));
-			
-			items_region[i].write_timestamp.setAll(0,0,0);
+
+			items_region[i].write_timestamp.setAll(0,0,0, 0);
 			i++;
 		}
 		fclose(fp);

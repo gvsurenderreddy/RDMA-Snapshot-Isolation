@@ -8,7 +8,8 @@
 #ifndef RDMA_MESSAGE_H_
 #define RDMA_MESSAGE_H_
 
-#include "../../auxilary/timestamp.hpp"
+#include "../../basic-types/timestamp.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
 #include <infiniband/verbs.h>
 
 namespace message {
@@ -25,9 +26,10 @@ namespace message {
 
 	struct TimestampServerMemoryKeys {
 		// We’ll use this to pass RDMA memory region (MR) keys between nodes
-		struct ibv_mr mr_finished_trxs_hash;
-		struct ibv_mr mr_read_trx;
-		size_t client_id;
+		//struct ibv_mr mr_finished_trxs_hash;
+		//struct ibv_mr mr_read_trx;
+		struct ibv_mr mr_last_trx_timestamp_per_client;
+		primitive::client_id_t client_id;
 		size_t client_cnt;
 	};
 

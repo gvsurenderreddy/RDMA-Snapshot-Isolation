@@ -8,26 +8,26 @@
 #ifndef RDMA_CLIENT_H_
 #define RDMA_CLIENT_H_
 
-//#include <byteswap.h>
+#include "../../../config.hpp"
+#include "../../util/RDMACommon.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
+#include "DataServerContext.hpp"
+#include "TimestampServerContext.hpp"
 #include <stdint.h>
 #include <stdlib.h>
 #include <infiniband/verbs.h>
 
-#include "../../../config.hpp"
-#include "../../util/RDMACommon.hpp"
-#include "DataServerContext.hpp"
-#include "TimestampServerContext.hpp"
 
 typedef message::TransactionResult::Result Result;
 
 
 class RDMAClient{
 private:
-	size_t	client_id_;
+	primitive::client_id_t	client_id_;
 	size_t	client_cnt_;
 	DataServerContext ds_ctx_[config::SERVER_CNT];
 	TimestampServerContext ts_ctx_;
-	Timestamp	next_epoch_;
+	primitive::timestamp_t	next_epoch_;
 
 	struct Cart {
 		ShoppingCartLine	cart_lines[config::ORDERLINE_PER_ORDER];
@@ -45,10 +45,13 @@ private:
 	int		install_and_unlock(const size_t server_num);
 	int		release_lock(const size_t server_num);
 	int 	submit_trx_result();
+	primitive::client_id_t	find_commiting_client(Timestamp &versionTimestamp);
+	std::string pointer_to_string(const size_t server_num) const;
+	std::string read_snapshot_to_string() const;
+
+
 
 	int		startTransactions();
-	bool 	check_if_wrapped_sweeper() const;
-	std::string pointer_to_stream(const size_t server_num) const;
 
 public:
 	int start_client ();

@@ -16,7 +16,7 @@
 #include "../../tpcw-tables/order_line_version.hpp"
 #include "../../tpcw-tables/cc_xacts_version.hpp"
 #include "../../tpcw-tables/shopping_cart_line.hpp"
-#include "../../auxilary/timestamp.hpp"
+#include "../../basic-types/timestamp.hpp"
 #include "../shared/newRDMAMessage.hpp"
 
 class DataServerContext : public BaseContext {
