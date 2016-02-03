@@ -21,9 +21,11 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <iostream>
-#include <time.h>	// for struct timespec
+#include <time.h>		// for struct timespec
 #include <sstream>
 #include <algorithm>	// for std::random_shuffle()
+#include <deque>		// std::deque
+
 
 
 #define CLASS_NAME	"RDMAClient"
@@ -61,17 +63,6 @@ void RDMAClient::fill_shopping_cart() {
 }
 
 int RDMAClient::acquire_read_ts() {
-	/*
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-	ts_ctx_.qp,
-	ts_ctx_.mr_read_trx,
-	(uint64_t)&ts_ctx_.read_trx,
-	&(ts_ctx_.peer_mr_read_trx),
-	(uint64_t)ts_ctx_.peer_mr_read_trx.addr,
-	(uint32_t)sizeof(Timestamp),
-	true));
-	TEST_NZ (RDMACommon::poll_completion(ts_ctx_.send_cq));
-	*/
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 	ts_ctx_.qp,
 	ts_ctx_.mr_last_trx_timestamp_per_client,
@@ -262,32 +253,6 @@ int RDMAClient::install_and_unlock(const size_t server_num) {
 }
 
 int RDMAClient::submit_trx_result() {
-	/*
-	bool signaled = false;
-	// if (transactionNum % 5000 == 0)
-	//	signaled = true;
-	signaled = true;
-
-	ts_ctx_.trx_status = 1;
-
-	size_t offset			= (ts_ctx_.commit_timestamp.getCID() * sizeof(uint8_t)) % config::TIMESTAMP_SERVER_QUEUE_SIZE;
-	uint64_t *write_addr	= (uint64_t *)(offset + (uint64_t)ts_ctx_.peer_mr_finished_trxs_hash.addr);
-
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
-		ts_ctx_.qp,
-		ts_ctx_.mr_trx_status,
-		(uint64_t)&ts_ctx_.trx_status,
-		&(ts_ctx_.peer_mr_finished_trxs_hash),
-		(uint64_t)write_addr,
-		(uint32_t)sizeof(uint8_t),
-		signaled));
-
-	if (signaled)
-		TEST_NZ (RDMACommon::poll_completion(ts_ctx_.send_cq));
-
-	DEBUG_COUT (CLASS_NAME, __func__, "[Sent] Client " << client_id_ << " sent trx result for CTS " << ts_ctx_.commit_timestamp.getCID() << " to the TS server");
-	return 0;
-	*/
 
 	size_t offset = client_id_ * sizeof(primitive::timestamp_t);
 	primitive::timestamp_t *write_addr	= (primitive::timestamp_t *)(offset + (uint64_t)ts_ctx_.peer_mr_last_trx_timestamp_per_client.addr);
@@ -330,6 +295,9 @@ primitive::client_id_t RDMAClient::find_commiting_client(Timestamp &versionTimes
 int RDMAClient::startTransactions() {
 	int		abort_cnt = 0;
 	int 	abort_due_to_inconsistent_snapshot_cnt = 0, abort_due_to_lock_cnt = 0;
+	std::deque<Result> recent_commit_results;
+	int recent_abort_cnt = 0;
+	int snapshot_acquisition_cnt = 0;
 
 	struct timespec firstRequestTime, lastRequestTime;				// for calculating TPMS
 	struct timespec before_read_ts, after_read_ts, after_fetch_info, after_commit_ts, after_lock, after_unlock, after_result_submission;
@@ -351,8 +319,40 @@ int RDMAClient::startTransactions() {
 		//	Acquire read timestamp
 		// ************************************************
 		clock_gettime(CLOCK_REALTIME, &before_read_ts);
-		TEST_NZ (acquire_read_ts());
-		DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Client " << client_id_ << " received read timestamp from oracle (" << read_snapshot_to_string() << ")");
+		if (config::ADAPTIVE_ABORT_RATE == true) {
+			// Adaptive snapshot acquisition is active. The client gets a new snapshot only if the current abort rate is too high
+
+			//int	recent_abort_cnt = 0;
+			if (recent_commit_results.size() > 0){
+				// compute the average recent abort rate
+//				for (unsigned i=0; i<recent_commit_results.size(); i++){
+//					if (recent_commit_results.at(i) == Result::ABORTED)
+//						recent_abort_cnt++;
+//				}
+				double abort_rate_recent_average = (double)recent_abort_cnt / recent_commit_results.size();
+				if (abort_rate_recent_average >= config::MAX_ABORT_RATE) {
+					// abort rate is too high. get a new snapshot
+					snapshot_acquisition_cnt++;
+					TEST_NZ (acquire_read_ts());
+					DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Client " << client_id_ << " received snapshot from oracle (" << read_snapshot_to_string() << ")");
+				}
+				else
+					// re-use the old snapshot
+					DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Client " << client_id_ << " re-used snapshot (" << read_snapshot_to_string() << ")");
+			}
+			else{
+				// it's first time. client must get the snapshot anyways
+				snapshot_acquisition_cnt++;
+				TEST_NZ (acquire_read_ts());
+				DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Client " << client_id_ << " received snapshot from oracle (" << read_snapshot_to_string() << ")");
+			}
+		}
+		else {
+			// it's not adaptive. so client gets the snapshot every time.
+			snapshot_acquisition_cnt++;
+			TEST_NZ (acquire_read_ts());
+			DEBUG_COUT (CLASS_NAME, __func__, "[Read] Step 1: Client " << client_id_ << " received snapshot from oracle (" << read_snapshot_to_string() << ")");
+		}
 		clock_gettime(CLOCK_REALTIME, &after_read_ts);
 	
 		// ************************************************
@@ -405,6 +405,11 @@ int RDMAClient::startTransactions() {
 			}
 			else {
 				primitive::client_id_t committed_client = find_commiting_client(ds_ctx_[server_num].items_head->write_timestamp);
+				if (committed_client == client_id_)
+					// regardless of whether the version matches the snapshot or not, the version is installed by the client itself, so is valid
+					// when is it useful? when using adaptive abort rate control.
+					continue;
+
 				if (ds_ctx_[server_num].items_head->write_timestamp.getTimestamp() > ts_ctx_.last_trx_timestamp_per_client[committed_client]) {
 					// from a later snapshot, so not useful
 					abort_flag = true;
@@ -418,7 +423,16 @@ int RDMAClient::startTransactions() {
 			DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: (Client " << client_id_ << ") NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 			abort_cnt++;
 			abort_due_to_inconsistent_snapshot_cnt++;
+			recent_abort_cnt++;
 			submit_trx_result();
+
+			recent_commit_results.push_back(Result::ABORTED);
+			if (recent_commit_results.size() > config::ADAPTIVE_WINDOW_SIZE) {
+				if (recent_commit_results.front() == Result::ABORTED)
+					recent_abort_cnt--;
+				recent_commit_results.pop_front();
+			}
+
 			continue;
 		}
 		else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 4: (Client " << client_id_ << ") All received versions are consistent with READ snapshot, and all are unlocked");
@@ -494,6 +508,14 @@ int RDMAClient::startTransactions() {
 			abort_due_to_lock_cnt++;
 			// TODO: do we actually need to inform the TS server about the aborts?? probably no.
 			submit_trx_result();
+
+			recent_commit_results.push_back(Result::ABORTED);
+			recent_abort_cnt++;
+			if (recent_commit_results.size() > config::ADAPTIVE_WINDOW_SIZE){
+				if (recent_commit_results.front() == Result::ABORTED)
+					recent_abort_cnt--;
+				recent_commit_results.pop_front();
+			}
 			continue;
 		}
 		else {
@@ -531,6 +553,13 @@ int RDMAClient::startTransactions() {
 			//	Submit the result to the timestamp server
 			// ************************************************
 			submit_trx_result();
+			recent_commit_results.push_back(Result::COMMITTED);
+			if (recent_commit_results.size() > config::ADAPTIVE_WINDOW_SIZE){
+				if (recent_commit_results.front() == Result::ABORTED)
+					recent_abort_cnt--;
+				recent_commit_results.pop_front();
+			}
+
 			clock_gettime(CLOCK_REALTIME, &after_result_submission);
 
 
@@ -628,14 +657,12 @@ int RDMAClient::startTransactions() {
 			
 		}
 	}
-	
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);	// Fire the  timer
 	
 	int committed_cnt = config::TRANSACTION_CNT - abort_cnt;
 	double micro_elapsed_time = ( (double)( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + (double)( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
-	
-	// double T_P_MILISEC = (double)(config::TRANSACTION_CNT / (double)(micro_elapsed_time / 1000));
 	double T_P_MILISEC = (double)(committed_cnt / (double)(micro_elapsed_time / 1000));
+	double success_rate = (double)committed_cnt / config:: TRANSACTION_CNT;
 
 	avg_read_ts /= 1000;
 	avg_fetch_info /= 1000;
@@ -643,9 +670,6 @@ int RDMAClient::startTransactions() {
 	avg_lock /= 1000;
 	avg_unlock /= 1000;
 	avg_result_submission /= 1000;
-
-	
-	double success_rate = (double)committed_cnt / config:: TRANSACTION_CNT;
 	
 	std::cout << "[Stat] Avg read ts (u sec):	" << (double)avg_read_ts / committed_cnt << std::endl;
 	std::cout << "[Stat] Avg fetch (u sec): 	" << (double)avg_fetch_info / committed_cnt << std::endl;
@@ -657,7 +681,7 @@ int RDMAClient::startTransactions() {
 	std::cout << "[Stat] " << committed_cnt << " committed, " << abort_cnt << " aborted. success rate:	" << success_rate << std::endl;
 	std::cout << "[Stat] Avg abort type I (snapshot) ratio	" << (double)abort_due_to_inconsistent_snapshot_cnt/abort_cnt << std::endl;
 	std::cout << "[Stat] Avg abort type II (lock) ratio	" << (double)abort_due_to_lock_cnt/abort_cnt << std::endl;
-
+	std::cout << "[Stat] Snapshot acquisition ratio	" << (double)snapshot_acquisition_cnt/config::TRANSACTION_CNT << std::endl;
 	std::cout << "[Stat] Committed Trx per millisec:	" <<  T_P_MILISEC << std::endl;
 	return 0;
 }
