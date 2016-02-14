@@ -2,7 +2,7 @@ CC = g++
 LD = g++
 
 CPPFLAGS	= -std=gnu++11 -g -Wall -Wconversion -Wextra -Wno-ignored-qualifiers -Wno-write-strings
-LIBS		= -libverbs -lpthread 
+LIBS		= -libverbs -lpthread
 
 
 # all the agents (including subfolders) should go here

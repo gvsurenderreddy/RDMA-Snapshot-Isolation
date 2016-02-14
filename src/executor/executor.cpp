@@ -11,6 +11,9 @@
 #include <iostream>
 #include <cstring>
 #include <unistd.h>		// getopt()
+#include <vector>
+#include <thread>
+#include <chrono>         // std::chrono::seconds
 
 
 int main (int argc, char *argv[]) {
@@ -19,25 +22,27 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 	if (strcmp(argv[1], "client")  == 0) {
-		if (argc != 2) {
+		if (argc != 4 || strcmp(argv[2], "-i") != 0 ) {
 			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " client" << std::endl;
+			std::cerr << argv[0] << " client -i INSTANCE_NUM" << std::endl;
 			std::cerr << "connects to server(s) specified in the config file" << std::endl;
 			return 1;
 		}
-		RDMAClient client;
+		unsigned instance_num = atoi(argv[3]);
+		RDMAClient client(instance_num);
 		client.start_client();
 	}
 	else if(strcmp(argv[1], "server") == 0) {
-		if (argc != 5 || strcmp(argv[3], "-n") != 0) {
+		if (argc != 7 || strcmp(argv[3], "-i") != 0 || strcmp(argv[5], "-n") != 0) {
 			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " server <i = server_num> -n NUM_OF_CLIENTS" << std::endl;
-			std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[i]" << std::endl;
-			std::cerr << "(valid range of i: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+			std::cerr << argv[0] << " server <s = server_num> -i INTANCE_NUM -n NUM_OF_CLIENTS" << std::endl;
+			std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s]" << std::endl;
+			std::cerr << "(valid range of s: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
 			return 1;
 		}
-		uint32_t cients_cnt = atoi(argv[4]);
-		RDMAServer server(atoi(argv[2]), cients_cnt);
+		unsigned instance_num = atoi(argv[4]);
+		uint32_t cients_cnt = atoi(argv[6]);
+		RDMAServer server(atoi(argv[2]), instance_num, cients_cnt);
 		server.start_server();
 	}
 	else if(strcmp(argv[1], "timestamp") == 0) {
@@ -50,6 +55,49 @@ int main (int argc, char *argv[]) {
 		uint32_t cients_cnt = atoi(argv[3]);
 		TimestampServer tsServer(cients_cnt);
 		tsServer.start_server();
+	}
+	else if(strcmp(argv[1], "instance") == 0) {
+		if (argc != 7 || strcmp(argv[3], "-n") != 0 || strcmp(argv[5], "-s") != 0) {
+			std::cerr << "Usage:" << std::endl;
+			std::cerr << argv[0] << " instance <i = instance_num> -n NUM_OF_CLIENTS -s NUM_OF_SERVERS" << std::endl;
+			std::cerr << "runs an RSI instance with the specified number of clients and servers." << std::endl;
+			return 1;
+		}
+		unsigned instance_num = atoi(argv[2]);
+		uint32_t clients_cnt = atoi(argv[4]);
+		uint32_t servers_cnt = atoi(argv[6]);
+
+		std::cout << "Running instance #" << (int)instance_num
+				<< " with " << (int)clients_cnt << " clients and " << (int)servers_cnt<< " servers." << std::endl;
+
+
+		std::vector<RDMAClient*> clients;
+		std::vector<RDMAServer*> servers;
+
+		std::vector<std::thread> client_threads;
+		std::vector<std::thread> server_threads;
+
+		for (unsigned i=0; i < servers_cnt; i++){
+			RDMAServer *server = new RDMAServer(i, instance_num, clients_cnt);
+			servers.push_back(server);
+			server_threads.push_back(std::thread(&RDMAServer::start_server, std::ref(*server)));
+		}
+
+		for (unsigned i=0; i < clients_cnt; i++) {
+			RDMAClient *client = new RDMAClient(instance_num);
+			clients.push_back(client);
+			client_threads.push_back(std::thread(&RDMAClient::start_client, std::ref(*client)));
+		}
+
+		std::cout << "synchronizing client threads...\n";
+		for (auto& th : client_threads) th.join();
+
+		std::cout << "synchronizing server threads...\n";
+		for (auto& th : server_threads) th.join();
+
+		for (auto& s : servers) delete s;
+		for (auto& c : clients) delete c;
+		std::cout << "FINISH" << std::endl;
 	}
 	else {
 		std::cerr << "Error in arguments" << std::endl;

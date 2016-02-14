@@ -24,6 +24,7 @@
 #define CLASS_NAME	"RDMAServer"
 
 RDMAServer::~RDMAServer () {
+	DEBUG_COUT(CLASS_NAME, __func__, "Destructor is invoked");
 	delete[](global_items_head);
 	//delete[](global_orders_region);
 	//delete[](global_order_line_region);
@@ -41,8 +42,6 @@ int RDMAServer::initialize_data_structures() {
 	global_items_older_versions	= new ItemVersion[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
 	global_items_pointer_list	= new Timestamp[config::ITEM_CNT * config::MAX_ITEM_VERSIONS];
 
-	//	global_items_older_versions	= new ItemVersion*[config::ITEM_CNT];
-	//	global_items_pointer_list	= new Timestamp*[config::ITEM_CNT];
 	for (int i = 0; i < config::ITEM_CNT; i++) {
 		for (int j = 0; j < config::MAX_ITEM_VERSIONS; j++)
 			global_items_pointer_list[i * config::MAX_ITEM_VERSIONS + j].setAll(0,0,0,0);
@@ -72,7 +71,7 @@ int RDMAServer::start_server () {
 	RDMAServerContext ctx[clients_cnt_];
 
 	std::cout << "[Info] Server " << server_num_ << " is waiting for " << clients_cnt_
-			<< " client(s) on tcp port: " << tcp_port_ << ", ib port: " << ib_port_ << std::endl;
+			<< " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_ << std::endl;
 
 	struct sockaddr_in serv_addr, cli_addr;
 	socklen_t clilen = sizeof(cli_addr);
@@ -98,12 +97,15 @@ int RDMAServer::start_server () {
 	// accept connections
 	for (size_t i = 0; i < clients_cnt_; i++){
 		initialize_context(ctx[i]);
+
 		ctx[i].sockfd  = accept (server_sockfd_, (struct sockaddr *) &cli_addr, &clilen);
+
 		if (ctx[i].sockfd < 0){ 
 			std::cerr << "ERROR on accept" << std::endl;
 			return -1;
 		}
 		std::cout << "[Conn] Received client #" << i << " on socket " << ctx[i].sockfd << std::endl;
+
 
 		// create all resources
 		TEST_NZ (ctx[i].create_context());
@@ -120,8 +122,12 @@ int RDMAServer::start_server () {
 		//memcpy(&(ctx[i].send_msg.mr_cc_xacts),	ctx[i].mr_cc_xacts,		sizeof(struct ibv_mr));
 		memcpy(&(ctx[i].send_msg.mr_items_older_versions),		ctx[i].mr_items_older_versions,		sizeof(struct ibv_mr));
 		memcpy(&(ctx[i].send_msg.mr_items_pointer_list),		ctx[i].mr_items_pointer_list,		sizeof(struct ibv_mr));
-
+		ctx[i].send_msg.global_items_head = global_items_head;
+		ctx[i].send_msg.global_items_pointer_list = global_items_pointer_list;
+		ctx[i].send_msg.global_items_older_versions = global_items_older_versions;
+		ctx[i].send_msg.server_instance_num = instance_num_;
 	}
+
 
 	for (size_t i = 0; i < clients_cnt_; i++){
 		// send memory locations using SEND 
@@ -152,9 +158,10 @@ int RDMAServer::start_server () {
 	return 0;
 }
 
-RDMAServer::RDMAServer(uint32_t server_num, uint32_t clients_cnt)
+RDMAServer::RDMAServer(uint32_t server_num, unsigned instance_num, uint32_t clients_cnt)
 : clients_cnt_(clients_cnt),
-  server_num_(server_num)
+  server_num_(server_num),
+  instance_num_(instance_num)
 {
 	server_sockfd_ = -1;
 	tcp_port_	= config::TCP_PORT[server_num];

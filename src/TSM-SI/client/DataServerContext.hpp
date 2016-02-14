@@ -23,6 +23,7 @@ class DataServerContext : public BaseContext {
 public:
 	std::string	server_address;
 	ShoppingCartLine	*associated_cart_line;	
+	unsigned instance_num;
 	
 	// local handler
 	struct ibv_mr *mr_recv;
@@ -42,6 +43,9 @@ public:
 	//struct ibv_mr peer_mr_cc_xacts;
 	struct ibv_mr peer_mr_items_older_versions;
 	struct ibv_mr peer_mr_items_pointer_list;
+	ItemVersion		*peer_memory_address_items_head;
+	ItemVersion		*peer_memory_address_items_older_versions;
+	Timestamp		*peer_memory_address_items_pointer_list;
 
 	
 	// memory buffers

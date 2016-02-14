@@ -24,10 +24,12 @@ typedef message::TransactionResult::Result Result;
 class RDMAClient{
 private:
 	primitive::client_id_t	client_id_;
+	const unsigned instance_num_;
 	size_t	client_cnt_;
 	DataServerContext ds_ctx_[config::SERVER_CNT];
 	TimestampServerContext ts_ctx_;
 	primitive::timestamp_t	next_epoch_;
+
 
 	struct Cart {
 		ShoppingCartLine	cart_lines[config::ORDERLINE_PER_ORDER];
@@ -55,7 +57,8 @@ private:
 
 public:
 	int start_client ();
-	RDMAClient();
+	RDMAClient(unsigned instance_num);
+	RDMAClient(const RDMAClient &copy_from_me);	// explicit copy constructor
 };
 
 #endif /* RDMA_CLIENT_H_ */

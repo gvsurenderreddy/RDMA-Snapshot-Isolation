@@ -24,7 +24,7 @@ private:
 	uint8_t	ib_port_;
 	const uint32_t clients_cnt_;
 	const uint32_t server_num_;
-
+	const unsigned instance_num_;
 	
 	// memory buffers
 	ItemVersion			*global_items_head;
@@ -39,7 +39,7 @@ private:
 	int initialize_context(RDMAServerContext &ctx);
 	
 public:
-	RDMAServer(uint32_t server_num, uint32_t clients_cnt);
+	RDMAServer(uint32_t server_num, unsigned instance_num, uint32_t clients_cnt);
 
 	int start_server();
 	

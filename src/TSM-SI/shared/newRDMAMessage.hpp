@@ -10,6 +10,7 @@
 
 #include "../../basic-types/timestamp.hpp"
 #include "../../basic-types/PrimitiveTypes.hpp"
+#include "../../tpcw-tables/item_version.hpp"
 #include <infiniband/verbs.h>
 
 namespace message {
@@ -22,6 +23,12 @@ namespace message {
 		//struct ibv_mr mr_timestamp;
 		struct ibv_mr mr_items_pointer_list;
 		struct ibv_mr mr_items_older_versions;
+
+		ItemVersion		*global_items_head;
+		Timestamp		*global_items_pointer_list;
+		ItemVersion		*global_items_older_versions;
+
+		unsigned server_instance_num;
 	};
 
 	struct TimestampServerMemoryKeys {

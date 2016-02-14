@@ -20,8 +20,8 @@ while [ $x -le $threads_per_client ]
 do
   #echo "Launching transaction $x at $(date +%s%N | cut -b1-13)..." 
   if [ $1 == "RDMA" ]; then
-	  echo "Launching RDMA client $x ..."
-	  ./exe/test.exe client &
+	  echo "Launching RDMA client -i 0 $x ..."
+	  ./exe/test.exe client -i 0 &
   elif [ $1 == "Trad" ]; then
 	  echo "Launching Traditional client $x ..."
 	  ./exe/Trad-SI/TradClient &

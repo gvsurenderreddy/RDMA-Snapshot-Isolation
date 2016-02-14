@@ -24,19 +24,19 @@ namespace config {
 	/* Server settings */
 	static const int			SERVER_CNT		= 1;
 	static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.1.1"};
-	static const uint16_t		TCP_PORT[SERVER_CNT]	= {45678};
+	static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680};
 	static const uint8_t		IB_PORT[SERVER_CNT]		= {1};
 
 
 	/* Oracle settings */
 	static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.0.1";	// only relevant for Tranditional-SI
-	static const uint16_t		TIMESTAMP_SERVER_PORT		= 56789;			// only relevant for Tranditional-SI
+	static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;			// only relevant for Tranditional-SI
 	static const int			TIMESTAMP_SERVER_IB_PORT	= 1;	// only relevant for Tranditional-SI
 	static const size_t			TIMESTAMP_SERVER_QUEUE_SIZE = 60000;	// has to be a multiple of  number of clients
 	static const useconds_t		TIMESTAMP_CLEANUP_SLEEP_MICROSEC = 2;
 
 	/* Client setting */
-	static const bool			ADAPTIVE_ABORT_RATE 	= true;
+	static const bool			ADAPTIVE_ABORT_RATE 	= false;
 	static const double 		MAX_ABORT_RATE			= 0.1;
 	static const unsigned		ADAPTIVE_WINDOW_SIZE	= 100;
 

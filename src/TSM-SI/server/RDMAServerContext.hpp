@@ -22,7 +22,7 @@
 class RDMAServerContext : public BaseContext {
 public:
 	std::string	server_address;
-	ShoppingCartLine	*associated_cart_line;	
+	ShoppingCartLine	*associated_cart_line;
 	
 	// memory handlers
 	struct ibv_mr *send_mr;
