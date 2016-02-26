@@ -67,11 +67,11 @@ void Timestamp::setAll(const primitive::lock_status_t lockStatus, const primitiv
 
 const uint64_t Timestamp::toUUL() const {
 	uint64_t uul;
-	uul += (uint64_t)timestamp_;
+	uul = (uint64_t)timestamp_;
 	uul = uul << 32;
 	uul += (uint64_t)clientID_;
 	uul = uul << 16;
-	uul = (uint64_t)lockStatus_;
+	uul += (uint64_t)lockStatus_;
 	uul = uul << 8;
 	uul += (uint64_t)versionOffset_;
 	return uul;

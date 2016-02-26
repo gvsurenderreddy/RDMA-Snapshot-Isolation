@@ -54,7 +54,7 @@ static double c = 0;          // Normalization constant
 // }
 
 int zipf_initialize(double alpha, int n) {
-	x = generate_random_seed();
+	x = utils::generate_random_seed();
 
 	// Compute normalization constant on first call only
 	for (int i=1; i <= n; i++)

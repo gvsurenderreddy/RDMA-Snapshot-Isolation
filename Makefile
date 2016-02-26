@@ -13,10 +13,13 @@ AGENTS_MODULES		:= TSM-SI TSM-SI/client TSM-SI/server TSM-SI/timestamp-oracle
 # agents for benchmarking
 BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
 
+TPC			:= benchmarks/TPC-C
 
 # the rest of the modules should go here.
-MODULES		:= util basic-types executor $(AGENTS_MODULES)
+#MODULES		:= util basic-types executor $(AGENTS_MODULES)
 #MODULES		:= util auxilary $(BENCHMARK_MODULES)
+UNIT_TESTS	:= unit-tests unit-tests/tpcw-tests 
+MODULES		:= util executor basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(TPC)/server $(TPC)/client #$(UNIT_TESTS) 
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))

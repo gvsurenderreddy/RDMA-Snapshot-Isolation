@@ -367,7 +367,7 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, i
 	
 	memcpy (local_con_data.gid, &my_gid, sizeof my_gid);
 	
-	TEST_NZ (sock_sync_data(sockfd, sizeof (struct CommExchData), (char *) &local_con_data, (char *) &tmp_con_data));
+	TEST_NZ (utils::sock_sync_data(sockfd, sizeof (struct CommExchData), (char *) &local_con_data, (char *) &tmp_con_data));
 
 	remote_con_data.qp_num	= ntohl (tmp_con_data.qp_num);
 	remote_con_data.lid		= ntohs (tmp_con_data.lid);
@@ -389,6 +389,6 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, i
 	
 
 	// sync to make sure that both sides are in states that they can connect to prevent packet loss
-	TEST_NZ(sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth
+	TEST_NZ(utils::sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth
 	return 0;
 }

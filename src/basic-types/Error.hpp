@@ -8,14 +8,6 @@
 #ifndef ERRORS_ERROR_HPP_
 #define ERRORS_ERROR_HPP_
 
-
-#include <string>
-#include <map>
-
-#define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
-#define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
-
-
 namespace error{
 	enum ErrorType {
 		SUCCESS = 0,

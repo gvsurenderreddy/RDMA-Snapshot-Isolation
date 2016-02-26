@@ -30,9 +30,6 @@
 #include <thread>
 
 
-
-
-
 #define CLASS_NAME	"RDMAClient"
 
 void RDMAClient::fill_shopping_cart() {

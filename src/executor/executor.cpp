@@ -5,9 +5,12 @@
  *      Author: Erfan Zamanian
  */
 
-#include "../TSM-SI/server/RDMAServer.hpp"
-#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
-#include "../TSM-SI/client/RDMAClient.hpp"
+//#include "../TSM-SI/server/RDMAServer.hpp"
+//#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
+//#include "../TSM-SI/client/RDMAClient.hpp"
+#include "../benchmarks/TPC-C/server/TPCCServer.hpp"
+#include "../benchmarks/TPC-C/client/TPCCClient.hpp"
+
 #include <iostream>
 #include <cstring>
 #include <unistd.h>		// getopt()
@@ -21,6 +24,22 @@ int main (int argc, char *argv[]) {
 		std::cerr << "At least two arguments are needed" << std::endl;
 		return 1;
 	}
+
+	if (strcmp(argv[1], "client")  == 0) {
+		unsigned instanceNum = 0;
+		uint8_t ibPort = 1;
+		TPCCClient client(instanceNum, ibPort);
+	}
+	else if(strcmp(argv[1], "server") == 0) {
+
+		uint32_t serverNum = 0;
+		unsigned instance_num = 1;
+		uint32_t cients_cnt = 1;
+		TPCCServer server(serverNum, instance_num, cients_cnt);
+	}
+
+
+	/*
 	if (strcmp(argv[1], "client")  == 0) {
 		if (argc != 4 || strcmp(argv[2], "-i") != 0 ) {
 			std::cerr << "Usage:" << std::endl;
@@ -103,5 +122,6 @@ int main (int argc, char *argv[]) {
 		std::cerr << "Error in arguments" << std::endl;
 		return 1;
 	}
+	 */
 	return 0;
 }

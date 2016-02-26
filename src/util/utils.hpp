@@ -9,13 +9,15 @@
 #define UTILS_H_
 
 #include "../../config.hpp"
-#include "../tpcw-tables/item_version.hpp"
+//#include "../tpcw-tables/item_version.hpp"
 #include <iomanip>	// std::setw()
 #include <stdint.h>
 #include <byteswap.h>
 #include <endian.h>
+#include <cassert>	// for assert()
 
 
+namespace utils {
 //#ifndef LOG_NAME
 //#define LOG_NAME "MUST BE REDEFINED BY ALL FILES"
 //#endif
@@ -30,13 +32,16 @@
 			std::string header = std::string("[") + className + "::" + funcName + "] "; \
 			std::cerr << std::setw(35) << std::left << header << message << std::endl; \
 		} while( false )
+	#define ASSERT(x) assert(x)
+
 	#else
 	#define DEBUG_COUT(className,funcName,message) do {} while (false)
 	#define DEBUG_CERR(className,funcName,message) do {} while (false)
+	#define ASSERT(x) do { (void)sizeof(x); } while(0)
 	#endif
 
-#define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero).");  } while (0)
-#define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
+#define TEST_NZ(x) do { if ( (x)) utils::die("error: " #x " failed (returned non-zero).");  } while (0)
+#define TEST_Z(x)  do { if (!(x)) utils::die("error: " #x " failed (returned zero/null)."); } while (0)
 
 #if defined(__i386__)
 static __inline__ unsigned long long rdtscp(void)
@@ -152,6 +157,8 @@ int sock_read(int sock, char *buffer, ssize_t xfer_size);
 * received from the remote.
 ******************************************************************************/
 size_t sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remote_data);
+size_t sock_sync (int sock);
+
 
 
 
@@ -205,7 +212,9 @@ int server_socket_setup(int *server_sockfd, int backlog);
 
 void die(const char *reason);
 
-int load_tables_from_files(ItemVersion* items_region);
+// int load_tables_from_files(ItemVersion* items_region);
+
+} // namespace util
 
 
 #endif /* UTILS_H_ */

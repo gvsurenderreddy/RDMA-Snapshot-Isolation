@@ -19,7 +19,7 @@
  
 #define CLASS_NAME "utils"
 
-int pin_to_CPU (int CPU_num){
+int utils::pin_to_CPU (int CPU_num){
 	cpu_set_t  mask;
 	CPU_ZERO(&mask);			// Clears set, so that it contains no CPUs.
 	CPU_SET(CPU_num, &mask);	// Add CPU 'cpu_num' to set. 
@@ -30,7 +30,7 @@ int pin_to_CPU (int CPU_num){
 
 
 // http://www.concentric.net/~Ttwang/tech/inthash.htm
-unsigned long generate_random_seed()
+unsigned long utils::generate_random_seed()
 {
 	unsigned long a = clock();
 	unsigned long b = time(NULL);
@@ -49,7 +49,7 @@ unsigned long generate_random_seed()
 	return c;
 }
 
-int sock_write(int sock, char *buffer, ssize_t xfer_size) {
+int utils::sock_write(int sock, char *buffer, ssize_t xfer_size) {
 	ssize_t rc;
 	rc = write (sock, buffer, xfer_size);
 	if (rc < xfer_size) {
@@ -59,41 +59,30 @@ int sock_write(int sock, char *buffer, ssize_t xfer_size) {
 	return 0;
 }
 
-int sock_read(int sock, char *buffer, ssize_t xfer_size) {
-	//int read_bytes = 0;
-	//int total_read_bytes = 0;
-	
+int utils::sock_read(int sock, char *buffer, ssize_t xfer_size) {
 	if (read (sock, buffer, xfer_size) <= 0)
 		return -1;
 	return 0;
-	
-	/*
-	int read_bytes = 0;
-	int total_read_bytes = 0;
-	
-	while (total_read_bytes < xfer_size) {
-		read_bytes = read (sock, buffer, xfer_size);
-		if (read_bytes > 0)
-			total_read_bytes += read_bytes;
-		else break;
-	}
-	if (read_bytes <= 0)
-		return -1;
-	else return 0;
-	*/
 }
 
 int sync_it (int sock, char *local_buffer, ssize_t xfer_size) {
 	char remote_buffer[xfer_size];
-	TEST_NZ (sock_write(sock, local_buffer, xfer_size));
-	TEST_NZ (sock_read(sock, remote_buffer, xfer_size));
+	TEST_NZ (utils::sock_write(sock, local_buffer, xfer_size));
+	TEST_NZ (utils::sock_read(sock, remote_buffer, xfer_size));
 		
 	if (strcmp(remote_buffer, local_buffer) == 0)
 		return 0;
 	return -1;
 }
 
-size_t sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remote_data) {
+size_t utils::sock_sync (int sock) {
+	char temp_char;
+	return utils::sock_sync_data(sock, 1, "W", &temp_char);
+
+}
+
+
+size_t utils::sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remote_data) {
 	ssize_t rc;
 	ssize_t read_bytes = 0;
 	ssize_t total_read_bytes = 0;
@@ -113,7 +102,7 @@ size_t sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remo
 	return rc;
 }
 
-int open_socket(){
+int utils::open_socket(){
 	int sockfd = socket (AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
 		std::cerr << "Error opening socket" << std::endl;
@@ -133,7 +122,7 @@ int open_socket(){
 	return sockfd;
 }
 
-int sock_connect (std::string servername, uint16_t port) {
+int utils::sock_connect (std::string servername, uint16_t port) {
 	int sockfd;
 	struct sockaddr_in serv_addr;
 	
@@ -155,8 +144,8 @@ int sock_connect (std::string servername, uint16_t port) {
 	return sockfd;
 }
 
-int establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *sockfd) {
-	*sockfd = sock_connect (remote_ip, remote_port);
+int utils::establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *sockfd) {
+	*sockfd = utils::sock_connect (remote_ip, remote_port);
 	if (*sockfd < 0) {
 		std::cerr << "failed to establish TCP connection to server " <<  remote_ip << " port " << remote_port << std::endl;
 		return -1;
@@ -165,7 +154,7 @@ int establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *s
 	return 0;
 }
 
-int server_socket_setup(int *server_sockfd, int backlog) {
+int utils::server_socket_setup(int *server_sockfd, int backlog) {
 	struct sockaddr_in serv_addr;
 	
 	// Open Socket
@@ -187,33 +176,34 @@ int server_socket_setup(int *server_sockfd, int backlog) {
 	return 0;
 }
 
-void die(const char *reason)
+void utils::die(const char *reason)
 {
 	std::cerr << reason << std::endl;
 	std::cerr << "Errno: " << strerror(errno) << std::endl;
 	exit(EXIT_FAILURE);
 }
 
+/*
 int load_tables_from_files(ItemVersion* items_region) {
 	FILE * fp;
 	char * line = NULL;
 	size_t len = 0;
 	ssize_t read;
-	
+
 	// First load ITEM file
 	try {
-		fp = fopen(config::ITEM_FILENAME, "r");
+		fp = fopen(config::tpcw_settings::ITEM_FILENAME, "r");
 		if (fp == NULL){
-			std::cerr << "Cannot open file: " << config::ITEM_FILENAME << std::endl;
+			std::cerr << "Cannot open file: " << config::tpcw_settings::ITEM_FILENAME << std::endl;
 			exit(EXIT_FAILURE);
-		}		
+		}
 		int i = 0;
-		
+
 		while ((read = getline(&line, &len, fp)) != -1) {
-			if (i >= config::ITEM_CNT)
+			if (i >= config::tpcw_settings::ITEM_CNT)
 				// we don't want to read more data from file.
 				break;
-			
+
 			items_region[i].item.I_ID = atoi(strtok(line,  "\t")) - 1;		// because we want to start IDs from zero
 			strcpy(items_region[i].item.I_TITLE,strtok(NULL, "\t"));
 			items_region[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
@@ -244,9 +234,10 @@ int load_tables_from_files(ItemVersion* items_region) {
 	}
 	catch (std::exception& e){
 	    std::cerr << "exception caught: " << e.what() << std::endl;
-	}	
+	}
 	if (line)
 		free(line);
-	
+
 	return 0;
 }
+*/
