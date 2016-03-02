@@ -9,8 +9,8 @@
 //#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
 //#include "../TSM-SI/client/RDMAClient.hpp"
 #include "../benchmarks/TPC-C/server/TPCCServer.hpp"
+#include "../benchmarks/TPC-C/oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/client/TPCCClient.hpp"
-
 #include <iostream>
 #include <cstring>
 #include <unistd.h>		// getopt()
@@ -28,16 +28,33 @@ int main (int argc, char *argv[]) {
 	if (strcmp(argv[1], "client")  == 0) {
 		unsigned instanceNum = 0;
 		uint8_t ibPort = 1;
-		TPCCClient client(instanceNum, ibPort);
+		uint16_t homeWarehouse = 0;
+		TPCC::TPCCClient client(instanceNum, homeWarehouse, ibPort);
 	}
 	else if(strcmp(argv[1], "server") == 0) {
-
-		uint32_t serverNum = 0;
+		if (argc != 5 || strcmp(argv[3], "-n") != 0) {
+			std::cerr << "Usage:" << std::endl;
+			std::cerr << argv[0] << " " << argv[1] << " <s = server_num> -n NUM_OF_CLIENTS" << std::endl;
+			std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s]" << std::endl;
+			std::cerr << "(valid range of s: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+			return 1;
+		}
 		unsigned instance_num = 1;
-		uint32_t cients_cnt = 1;
-		TPCCServer server(serverNum, instance_num, cients_cnt);
-	}
+		uint32_t clients_cnt = atoi(argv[4]);
+		uint32_t serverNum = atoi(argv[2]);
 
+		TPCC::TPCCServer server(serverNum, instance_num, clients_cnt);
+	}
+	else if(strcmp(argv[1], "oracle") == 0) {
+		if (argc != 4 || strcmp(argv[2], "-n") != 0) {
+			std::cerr << "Usage:" << std::endl;
+			std::cerr << argv[0] << " " << argv[1] << " -n NUM_OF_CLIENTS" << std::endl;
+			std::cerr << "connects to the oracle specified in the config file" << std::endl;
+			return 1;
+		}
+		uint32_t clients_cnt = atoi(argv[3]);
+		TPCC::Oracle ts(clients_cnt);
+	}
 
 	/*
 	if (strcmp(argv[1], "client")  == 0) {

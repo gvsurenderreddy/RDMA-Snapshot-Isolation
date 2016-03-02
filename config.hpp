@@ -15,7 +15,7 @@
 
 
 namespace config {
-#define DEBUG_ENABLED (true)
+#define DEBUG_ENABLED (false)
 
 /* Server settings */
 static const int			SERVER_CNT		= 1;
@@ -47,17 +47,17 @@ static const int	TIMEOUT_IN_MS			= 500;		/* ms */
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int		NEWORDER_TRANSACTION_CNT 	= 1;
+static const int		NEWORDER_TRANSACTION_CNT 	= 100000;
 
 /*	Database settings	*/
 static const int WAREHOUSE_CNT			= 1;
-static const int ITEMS_CNT				= 5; //10000;
+static const int ITEMS_CNT				= 15; //10000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default
 static const int WAREHOUSE_PER_SERVER	= WAREHOUSE_CNT / SERVER_CNT;
 static const int DISTRICT_PER_WAREHOUSE	= 2; //10;
 static const int CUSTOMER_PER_DISTRICT	= 10; // 3000;
 static const int STOCK_PER_WAREHOUSE	= ITEMS_CNT;
-static const int ORDER_PER_DISTRICT		= 3000;
-static const int NEWORDER_PER_DISTRICT	= 3000;
+static const int ORDER_PER_DISTRICT		= NEWORDER_TRANSACTION_CNT * CUSTOMER_PER_DISTRICT; 	// 3000;
+static const int NEWORDER_PER_DISTRICT	= NEWORDER_TRANSACTION_CNT * CUSTOMER_PER_DISTRICT;		// 3000;
 static const double REMOTE_WAREHOUSE_PROB	= 0.01; // probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
 
 static const int VERSION_NUM = 3;

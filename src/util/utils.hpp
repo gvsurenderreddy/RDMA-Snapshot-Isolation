@@ -40,8 +40,8 @@ namespace utils {
 	#define ASSERT(x) do { (void)sizeof(x); } while(0)
 	#endif
 
-#define TEST_NZ(x) do { if ( (x)) utils::die("error: " #x " failed (returned non-zero).");  } while (0)
-#define TEST_Z(x)  do { if (!(x)) utils::die("error: " #x " failed (returned zero/null)."); } while (0)
+#define TEST_NZ(x) do { if ( (x)) utils::die("error: " #x " failed (returned non-zero)", __FILE__, __LINE__);  } while (0)
+#define TEST_Z(x)  do { if (!(x)) utils::die("error: " #x " failed (returned zero/null)", __FILE__, __LINE__); } while (0)
 
 #if defined(__i386__)
 static __inline__ unsigned long long rdtscp(void)
@@ -210,7 +210,7 @@ int establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *s
 
 int server_socket_setup(int *server_sockfd, int backlog);
 
-void die(const char *reason);
+void die(const char *reason, const char* filename, int lineNumber);
 
 // int load_tables_from_files(ItemVersion* items_region);
 

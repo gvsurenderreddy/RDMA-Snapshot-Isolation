@@ -9,7 +9,7 @@
 #define SRC_BENCHMARKS_TPC_C_SERVER_TPCCSERVER_HPP_
 
 #include "ClientContext.hpp"
-#include "../TPCCDB.hpp"
+#include "../tables/TPCCDB.hpp"
 #include "ServerMemoryKeys.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
@@ -19,6 +19,7 @@
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <vector>	// for std::vector
 
+namespace TPCC{
 class TPCCServer {
 public:
 	TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt);
@@ -39,5 +40,6 @@ private:
 
 	RDMARegion<ServerMemoryKeys> *memoryKeysMessage_;
 };
+}
 
 #endif /* SRC_BENCHMARKS_TPC_C_SERVER_TPCCSERVER_HPP_ */

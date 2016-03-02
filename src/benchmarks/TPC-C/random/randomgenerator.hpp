@@ -3,6 +3,7 @@
 
 #include <cstdlib>  // for struct random_data
 #include <set>		// for std::set
+#include <cstdint>
 
 namespace TPCC {
 
@@ -37,6 +38,9 @@ public:
     int numberExcluding(int lower, int upper, int excluding);
 
     std::set<int> selectUniqueIds(size_t num_unique, int lower_id, int upper_id);
+
+    std::set<uint32_t> selectUniqueNonUniformIds(int A, size_t num_unique, int lower_id, int upper_id);
+
 
     void astring(char* s, int lower_length, int upper_length);
     void nstring(char* s, int lower_length, int upper_length);

@@ -21,7 +21,7 @@
 #include "../tables/WarehouseTable.hpp"
 #include <infiniband/verbs.h>
 
-
+namespace TPCC{
 struct ServerMemoryKeys{
 public:
 	MemoryHandler<TPCC::CustomerVersion>	customerTableHeadVersions;
@@ -64,6 +64,7 @@ public:
 
 	unsigned serverInstanceNum;
 };
+}	// namespace TPCC
 
 
 

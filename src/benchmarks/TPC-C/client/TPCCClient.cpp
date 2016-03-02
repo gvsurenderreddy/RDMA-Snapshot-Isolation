@@ -1,6 +1,5 @@
 /*
  * TPCCClient.cpp
- *
  *  Created on: Feb 22, 2016
  *      Author: erfanz
  */
@@ -18,7 +17,7 @@
 
 #define CLASS_NAME "TPCCClient"
 
-TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
+TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uint8_t ibPort)
 : instanceNum_(instanceNum),
   ibPort_(ibPort){
 	srand ((unsigned int)utils::generate_random_seed());		// initialize random seed
@@ -28,15 +27,45 @@ TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	TPCC::NURandC cLoad = TPCC::NURandC::makeRandom(random_);
 	random_.setC(cLoad);
 
-	context_ = new RDMAContext(ibPort_);
+	context_ 		= new RDMAContext(ibPort_);
+	localMemory_ 	= new NewOrderLocalMemory(*context_);
+	sessionState_ 	= new SessionState(homeWarehouseID, (primitive::timestamp_t) 1ULL);
 
-	sessionState.nextCommitOrderID = clientID_;
-	sessionState.nextEpoch_ = (primitive::timestamp_t) 1ULL;
+	// ************************************************
+	//	Connect to Oracle
+	// ************************************************
+	int sockfd;
+	TEST_NZ (utils::establish_tcp_connection(config::TIMESTAMP_SERVER_ADDR, config::TIMESTAMP_SERVER_PORT, &sockfd));
+	DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Connection established to Oracle");
+	oracleContext_ = new OracleContext(sockfd, config::TIMESTAMP_SERVER_PORT, config::TIMESTAMP_SERVER_IB_PORT, *context_);
+
+	// before connecting the queue pairs, we post the RECEIVE job to be ready for the server's message containing its memory locations
+	RDMACommon::post_RECEIVE(
+			oracleContext_->getQP(),
+			oracleContext_->getRemoteMemoryKeys()->getRDMAHandler(),
+			(uintptr_t)oracleContext_->getRemoteMemoryKeys()->getRegion(),
+			(uint32_t)oracleContext_->getRemoteMemoryKeys()->getRegionSizeInByte());
 
 
+	oracleContext_->activateQueuePair(*context_);
+	DEBUG_COUT(CLASS_NAME, __func__, "[Conn] QPed to Oracle");
+
+	TEST_NZ(RDMACommon::poll_completion(context_->getRecvCq()));
+	DEBUG_COUT(CLASS_NAME, __func__, "[Recv] buffers info from Oracle");
+
+	// Set client ID and client cnt
+	clientID_ = oracleContext_->getRemoteMemoryKeys()->getRegion()->client_id;
+	clientCnt_ = oracleContext_->getRemoteMemoryKeys()->getRegion()->client_cnt;
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client is assigned ID = " << clientID_ << " out of " << clientCnt_ << " clients");
+
+	localTimestampVector_	= new RDMARegion<primitive::timestamp_t>(clientCnt_, *context_, IBV_ACCESS_LOCAL_WRITE);
+
+
+
+	// ************************************************
+	//	Connect to Servers
+	// ************************************************
 	for (int i = 0; i < config::SERVER_CNT; i++){
-		// Connect to servers
-		int sockfd;
 		TEST_NZ (utils::establish_tcp_connection(config::SERVER_ADDR[i], config::TCP_PORT[i], &sockfd));
 
 		// build server context
@@ -61,10 +90,30 @@ TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Starting transactions ");
 
+	int abortCnt = 0;
+	int committedCnt = 0;
+	int abortDueToInconsistentSnapshot = 0;
+	int abortDueToUnsuccessfulLock = 0;
 	for (int i=0; i < config::tpcc_settings::NEWORDER_TRANSACTION_CNT; i++){
-		DEBUG_COUT(CLASS_NAME, __func__, "[Info] Transaction " << i << ":");
-		doNewOrder();
+		DEBUG_COUT(CLASS_NAME, __func__, "--------------- [Info] Transaction " << i << ": --------------");
+		TransactionResult trxResult = doNewOrder();
+		if (trxResult.result == TransactionResult::Result::ABORTED){
+			abortCnt++;
+			if (trxResult.reason == TransactionResult::Reason::INCONSISTENT_SNAPSHOT)
+				abortDueToInconsistentSnapshot++;
+			else if (trxResult.reason == TransactionResult::Reason::UNSUCCESSFUL_LOCK)
+				abortDueToUnsuccessfulLock++;
+		}
+		else committedCnt++;
 	}
+
+	double success_rate = (double)committedCnt / config::tpcc_settings::NEWORDER_TRANSACTION_CNT;
+	double inconsistentSnapshotRatio = (abortCnt==0) ? 0 : (double)abortDueToInconsistentSnapshot/abortCnt;
+	double unsuccessfulLockRatio = (abortCnt==0) ? 0 : (double)abortDueToUnsuccessfulLock/abortCnt;
+
+	std::cout << "[Stat] " << committedCnt << " committed, " << abortCnt << " aborted. success rate:	" << success_rate << std::endl;
+	std::cout << "[Stat] Avg abort type I (snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
+	std::cout << "[Stat] Avg abort type II (lock) ratio	" << unsuccessfulLockRatio << std::endl;
 
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client is done, and is ready to destroy its resources!");
@@ -73,14 +122,34 @@ TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Notified server " << i << " it's done");
 		delete dsCtx_[i];
 	}
+
+	TEST_NZ (utils::sock_sync (oracleContext_->getSockFd()));	// just send a dummy char back and forth
+	DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Notified Oracle it's done");
 }
 
-Cart TPCCClient::buildCart(){
-	int w_id = 0;	// TODO
+bool TPCC::TPCCClient::isRecordAccessible(Timestamp &ts){
+	if (ts.isLocked())
+		// item is already locked
+		return false;
+
+	primitive::client_id_t committingClient = ts.getClientID();
+	if (committingClient == clientID_)
+		// regardless of whether the version matches the snapshot or not, the version is installed by the client itself, so is valid
+		// when is it useful? when using adaptive abort rate control.
+		return true;
+	if (ts.getTimestamp() > localTimestampVector_->getRegion()[committingClient])
+		// from a later snapshot, so not useful
+		return false;
+
+	return true;
+}
+
+TPCC::Cart TPCC::TPCCClient::buildCart(){
 	Cart cart;
 
 	// 2.4.1.1 the home warehouse number (W_ID) is constant over the whole measurement interval
-	cart.wID = (uint16_t) random_.number(0, config::tpcc_settings::WAREHOUSE_CNT);
+	// cart.wID = (uint16_t) random_.number(0, config::tpcc_settings::WAREHOUSE_CNT - 1);
+	cart.wID = sessionState_->getHomeWarehouseID();
 
 	// 2.4.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
 	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
@@ -95,18 +164,23 @@ Cart TPCCClient::buildCart(){
 	// 2.4.1.4 A fixed 1% of the New-Order transactions are chosen at random to simulate user data entry errors and exercise the performance of rolling back update transactions.
 	// bool rollback = random_.number(1, 100) == 1;
 
+	std::vector<uint32_t> uniqueItemIDs(ol_cnt);
+	std::set<uint32_t> uniqueIDSets = random_.selectUniqueNonUniformIds(8191, ol_cnt, 0, config::tpcc_settings::ITEMS_CNT - 1);
+	std::copy(uniqueIDSets.begin(), uniqueIDSets.end(), uniqueItemIDs.begin());
+
 	for (int i = 0; i < ol_cnt; ++i) {
 		NewOrderItem noi;
 		// A non-uniform random item number (OL_I_ID) is selected using the NURand (8191,1,100000) function
-		noi.I_ID = (uint32_t) random_.NURand(8191, 0, config::tpcc_settings::ITEMS_CNT - 1); ;
+		//noi.I_ID = (uint32_t) random_.NURand(8191, 0, config::tpcc_settings::ITEMS_CNT - 1);
+		noi.I_ID = uniqueItemIDs.at(i);
 
 		// TPC-C suggests generating a number in range (1, 100) and selecting remote on 1 (clause 2.4.1.5.2)
 		// This provides more variation, and lets us tune the fraction of "remote" transactions.
 		bool remote = random_.number(0, 1) <= config::tpcc_settings::REMOTE_WAREHOUSE_PROB;
 		if (config::tpcc_settings::WAREHOUSE_CNT > 1 && remote) {
-			noi.OL_SUPPLY_W_ID = random_.numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, w_id);
+			noi.OL_SUPPLY_W_ID = (uint16_t) random_.numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, sessionState_->getHomeWarehouseID());
 		} else {
-			noi.OL_SUPPLY_W_ID = w_id;
+			noi.OL_SUPPLY_W_ID = sessionState_->getHomeWarehouseID();
 		}
 
 		// 2.4.1.5.3 A quantity (OL_QUANTITY) is randomly selected within [1 .. 10]
@@ -116,49 +190,188 @@ Cart TPCCClient::buildCart(){
 	return cart;
 }
 
-void TPCCClient::doNewOrder(){
-	Cart cart = buildCart();
-
+TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	time_t timer;
 	std::time(&timer);
+	TransactionResult trxResult;
 
+
+	// ************************************************
+	//	Constructing the shopping cart
+	// ************************************************
+	Cart cart = buildCart();
+	//std::cout << cart;
+
+
+	// ************************************************
+	//	Acquire read timestamp
+	// ************************************************
+	getReadTimestamp();
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " received read snapshot from oracle");
+
+
+	// ************************************************
+	//	Read records in read-set
+	// ************************************************
 	// From Warehouse table, retrieve W_TAX
 	float wTax = retrieveWarehouseTax(cart.wID);
-	std::cout << "wTax: " << wTax << std::endl;
-
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Warehouse " << (int)cart.wID);
+	(void)wTax;
 
 
 	// From District table, retrieve D_TAX
 	float dTax = retrieveDistrictTax(cart.wID, cart.dID);
-	std::cout << "dTax: " << dTax << std::endl;
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved District D_W_ID: " << (int)cart.wID << ", D_ID: " << (int)cart.dID);
+	(void)dTax;
+
+	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
+	TPCC::CustomerVersion *customerV = getCustomerInformation(cart.wID, cart.dID, cart.cID);
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Customer " << customerV->customer);
+
+	std::vector<TPCC::ItemVersion*> items;
+	std::vector<TPCC::StockVersion*> stocks;
+
+	// Retrieve item and stock
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		items.push_back(retrieveItem(olNumber, cart.items.at(olNumber).I_ID, cart.wID));
+		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Item " << items[olNumber]->item);
+
+		stocks.push_back(retrieveStock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID));
+		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Stock " << stocks[olNumber]->stock);
+	}
+
+
+	// ************************************************
+	//	Check whether fetched items are from a consistent snapshot, and not locked
+	// ************************************************
+	// IMPORTANT: This step has to be done AFTER acquiring CTS. It follows that if the snapshot is already overwritten, the transaction has to ABORT and
+	// flip the bit on the TS server.
+	// It is tempting to think that this step can be done BEFORE acquiring the commit timestamp, which would subsequently allow the client to silently abort
+	// (by avoid flipping the bit on TS server if the transaction has to abort). However, this will result in a potential unlimited loop, where the client reads the same snapshot over and over
+	// again, and each time aborts because the snapshot is no longer valid. However, the sweeper cannot make progress because this client aborts silently.
+	// TODO: investigate if the above note is still valid for the new timestamp
+	bool abortFlag = false;
+	if (! isRecordAccessible(customerV->writeTimestamp)){
+		abortFlag = true;
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] (client " << clientID_ << ") Customer " << (int)customerV->customer.C_ID
+				<< " (" << customerV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+	}
+	else{
+		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+			if (! isRecordAccessible(items[olNumber]->writeTimestamp)){
+				abortFlag = true;
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] (client " << clientID_ << ") item " << (int)items[olNumber]->item.I_ID
+						<< " (" << items[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+			}
+			else if (! isRecordAccessible(stocks[olNumber]->writeTimestamp)){
+				abortFlag = true;
+				DEBUG_COUT (CLASS_NAME, __func__, "[Info] (client " << clientID_ << ") stock " << (int)stocks[olNumber]->stock.S_I_ID
+						<< " (" << stocks[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+			}
+		}
+	}
+
+	if (abortFlag == true) {
+		DEBUG_COUT (CLASS_NAME, __func__, "(Client " << clientID_ << ") NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
+		return trxResult;
+	}
+	else DEBUG_COUT (CLASS_NAME, __func__, "[Info] (Client " << clientID_ << ") All received versions are consistent with READ snapshot, and all are unlocked");
+
+
+	// ************************************************
+	//	Acquire Commit timestamp
+	// ************************************************
+	primitive::timestamp_t cts = getNewCommitTimestamp();
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " acquired commit timestamp " << cts);
+
+	primitive::lock_status_t 	lockStatus = 1;
+	primitive::version_offset_t	versionOffset = 0;
+	primitive::client_id_t		clientID = clientID_;
+	Timestamp lockTS (lockStatus, versionOffset, clientID, cts);
+
+
+	// ************************************************
+	// Acquire locks for records in write-set
+	// ************************************************
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		lockStock(olNumber, cart.items.at(olNumber).I_ID, cart.wID, stocks.at(olNumber)->writeTimestamp, lockTS);
+	}
+
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+		// Byte swapping, since values read by atomic operations are in Big Endian order
+		//Timestamp& ts = localMemory_->getLockRegion()->getRegion()[olNumber];
+		localMemory_->getLockRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getLockRegion()->getRegion()[olNumber]);
+		//Timestamp correctlyOrderedTS(ts.toUUL());
+		//ts.copy(correctlyOrderedTS);
+	}
+
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " received the results for all the locks");
+
+	// checks if locks are successful
+	std::vector<uint8_t> unsuccesfulOrderLines;
+	std::vector<uint8_t> succesfulOrderLines;
+
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		Timestamp existingLock(localMemory_->getLockRegion()->getRegion()[olNumber]);
+		Timestamp &expectedLock = stocks.at(olNumber)->writeTimestamp;
+		if (! existingLock.isEqual(expectedLock)){
+			unsuccesfulOrderLines.push_back(olNumber);
+			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << "'s attemp to lock item " << (int)cart.items.at(olNumber).I_ID << " was NOT successful "
+					<< "(expected: " << expectedLock << ", existing: " << existingLock << ")");
+		}
+		else {
+			succesfulOrderLines.push_back(olNumber);
+			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << "'s attemp to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful");
+		}
+	}
+
+	if (unsuccesfulOrderLines.size() != 0){
+		// some locks couldn't get acquired. must first release the successful ones, then abort
+		for (auto const& olNumber: succesfulOrderLines){
+			revertStockLock(olNumber, cart.items.at(olNumber).I_ID, cart.wID);
+		}
+		for (auto const& olNumber: succesfulOrderLines){
+			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] (Client " << clientID_ << ") Lock reverted on stock " << stocks[olNumber]->stock);
+			(void)olNumber;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
+
+		}
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] (Client " << clientID_ << ") Lock on all items could not be acquired --> ** ABORT **");
+		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
+		return trxResult;
+	}
+
+	// ************************************************
+	//	Append old version to the versions list, and update the pointers list
+	// ************************************************
+
+
+	// ************************************************
+	// Insert and unlock new records in write-set
+	// ************************************************
+	// insert a new row into New-Order and Order table.
+	// O_CARRIER_ID is set to a null value. If the order includes only home order-lines, then O_ALL_LOCAL is set to 1, otherwise O_ALL_LOCAL is set to 0.
+	lockStatus = 0;
+	versionOffset = 0;
+	clientID = clientID_;
+	Timestamp unlockTS(lockStatus, versionOffset, clientID, cts);
 
 	// In District table, increment the next available order number for the district D_NEXT_O_ID
 	uint32_t oID = retrieveAndIncrementDistrictNextOID(cart.wID, cart.dID);
-	std::cout << "oID: " << oID << std::endl;
 
-	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
-	char		cLast[16];
-	float		cDiscount;
-	char		cCredit[2];
-	getCustomerInformation(cart.wID, cart.dID, cart.cID, cLast, cDiscount, cCredit);
-	std::cout << "cLast: " << cLast << std::endl;
-	std::cout << "cDiscount: " << cDiscount << std::endl;
-	std::cout << "cCredit: " << cCredit << std::endl;
+	TPCC::OrderVersion* orderV = insertIntoOrder(oID, cart, timer, unlockTS);
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted Order " << orderV->order);
+	(void)orderV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 
 
-	// insert a new row into New-Order and Order table.
-	// O_CARRIER_ID is set to a null value. If the order includes only home order-lines, then O_ALL_LOCAL is set to 1, otherwise O_ALL_LOCAL is set to 0.
-	// The number of items, O_OL_CNT, is computed to match ol_cnt
-	primitive::lock_status_t 		lockStatus = 1;
-	primitive::version_offset_t		versionOffset = 0;
-	primitive::client_id_t			clientID = clientID_;
-	const primitive::timestamp_t	timestamp = sessionState.nextEpoch_;
-	Timestamp ts (lockStatus, versionOffset, clientID, timestamp);
-	TPCC::OrderVersion* orderV = insertIntoOrder(oID, cart, timer, ts);
-	TPCC::NewOrderVersion* newOrderV = insertIntoNewOrder(oID, cart.wID, cart.dID, ts);
-	(void) orderV;
-	(void) newOrderV;
-
+	TPCC::NewOrderVersion* newOrderV = insertIntoNewOrder(oID, cart.wID, cart.dID, unlockTS);
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted NewOrder " << newOrderV->newOrder);
+	(void)newOrderV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 
 
 	// For each O_OL_CNT item on the order:
@@ -169,41 +382,101 @@ void TPCCClient::doNewOrder(){
 	// |   S_QUANTITY is updated to (S_QUANTITY - OL_QUANTITY)+91. S_YTD is increased by OL_QUANTITY and S_ORDER_CNT is incremented by 1.
 	// |   If the order-line is remote, then S_REMOTE_CNT is incremented by 1.
 	// |
-	// |-- The amount for the item in the order (OL_AMOUNT) is computed as: OL_QUANTITY * I_PRICE
-	// |
 	// |-- The strings in I_DATA and S_DATA are examined. If they both include the string "ORIGINAL",
 	// |   the brand-generic field for that item is set to "B", otherwise, the brand-generic field is set to "G".
 	// |
 	// |-- A new row is inserted into the ORDER-LINE table to reflect the item on the order. OL_DELIVERY_D is set to a null value, OL_NUMBER is set to a unique value within
 	// |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		TPCC::Item *item = retrieveItem(cart.items.at(olNumber).I_ID, cart.wID);
-		TPCC::StockVersion *stockV = retrieveStock(cart.items.at(olNumber).I_ID, cart.wID);
+	// |   The amount for the item in the order (OL_AMOUNT) is computed as: OL_QUANTITY * I_PRICE
 
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 		bool remote = cart.items.at(olNumber).OL_SUPPLY_W_ID == 0;	// TODO
 
-		stockV->writeTimestamp.copy(ts);
-		if (stockV->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY >= 10)
-			stockV->stock.S_QUANTITY = (uint16_t)(stockV->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY);
+		stocks[olNumber]->writeTimestamp.copy(unlockTS);
+		if (stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY >= 10)
+			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY);
 		else
-			stockV->stock.S_QUANTITY = (uint16_t)(stockV->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY + 91);
-		stockV->stock.S_YTD = (uint32_t)(stockV->stock.S_YTD + cart.items.at(olNumber).OL_QUANTITY);
-		stockV->stock.S_ORDER_CNT = (uint16_t)(stockV->stock.S_ORDER_CNT + 1);
+			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY + 91);
+		stocks[olNumber]->stock.S_YTD = (uint32_t)(stocks[olNumber]->stock.S_YTD + cart.items.at(olNumber).OL_QUANTITY);
+		stocks[olNumber]->stock.S_ORDER_CNT = (uint16_t)(stocks[olNumber]->stock.S_ORDER_CNT + 1);
 		if (remote)
-			stockV->stock.S_REMOTE_CNT++;
+			stocks[olNumber]->stock.S_REMOTE_CNT++;
 
-		updateStock(stockV);
-		insertIntoOrderLine(olNumber, oID, cart, cart.items.at(olNumber), item, stockV, ts);
+		updateStock(olNumber, stocks[olNumber]);
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " updated stock " << stocks[olNumber]->stock);
+
+		TPCC::OrderLineVersion *orderLineV = insertIntoOrderLine(olNumber, oID, cart, cart.items.at(olNumber), items[olNumber], stocks[olNumber], unlockTS);
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted OrderLine " << orderLineV->orderLine);
+		(void)orderLineV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
+
 	}
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << "  successfully installed and unlocked all records");
+
+
+	// ************************************************
+	//	Submit the result to the oracle
+	// ************************************************
+	trxResult.result = TransactionResult::Result::COMMITTED;
+	trxResult.reason = TransactionResult::Reason::SUCCESS;
+	trxResult.cts = cts;
+	submitResult(trxResult);
+	DEBUG_COUT (CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << " sent trx result for CTS " << cts << " to the Oracle");
+
+	return trxResult;
 }
 
-ServerContext* TPCCClient::getServerContext(uint16_t wID){
+TPCC::ServerContext* TPCC::TPCCClient::getServerContext(uint16_t wID){
 	(void) wID;
 	return dsCtx_[0];
 }
 
+void TPCC::TPCCClient::getReadTimestamp() {
+	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_.addr;
+	uint32_t size = (uint32_t)(oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.regionSize_ * sizeof(primitive::timestamp_t));
 
-float TPCCClient::retrieveWarehouseTax(uint16_t wID){
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_READ,
+			oracleContext_->getQP(),
+			localTimestampVector_->getRDMAHandler(),
+			(uintptr_t)localTimestampVector_->getRegion(),
+			&oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			true));
+
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+}
+
+void TPCC::TPCCClient::submitResult(TPCC::TransactionResult trxResult){
+	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
+	size_t tableOffset = (size_t)(clientID_ * sizeof(primitive::timestamp_t));		// offset of client's cts in timestampVector
+
+	// The remote address of the timestamp
+	primitive::timestamp_t *writeAddress = (primitive::timestamp_t*)(tableOffset + (uint64_t)oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_.addr);
+
+	uint32_t size = (uint32_t) sizeof(primitive::timestamp_t);
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			oracleContext_->getQP(),
+			localTimestampVector_->getRDMAHandler(),
+			(uintptr_t)&localTimestampVector_->getRegion()[clientID_],
+			&oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			true));
+
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+}
+
+primitive::timestamp_t TPCC::TPCCClient::getNewCommitTimestamp() {
+	primitive::timestamp_t output;
+	output = (primitive::timestamp_t)(sessionState_->getNextEpoch() * clientCnt_ + clientID_);
+	sessionState_->advanceEpoch();
+	return output;
+}
+
+float TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)(wID * sizeof(TPCC::WarehouseVersion));				// offset of WarehouseVersion in WarehouseTable
@@ -222,18 +495,18 @@ float TPCCClient::retrieveWarehouseTax(uint16_t wID){
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
-			serverContext->getLocalWarehouseHead()->getRDMAHandler(),
-			(uintptr_t)&(serverContext->getLocalWarehouseHead()->getRegion()->warehouse.W_TAX),
+			localMemory_->getWarehouseHead()->getRDMAHandler(),
+			(uintptr_t)&(localMemory_->getWarehouseHead()->getRegion()->warehouse.W_TAX),
 			&serverContext->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			true));
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	return serverContext->getLocalWarehouseHead()->getRegion()->warehouse.W_TAX;
+	return localMemory_->getWarehouseHead()->getRegion()->warehouse.W_TAX;
 }
 
-float TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
+float TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
@@ -252,18 +525,18 @@ float TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
-			serverContext->getLocalDistrictHead()->getRDMAHandler(),
-			(uintptr_t)&(serverContext->getLocalDistrictHead()->getRegion()->district.D_TAX),
+			localMemory_->getDistrictHead()->getRDMAHandler(),
+			(uintptr_t)&(localMemory_->getDistrictHead()->getRegion()->district.D_TAX),
 			&serverContext->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			true));
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	return serverContext->getLocalDistrictHead()->getRegion()->district.D_TAX;
+	return localMemory_->getDistrictHead()->getRegion()->district.D_TAX;
 }
 
-uint32_t TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
+uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
@@ -278,12 +551,12 @@ uint32_t TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t d
 			+ ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
-	size_t size = sizeof(serverContext->getLocalDistrictHead()->getRegion()->district.D_NEXT_O_ID);
+	size_t size = sizeof(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
 
 	TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
 			serverContext->getQP(),
-			serverContext->getLocalDistrictHead()->getRDMAHandler(),
-			(uintptr_t)&(serverContext->getLocalDistrictHead()->getRegion()->district.D_NEXT_O_ID),
+			localMemory_->getDistrictHead()->getRDMAHandler(),
+			(uintptr_t)&(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID),
 			&serverContext->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			(uint64_t)1ULL,
@@ -291,31 +564,26 @@ uint32_t TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t d
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// Byte swapping, since values read by atomic operations are in Big Endian order
-	return (uint32_t) utils::bigEndianToHost(serverContext->getLocalDistrictHead()->getRegion()->district.D_NEXT_O_ID);
+	return (uint32_t) utils::bigEndianToHost(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
 }
 
-
-void TPCCClient::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID, char* out_cLast, float &out_cDiscount, char *out_cCredit){
+TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)(((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
 			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID)
 			* sizeof(TPCC::CustomerVersion));										// offset of CustomerVersion in CustomerTable
-	size_t customerOffset = (size_t)TPCC::CustomerVersion::getOffsetOfCustomer();	// offset of Customer in CustomerVersion
 
 	// The remote address to read the customer info
-	TPCC::Customer *lookupAddress =  (TPCC::Customer *)(
-			tableOffset
-			+ customerOffset
-			+ ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions.rdmaHandler_.addr));
+	TPCC::CustomerVersion *lookupAddress =  (TPCC::CustomerVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
-	uint32_t size = (uint32_t) sizeof(TPCC::Customer);
+	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
-			serverContext->getLocalCustomerHead()->getRDMAHandler(),
-			(uintptr_t)&(serverContext->getLocalCustomerHead()->getRegion()->customer),
+			localMemory_->getCustomerHead()->getRDMAHandler(),
+			(uintptr_t)localMemory_->getCustomerHead()->getRegion(),
 			&serverContext->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
@@ -324,16 +592,13 @@ void TPCCClient::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID,
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// results are ready. now filling in the output arguments
-	TPCC::Customer &customer = serverContext->getLocalCustomerHead()->getRegion()->customer;
-	std::memcpy(out_cLast, customer.C_LAST, sizeof(customer.C_LAST));
-	out_cDiscount = customer.C_DISCOUNT;
-	std::memcpy(out_cCredit, customer.C_CREDIT, sizeof(customer.C_CREDIT));
+	return localMemory_->getCustomerHead()->getRegion();
 }
 
-TPCC::OrderVersion* TPCCClient::insertIntoOrder(uint32_t oID, Cart &cart, time_t timer, Timestamp writeTimestamp){
+TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &cart, time_t timer, Timestamp writeTimestamp){
 	ServerContext* serverContext = getServerContext(cart.wID);
 
-	TPCC::OrderVersion *ov = serverContext->getLocalOrderHead()->getRegion();
+	TPCC::OrderVersion *ov = localMemory_->getOrderHead()->getRegion();
 
 	ov->writeTimestamp.copy(writeTimestamp);
 
@@ -357,7 +622,7 @@ TPCC::OrderVersion* TPCCClient::insertIntoOrder(uint32_t oID, Cart &cart, time_t
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
-			serverContext->getLocalOrderHead()->getRDMAHandler(),
+			localMemory_->getOrderHead()->getRDMAHandler(),
 			(uintptr_t)ov,
 			&serverContext->getRemoteMemoryKeys()->getRegion()->orderTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
@@ -369,9 +634,9 @@ TPCC::OrderVersion* TPCCClient::insertIntoOrder(uint32_t oID, Cart &cart, time_t
 	return ov;
 }
 
-TPCC::NewOrderVersion* TPCCClient::insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp){
+TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp){
 	ServerContext* serverContext = getServerContext(wID);
-	TPCC::NewOrderVersion *nov = serverContext->getLocalNewOrderHead()->getRegion();
+	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
 
 	nov->writeTimestamp.copy(writeTimestamp);
 
@@ -390,7 +655,7 @@ TPCC::NewOrderVersion* TPCCClient::insertIntoNewOrder(uint32_t oID, uint16_t wID
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
-			serverContext->getLocalNewOrderHead()->getRDMAHandler(),
+			localMemory_->getNewOrderHead()->getRDMAHandler(),
 			(uintptr_t)nov,
 			&serverContext->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
@@ -402,22 +667,22 @@ TPCC::NewOrderVersion* TPCCClient::insertIntoNewOrder(uint32_t oID, uint16_t wID
 	return nov;
 }
 
-TPCC::Item* TPCCClient::retrieveItem(uint32_t iID, uint16_t wID){
-	ServerContext* serverContext = getServerContext(wID);
+TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID){
+	TPCC::ItemVersion &itemV = localMemory_->getItemHead()->getRegion()[olNumber];
 
+	ServerContext* serverContext = getServerContext(wID);
 	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
-	size_t itemOffset = (size_t)TPCC::ItemVersion::getOffsetOfItem();	// offset of Item in ItemVersion
 
 	// The remote address to read the item info
-	TPCC::Item *lookupAddress =  (TPCC::Item *)(tableOffset + itemOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_.addr));
+	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::Item);
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
-			serverContext->getLocalItemHead()->getRDMAHandler(),
-			(uintptr_t)&(serverContext->getLocalItemHead()->getRegion()->item),
+			localMemory_->getItemHead()->getRDMAHandler(),
+			(uintptr_t)&itemV,
 			&serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
@@ -426,12 +691,13 @@ TPCC::Item* TPCCClient::retrieveItem(uint32_t iID, uint16_t wID){
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// results are ready. now filling in the output arguments
-	return &serverContext->getLocalItemHead()->getRegion()->item;
+	return &itemV;
 }
 
-TPCC::StockVersion* TPCCClient::retrieveStock(uint32_t iID, uint16_t wID){
-	ServerContext* serverContext = getServerContext(wID);
+TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID){
+	TPCC::StockVersion &stockV = localMemory_->getStockHead()->getRegion()[olNumber];
 
+	ServerContext* serverContext = getServerContext(wID);
 	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 
 	// The remote address to read the item info
@@ -442,8 +708,8 @@ TPCC::StockVersion* TPCCClient::retrieveStock(uint32_t iID, uint16_t wID){
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
-			serverContext->getLocalStockHead()->getRDMAHandler(),
-			(uintptr_t)serverContext->getLocalStockHead()->getRegion(),
+			localMemory_->getStockHead()->getRDMAHandler(),
+			(uintptr_t)&stockV,
 			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
@@ -452,7 +718,7 @@ TPCC::StockVersion* TPCCClient::retrieveStock(uint32_t iID, uint16_t wID){
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// results are ready. now filling in the output arguments
-	return serverContext->getLocalStockHead()->getRegion();
+	return &stockV;
 }
 
 /***
@@ -460,7 +726,7 @@ TPCC::StockVersion* TPCCClient::retrieveStock(uint32_t iID, uint16_t wID){
  * S_QUANTITY is updated to (S_QUANTITY - OL_QUANTITY)+91. S_YTD is increased by OL_QUANTITY and S_ORDER_CNT is incremented by 1.
  * If the order-line is remote, then S_REMOTE_CNT is incremented by 1.
  */
-error::ErrorType TPCCClient::updateStock(TPCC::StockVersion *stockV){
+error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV){
 	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
 
 	size_t tableOffset = (size_t)((stockV->stock.S_W_ID * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -473,8 +739,8 @@ error::ErrorType TPCCClient::updateStock(TPCC::StockVersion *stockV){
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
-			serverContext->getLocalStockHead()->getRDMAHandler(),
-			(uintptr_t)serverContext->getLocalStockHead()->getRegion(),
+			localMemory_->getStockHead()->getRDMAHandler(),
+			(uintptr_t)&localMemory_->getStockHead()->getRegion()[olNumber],
 			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
@@ -493,22 +759,23 @@ error::ErrorType TPCCClient::updateStock(TPCC::StockVersion *stockV){
 // |-- A new row is inserted into the ORDER-LINE table to reflect the item on the order. OL_DELIVERY_D is set to a null value, OL_NUMBER is set to a unique value within
 // |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
 
-TPCC::OrderLineVersion* TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::Item *item, TPCC::StockVersion *stockV, Timestamp &ts){
+TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts){
 	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
-	TPCC::OrderLineVersion *olv = serverContext->getLocalOrderLineHead()->getRegion();
+	TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
 
-	olv->writeTimestamp.copy(ts);
+	olv.writeTimestamp.copy(ts);
 
-	olv->orderLine.OL_O_ID 			= oID;
-	olv->orderLine.OL_D_ID 			= cart.dID;
-	olv->orderLine.OL_W_ID 			= cart.wID;
-	olv->orderLine.OL_NUMBER 		= olNumber;
-	olv->orderLine.OL_I_ID 			= item->I_ID;
-	olv->orderLine.OL_SUPPLY_W_ID 	= newOrderItem.OL_SUPPLY_W_ID;
-	olv->orderLine.OL_DELIVERY_D 	= (time_t)0;
-	olv->orderLine.OL_QUANTITY 		=  newOrderItem.OL_QUANTITY;
-	olv->orderLine.OL_AMOUNT 		= (float)newOrderItem.OL_QUANTITY * item->I_PRICE;
-	std::memcpy(olv->orderLine.OL_DIST_INFO, stockV->stock.S_DIST[cart.dID], 25);
+	olv.orderLine.OL_O_ID 			= oID;
+	olv.orderLine.OL_D_ID 			= cart.dID;
+	olv.orderLine.OL_W_ID 			= cart.wID;
+	olv.orderLine.OL_NUMBER 		= olNumber;
+	olv.orderLine.OL_I_ID 			= itemV->item.I_ID;
+	olv.orderLine.OL_SUPPLY_W_ID 	= newOrderItem.OL_SUPPLY_W_ID;
+	olv.orderLine.OL_DELIVERY_D 	= (time_t)0;
+	olv.orderLine.OL_QUANTITY 		=  newOrderItem.OL_QUANTITY;
+	olv.orderLine.OL_AMOUNT 		= (float)newOrderItem.OL_QUANTITY * itemV->item.I_PRICE;
+	std::memcpy(olv.orderLine.OL_DIST_INFO, stockV->stock.S_DIST[cart.dID], 25);
+
 	size_t tableOffset = (size_t)(
 			(
 					(cart.wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
@@ -526,8 +793,8 @@ TPCC::OrderLineVersion* TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
-			serverContext->getLocalOrderLineHead()->getRDMAHandler(),
-			(uintptr_t)serverContext->getLocalOrderLineHead()->getRegion(),
+			localMemory_->getOrderLineHead()->getRDMAHandler(),
+			(uintptr_t)&olv,
 			&serverContext->getRemoteMemoryKeys()->getRegion()->orderLineTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
@@ -535,10 +802,58 @@ TPCC::OrderLineVersion* TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
-	return serverContext->getLocalOrderLineHead()->getRegion();
+	return &olv;
 }
 
-TPCCClient::~TPCCClient(){
+void TPCC::TPCCClient::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS){
+	ServerContext* serverContext = getServerContext(wID);
+
+	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
+
+	// The remote address of the timestamp
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			serverContext->getQP(),
+			localMemory_->getLockRegion()->getRDMAHandler(),
+			(uintptr_t)&localMemory_->getLockRegion()->getRegion()[olNumber],
+			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			oldTS.toUUL(),
+			newTS.toUUL()));
+}
+
+void TPCC::TPCCClient::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID){
+	ServerContext* serverContext = getServerContext(wID);
+
+	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
+
+	// The remote address of the timestamp
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			serverContext->getQP(),
+			localMemory_->getStockHead()->getRDMAHandler(),
+			(uintptr_t)&localMemory_->getStockHead()->getRegion()[olNumber].writeTimestamp,
+			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			true));
+}
+
+TPCC::TPCCClient::~TPCCClient(){
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Destructor called");
+	delete localMemory_;
+	delete localTimestampVector_;
+	delete oracleContext_;
 	delete context_;
+	delete sessionState_;
 }

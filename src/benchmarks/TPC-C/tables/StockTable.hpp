@@ -59,12 +59,11 @@ public:
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const Stock& s) {
-		os << "NO_O_ID:" << (int)s.S_I_ID << "|S_W_ID:" << (int)s.S_W_ID << "|S_Quant:" << (int)s.S_QUANTITY;
+		os << "S_I_ID:" << (int)s.S_I_ID << "|S_W_ID:" << (int)s.S_W_ID;
 		return os;
 	}
 
 };
-
 
 class StockVersion{
 public:
@@ -74,7 +73,25 @@ public:
 	static size_t getOffsetOfStock(){
 		return offsetof(StockVersion, stock);
 	}
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(StockVersion, writeTimestamp);
+	}
 };
+
+//class StockVersion{
+//public:
+//	Stock stock;
+//	Timestamp writeTimestamp;
+//
+//	static size_t getOffsetOfStock(){
+//		return offsetof(StockVersion, stock);
+//	}
+//
+//	static size_t getOffsetOfTimestamp(){
+//		return offsetof(StockVersion, writeTimestamp);
+//	}
+//};
 
 class StockTable{
 public:

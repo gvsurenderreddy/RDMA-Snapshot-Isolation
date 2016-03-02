@@ -16,7 +16,7 @@
 #define CLASS_NAME	"TPCCDB"
 
 
-TPCCDB::TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
+TPCC::TPCCDB::TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
 itemCnt_(itemCnt),
 customerCnt_(customerCnt),
 warehouseCnt_(warehouseCnt),
@@ -34,7 +34,7 @@ newOrderTable(newOrderCnt, versionNum, context, mrFlags_) {
 	;
 }
 
-void TPCCDB::populate() {
+void TPCC::TPCCDB::populate() {
 	Timestamp initialTS(0,0,0,0);
 
 	// first, populate the item table
@@ -87,7 +87,7 @@ void TPCCDB::populate() {
 	}
 }
 
-void TPCCDB::getMemoryKeys(ServerMemoryKeys *k){
+void TPCC::TPCCDB::getMemoryKeys(TPCC::ServerMemoryKeys *k){
 	customerTable.getMemoryHandler(k->customerTableHeadVersions, k->customerTabletsList, k->customerTableOlderVersions);
 	districtTable.getMemoryHandler(k->districtTableHeadVersions, k->districtTabletsList, k->districtTableOlderVersions);
 	//historyTable.getMemoryHandler(k->historyTableHeadVersions, k->historyTabletsList, k->historyTableOlderVersions);
@@ -100,7 +100,7 @@ void TPCCDB::getMemoryKeys(ServerMemoryKeys *k){
 
 }
 
-TPCCDB::~TPCCDB(){
+TPCC::TPCCDB::~TPCCDB(){
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called");
 }
 

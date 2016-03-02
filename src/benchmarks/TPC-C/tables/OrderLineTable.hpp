@@ -55,7 +55,7 @@ public:
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const OrderLine& ol) {
-		os << "NO_O_ID:" << (int)ol.OL_O_ID << "|OL_D_ID:" << (int)ol.OL_D_ID << "|OL_W_ID:" << (int)ol.OL_W_ID << "|OL_I_ID:" << (int)ol.OL_I_ID;
+		os << "NO_O_ID:" << (int)ol.OL_O_ID << "|OL_D_ID:" << (int)ol.OL_D_ID << "|OL_W_ID:" << (int)ol.OL_W_ID << "|OL_NUMBER:" << (int)ol.OL_NUMBER << "|OL_I_ID:" << (int)ol.OL_I_ID;
 		return os;
 	}
 

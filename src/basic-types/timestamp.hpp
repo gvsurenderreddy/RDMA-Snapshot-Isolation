@@ -28,6 +28,7 @@ public:
 	const primitive::timestamp_t getTimestamp() const;
 	const primitive::version_offset_t getVersionOffset() const;
 	const primitive::lock_status_t getLockStatus() const;
+	const bool isLocked() const;
 	void setClientID(const primitive::client_id_t clientID);
 	void setTimestamp(const primitive::timestamp_t timestamp);
 	void setAll(const primitive::lock_status_t lockStatus, const primitive::version_offset_t versionOffset, const primitive::client_id_t clientID, const primitive::timestamp_t timestamp);

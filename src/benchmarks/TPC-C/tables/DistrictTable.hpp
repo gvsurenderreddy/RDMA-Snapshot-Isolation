@@ -39,8 +39,7 @@ class District{
 		    D_W_ID = wID;
 		    D_TAX = makeTax(random);
 		    D_YTD = DISTRICT_INITIAL_YTD;
-		    //D_NEXT_O_ID = config::tpcc_settings::CUSTOMER_PER_DISTRICT + 1;
-		    D_NEXT_O_ID = 8;
+		    D_NEXT_O_ID = config::tpcc_settings::CUSTOMER_PER_DISTRICT + 1;
 		    random.astring(D_NAME, DISTRICT_MIN_NAME, DISTRICT_MAX_NAME);
 		    random.astring(D_STREET_1, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
 		    random.astring(D_STREET_2, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);

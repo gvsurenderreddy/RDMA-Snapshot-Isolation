@@ -176,9 +176,9 @@ int utils::server_socket_setup(int *server_sockfd, int backlog) {
 	return 0;
 }
 
-void utils::die(const char *reason)
+void utils::die(const char *reason, const char* filename, int lineNumber)
 {
-	std::cerr << reason << std::endl;
+	std::cerr << reason << ", at Line: " << lineNumber << " in file: " << filename << std::endl ;
 	std::cerr << "Errno: " << strerror(errno) << std::endl;
 	exit(EXIT_FAILURE);
 }

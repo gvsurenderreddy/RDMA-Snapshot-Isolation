@@ -50,6 +50,10 @@ const primitive::lock_status_t Timestamp::getLockStatus() const {
 	return lockStatus_;
 }
 
+const bool Timestamp::isLocked() const{
+	return lockStatus_ != 0;
+}
+
 void Timestamp::setClientID(const primitive::client_id_t clientID) {
 	this->clientID_ = clientID;
 }

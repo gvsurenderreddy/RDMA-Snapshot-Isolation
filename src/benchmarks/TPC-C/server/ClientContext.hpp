@@ -10,6 +10,7 @@
 
 #include "../../../rdma-region/RDMAContext.hpp"
 
+namespace TPCC{
 class ClientContext {
 public:
 	int 			sockfd_;
@@ -21,5 +22,5 @@ public:
 	void activateQueuePair(RDMAContext &context);
 	~ClientContext();
 };
-
+}	// namespace TPCC
 #endif /* SRC_BENCHMARKS_TPC_C_SERVER_CLIENTCONTEXT_HPP_ */

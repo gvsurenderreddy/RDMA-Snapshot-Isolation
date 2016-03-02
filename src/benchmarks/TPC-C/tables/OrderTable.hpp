@@ -50,7 +50,7 @@ public:
 
 	friend std::ostream& operator<<(std::ostream& os, const Order& o) {
 		os << "O_ID:" << (int)o.O_ID << "|O_D_ID:" << (int)o.O_D_ID << "|O_W_ID:"
-				<< (int)o.O_W_ID << "|O_C_ID:" << (int)o.O_C_ID << "|O_OL_CNT:" << o.O_OL_CNT;
+				<< (int)o.O_W_ID << "|O_C_ID:" << (int)o.O_C_ID << "|O_OL_CNT:" << (int)o.O_OL_CNT;
 		return os;
 	}
 };

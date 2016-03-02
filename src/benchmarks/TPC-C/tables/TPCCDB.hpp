@@ -23,6 +23,7 @@
 
 #include <ctime>
 
+namespace TPCC{
 class TPCCDB {
 private:
 	size_t itemCnt_;
@@ -49,5 +50,6 @@ public:
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying
 	~TPCCDB();
 };
+}	// namespace TPCC
 
 #endif /* SRC_BENCHMARKS_TPCCDB_HPP_ */

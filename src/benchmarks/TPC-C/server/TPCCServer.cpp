@@ -20,7 +20,7 @@ using namespace config::tpcc_settings;
 #define CLASS_NAME	"TPCCServer"
 
 
-TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt)
+TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt)
 : serverNum_(serverNum),
   instanceNum_(instanceNum),
   clientsCnt_(clientsCnt),
@@ -35,19 +35,17 @@ TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t client
 
 	context_ = new RDMAContext(ib_port_);
 
+	size_t warehouseCnt = WAREHOUSE_PER_SERVER;
+	size_t districtCnt = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t customerCnt = CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t orderCnt = ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t orderLineCnt = tpcc_settings::ORDER_MAX_OL_CNT * ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t newOrderCnt = NEWORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t stockCnt = STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t itemCnt = ITEMS_CNT;
+	size_t versionNum = VERSION_NUM;
 
-	db = new TPCCDB(
-			WAREHOUSE_PER_SERVER,
-			DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			tpcc_settings::ORDER_MAX_OL_CNT * ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			NEWORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER,
-			ITEMS_CNT,
-			VERSION_NUM,
-			random,
-			*context_);
+	db = new TPCCDB( warehouseCnt, districtCnt, customerCnt, orderCnt, orderLineCnt, newOrderCnt, stockCnt, itemCnt, versionNum, random, *context_);
 	db->populate();
 
 	// Put the memory keys into the message that is to be sent to clients
@@ -115,7 +113,7 @@ TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t client
 	std::cout << "[Info] Server's ready to gracefully get destroyed" << std::endl;
 }
 
-TPCCServer::~TPCCServer() {
+TPCC::TPCCServer::~TPCCServer() {
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete memoryKeysMessage_;
 	delete db;
