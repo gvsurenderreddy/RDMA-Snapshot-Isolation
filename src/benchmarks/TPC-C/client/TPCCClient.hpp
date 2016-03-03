@@ -75,21 +75,20 @@ private:
 	TPCC::TransactionResult doNewOrder();
 	Cart buildCart();
 	ServerContext* getServerContext(uint16_t wID);
+	bool isRecordAccessible(Timestamp &ts);
 	void getReadTimestamp();
 	void submitResult(TPCC::TransactionResult trxResult);
 	primitive::timestamp_t getNewCommitTimestamp();
-	float retrieveWarehouseTax(uint16_t wID);
-	float retrieveDistrictTax(uint16_t wID, uint8_t dID);
+	void retrieveWarehouseTax(uint16_t wID);
+	void retrieveDistrictTax(uint16_t wID, uint8_t dID);
 	uint32_t retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID);
-	bool isRecordAccessible(Timestamp &ts);
-
 	TPCC::CustomerVersion* getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID);
+	TPCC::ItemVersion *retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID);
+	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled);
 	TPCC::OrderVersion* insertIntoOrder(uint32_t oID, Cart &cart, time_t timer, Timestamp writeTimestamp);
 	TPCC::NewOrderVersion* insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp);
-	TPCC::ItemVersion *retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID);
-	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID);
 	error::ErrorType updateStock(uint8_t olNumber, TPCC::StockVersion *stockV);
-	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts);
+	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled);
 	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS);
 	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);
 

@@ -12,6 +12,8 @@
 #include <infiniband/verbs.h>
 #include <string>
 #include <vector>
+#include <time.h>		// for struct timespec
+
 
 
 
@@ -94,6 +96,10 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 	int committedCnt = 0;
 	int abortDueToInconsistentSnapshot = 0;
 	int abortDueToUnsuccessfulLock = 0;
+	struct timespec firstRequestTime, lastRequestTime;
+
+	clock_gettime(CLOCK_REALTIME, &firstRequestTime);
+
 	for (int i=0; i < config::tpcc_settings::NEWORDER_TRANSACTION_CNT; i++){
 		DEBUG_COUT(CLASS_NAME, __func__, "--------------- [Info] Transaction " << i << ": --------------");
 		TransactionResult trxResult = doNewOrder();
@@ -107,14 +113,21 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 		else committedCnt++;
 	}
 
+	clock_gettime(CLOCK_REALTIME, &lastRequestTime);
+
+	double microElapsedTime = ( (double)( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + (double)( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
+
+
 	double success_rate = (double)committedCnt / config::tpcc_settings::NEWORDER_TRANSACTION_CNT;
 	double inconsistentSnapshotRatio = (abortCnt==0) ? 0 : (double)abortDueToInconsistentSnapshot/abortCnt;
 	double unsuccessfulLockRatio = (abortCnt==0) ? 0 : (double)abortDueToUnsuccessfulLock/abortCnt;
+	double trxsPerSec = (double)(committedCnt / (double)(microElapsedTime / (1000 * 1000) ));
+
 
 	std::cout << "[Stat] " << committedCnt << " committed, " << abortCnt << " aborted. success rate:	" << success_rate << std::endl;
 	std::cout << "[Stat] Avg abort type I (snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
 	std::cout << "[Stat] Avg abort type II (lock) ratio	" << unsuccessfulLockRatio << std::endl;
-
+	std::cout << "[Stat] Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client is done, and is ready to destroy its resources!");
 	for (int i = 0; i < config::SERVER_CNT; i++){
@@ -214,15 +227,15 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	//	Read records in read-set
 	// ************************************************
 	// From Warehouse table, retrieve W_TAX
-	float wTax = retrieveWarehouseTax(cart.wID);
+	retrieveWarehouseTax(cart.wID);
 	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Warehouse " << (int)cart.wID);
-	(void)wTax;
+	//(void)wTax;
 
 
 	// From District table, retrieve D_TAX
-	float dTax = retrieveDistrictTax(cart.wID, cart.dID);
+	retrieveDistrictTax(cart.wID, cart.dID);
 	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved District D_W_ID: " << (int)cart.wID << ", D_ID: " << (int)cart.dID);
-	(void)dTax;
+	//(void)dTax;
 
 	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
 	TPCC::CustomerVersion *customerV = getCustomerInformation(cart.wID, cart.dID, cart.cID);
@@ -232,13 +245,21 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	std::vector<TPCC::StockVersion*> stocks;
 
 	// Retrieve item and stock
+	bool signaled = false;
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 		items.push_back(retrieveItem(olNumber, cart.items.at(olNumber).I_ID, cart.wID));
 		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Item " << items[olNumber]->item);
 
-		stocks.push_back(retrieveStock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID));
+		if (olNumber == cart.items.size() - 1)
+			// make the last request a signaled one
+			signaled = true;
+		stocks.push_back(retrieveStock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, signaled));
 		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Stock " << stocks[olNumber]->stock);
+
 	}
+
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
 
 
 	// ************************************************
@@ -389,6 +410,7 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	// |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
 	// |   The amount for the item in the order (OL_AMOUNT) is computed as: OL_QUANTITY * I_PRICE
 
+	signaled = false;
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 		bool remote = cart.items.at(olNumber).OL_SUPPLY_W_ID == 0;	// TODO
 
@@ -405,11 +427,14 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		updateStock(olNumber, stocks[olNumber]);
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " updated stock " << stocks[olNumber]->stock);
 
-		TPCC::OrderLineVersion *orderLineV = insertIntoOrderLine(olNumber, oID, cart, cart.items.at(olNumber), items[olNumber], stocks[olNumber], unlockTS);
+		if (olNumber == cart.items.size() - 1)
+			signaled = true;
+		TPCC::OrderLineVersion *orderLineV = insertIntoOrderLine(olNumber, oID, cart, cart.items.at(olNumber), items[olNumber], stocks[olNumber], unlockTS, signaled);
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted OrderLine " << orderLineV->orderLine);
 		(void)orderLineV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
-
 	}
+
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << "  successfully installed and unlocked all records");
 
 
@@ -442,9 +467,9 @@ void TPCC::TPCCClient::getReadTimestamp() {
 			&oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 }
 
 void TPCC::TPCCClient::submitResult(TPCC::TransactionResult trxResult){
@@ -476,7 +501,7 @@ primitive::timestamp_t TPCC::TPCCClient::getNewCommitTimestamp() {
 	return output;
 }
 
-float TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
+void TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)(wID * sizeof(TPCC::WarehouseVersion));				// offset of WarehouseVersion in WarehouseTable
@@ -500,13 +525,13 @@ float TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 			&serverContext->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	return localMemory_->getWarehouseHead()->getRegion()->warehouse.W_TAX;
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	// return localMemory_->getWarehouseHead()->getRegion()->warehouse.W_TAX;
 }
 
-float TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
+void TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 	ServerContext* serverContext = getServerContext(wID);
 
 	size_t tableOffset = (size_t)((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
@@ -530,10 +555,10 @@ float TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 			&serverContext->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	return localMemory_->getDistrictHead()->getRegion()->district.D_TAX;
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	// return localMemory_->getDistrictHead()->getRegion()->district.D_TAX;
 }
 
 uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
@@ -587,12 +612,67 @@ TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, ui
 			&serverContext->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// results are ready. now filling in the output arguments
 	return localMemory_->getCustomerHead()->getRegion();
+}
+
+
+TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID){
+	TPCC::ItemVersion &itemV = localMemory_->getItemHead()->getRegion()[olNumber];
+
+	ServerContext* serverContext = getServerContext(wID);
+	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
+
+	// The remote address to read the item info
+	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::Item);
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			serverContext->getQP(),
+			localMemory_->getItemHead()->getRDMAHandler(),
+			(uintptr_t)&itemV,
+			&serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			false));
+
+	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	// results are ready. now filling in the output arguments
+	return &itemV;
+}
+
+TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled){
+	TPCC::StockVersion &stockV = localMemory_->getStockHead()->getRegion()[olNumber];
+
+	ServerContext* serverContext = getServerContext(wID);
+	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+
+	// The remote address to read the item info
+	TPCC::StockVersion *lookupAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			serverContext->getQP(),
+			localMemory_->getStockHead()->getRDMAHandler(),
+			(uintptr_t)&stockV,
+			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	// results are ready. now filling in the output arguments
+	return &stockV;
 }
 
 TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &cart, time_t timer, Timestamp writeTimestamp){
@@ -627,9 +707,9 @@ TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &
 			&serverContext->getRemoteMemoryKeys()->getRegion()->orderTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	return ov;
 }
@@ -660,66 +740,13 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
 			&serverContext->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	return nov;
 }
 
-TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID){
-	TPCC::ItemVersion &itemV = localMemory_->getItemHead()->getRegion()[olNumber];
-
-	ServerContext* serverContext = getServerContext(wID);
-	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
-
-	// The remote address to read the item info
-	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_.addr));
-
-	// Size to be read from the remote side
-	uint32_t size = (uint32_t) sizeof(TPCC::Item);
-
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-			serverContext->getQP(),
-			localMemory_->getItemHead()->getRDMAHandler(),
-			(uintptr_t)&itemV,
-			&serverContext->getRemoteMemoryKeys()->getRegion()->itemTableHeadVersions.rdmaHandler_,
-			(uintptr_t)lookupAddress,
-			size,
-			true));
-
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-
-	// results are ready. now filling in the output arguments
-	return &itemV;
-}
-
-TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID){
-	TPCC::StockVersion &stockV = localMemory_->getStockHead()->getRegion()[olNumber];
-
-	ServerContext* serverContext = getServerContext(wID);
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
-
-	// The remote address to read the item info
-	TPCC::StockVersion *lookupAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_.addr));
-
-	// Size to be read from the remote side
-	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
-
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
-			serverContext->getQP(),
-			localMemory_->getStockHead()->getRDMAHandler(),
-			(uintptr_t)&stockV,
-			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
-			(uintptr_t)lookupAddress,
-			size,
-			true));
-
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-
-	// results are ready. now filling in the output arguments
-	return &stockV;
-}
 
 /***
  * If the retrieved value for S_QUANTITY exceeds OL_QUANTITY by 10 or more, then S_QUANTITY is decreased by OL_QUANTITY; otherwise
@@ -744,9 +771,9 @@ error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVers
 			&serverContext->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			false));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	return error::ErrorType::SUCCESS;
 }
@@ -759,7 +786,7 @@ error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVers
 // |-- A new row is inserted into the ORDER-LINE table to reflect the item on the order. OL_DELIVERY_D is set to a null value, OL_NUMBER is set to a unique value within
 // |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
 
-TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts){
+TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled){
 	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
 	TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
 
@@ -798,9 +825,9 @@ TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, 
 			&serverContext->getRemoteMemoryKeys()->getRegion()->orderLineTableHeadVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			signaled));
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	return &olv;
 }
