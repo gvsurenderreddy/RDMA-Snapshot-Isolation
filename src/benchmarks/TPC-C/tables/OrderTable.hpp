@@ -84,9 +84,9 @@ public:
 		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
 	}
 
-	void insert(Order &order, Timestamp &ts) {
+	void insert(size_t warehouseOffset, Order &order, Timestamp &ts) {
 		size_t ind =
-				(order.O_W_ID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+				(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
 						+ order.O_D_ID) * config::tpcc_settings::CUSTOMER_PER_DISTRICT
 						+ order.O_ID;
 		std::memcpy(&headVersions->getRegion()[ind].order, &order, sizeof(Order));

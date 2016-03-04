@@ -58,8 +58,8 @@ public:
 		olderVersions	= new RDMARegion<NewOrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void insert(uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
-		size_t ind = ( wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	void insert(size_t warehouseOffset, uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
+		size_t ind = ( warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
 						+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT + oID;
 
 		headVersions->getRegion()[ind].newOrder.initialize(wID, dID, oID);

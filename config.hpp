@@ -18,10 +18,10 @@ namespace config {
 #define DEBUG_ENABLED (true)
 
 /* Server settings */
-static const int			SERVER_CNT		= 1;
-static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.0.1"};
-static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680};
-static const uint8_t		IB_PORT[SERVER_CNT]		= {1};
+static const int			SERVER_CNT		= 2;
+static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.0.1", "192.168.1.1"};
+static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680, 45680};
+static const uint8_t		IB_PORT[SERVER_CNT]		= {1, 1};
 
 
 /* Oracle settings */
@@ -50,9 +50,9 @@ namespace tpcc_settings{
 static const int		NEWORDER_TRANSACTION_CNT 	= 10;
 
 /*	Database settings	*/
-static const int WAREHOUSE_CNT			= 1;
+static const int WAREHOUSE_PER_SERVER	= 1;
+static const int WAREHOUSE_CNT			= WAREHOUSE_PER_SERVER * SERVER_CNT;
 static const int ITEMS_CNT				= 15; //10000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default
-static const int WAREHOUSE_PER_SERVER	= WAREHOUSE_CNT / SERVER_CNT;
 static const int DISTRICT_PER_WAREHOUSE	= 2; //10;
 static const int CUSTOMER_PER_DISTRICT	= 10; // 3000;
 static const int STOCK_PER_WAREHOUSE	= ITEMS_CNT;

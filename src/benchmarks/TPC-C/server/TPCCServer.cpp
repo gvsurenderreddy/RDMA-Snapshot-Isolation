@@ -45,8 +45,12 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	size_t itemCnt = ITEMS_CNT;
 	size_t versionNum = VERSION_NUM;
 
-	db = new TPCCDB( warehouseCnt, districtCnt, customerCnt, orderCnt, orderLineCnt, newOrderCnt, stockCnt, itemCnt, versionNum, random, *context_);
-	db->populate();
+	db = new TPCC::TPCCDB( warehouseCnt, districtCnt, customerCnt, orderCnt, orderLineCnt, newOrderCnt, stockCnt, itemCnt, versionNum, random, *context_);
+	std::vector<uint16_t> warehouseIDs;
+	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
+		warehouseIDs.push_back((uint16_t)(serverNum * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
+
+	db->populate(warehouseIDs);
 
 	// Put the memory keys into the message that is to be sent to clients
 	memoryKeysMessage_ = new RDMARegion<ServerMemoryKeys>(1, *context_, IBV_ACCESS_LOCAL_WRITE);

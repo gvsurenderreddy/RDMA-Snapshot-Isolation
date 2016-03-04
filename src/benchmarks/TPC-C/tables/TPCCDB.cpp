@@ -12,6 +12,8 @@
 #include "../../../config.hpp"
 #include "tables/TPCCUtil.hpp"
 #include <set>
+#include <cassert>
+
 
 #define CLASS_NAME	"TPCCDB"
 
@@ -34,28 +36,31 @@ newOrderTable(newOrderCnt, versionNum, context, mrFlags_) {
 	;
 }
 
-void TPCC::TPCCDB::populate() {
+void TPCC::TPCCDB::populate(std::vector<uint16_t> &warehouseIDs) {
+	assert(warehouseIDs.size() == config::tpcc_settings::WAREHOUSE_PER_SERVER);
+
 	Timestamp initialTS(0,0,0,0);
 
 	// first, populate the item table
 	itemTable.populate(initialTS, random_);
 
-	for (unsigned short int wID = 0; wID < config::tpcc_settings::WAREHOUSE_PER_SERVER; wID++){
+	for (size_t warehouseOffset = 0; warehouseOffset < config::tpcc_settings::WAREHOUSE_PER_SERVER; warehouseOffset++){
+		uint16_t wID = warehouseIDs.at(warehouseOffset);
 		// then populate the stock table for the given warehouse
-		stockTable.populate(wID, random_, itemCnt_, initialTS);
+		stockTable.populate(warehouseOffset, wID, random_, itemCnt_, initialTS);
 
 		// insert the warehouse
-		warehouseTable.insert(wID, random_, initialTS);
+		warehouseTable.insert(warehouseOffset, wID, random_, initialTS);
 
 		for (unsigned char dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++dID) {
-			districtTable.insert(dID, wID, random_, initialTS);
+			districtTable.insert(warehouseOffset, dID, wID, random_, initialTS);
 
 			// Select 10% of the customers to have bad credit
 			std::set<int> selected_rows =
 					random_.selectUniqueIds(config::tpcc_settings::CUSTOMER_PER_DISTRICT/10, 1, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
 			for (unsigned short int cID = 0; cID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++cID) {
 				bool bad_credit = selected_rows.find(cID) != selected_rows.end();
-				customerTable.insert(cID, dID, wID, bad_credit, random_, now_, initialTS);
+				customerTable.insert(warehouseOffset, cID, dID, wID, bad_credit, random_, now_, initialTS);
 				//			History h;
 				//			generateHistory(c_id, d_id, w_id, &h);
 				//			tables->insertHistory(h);
@@ -70,16 +75,16 @@ void TPCC::TPCCDB::populate() {
 				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
 				TPCC::Order order;
 				order.initialize(oID, (unsigned short int)permutation[oID], dID, wID, isNewOrder,  random_, now_);
-				orderTable.insert(order, initialTS);
+				orderTable.insert(warehouseOffset, order, initialTS);
 
 				// Generate each OrderLine for the order
 				for (unsigned char olNumber = 0; olNumber < order.O_OL_CNT; ++olNumber) {
-					orderLineTable.insert(olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
+					orderLineTable.insert(warehouseOffset, olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
 				}
 
 				if (isNewOrder) {
 					// This is a new order: make one for it
-					newOrderTable.insert(wID, dID, oID, initialTS);
+					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
 				}
 			}
 			delete[] permutation;

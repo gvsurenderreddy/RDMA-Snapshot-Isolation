@@ -113,8 +113,8 @@ public:
 		olderVersions	= new RDMARegion<CustomerVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void insert(uint32_t cID, uint8_t dID, uint16_t wID, bool bad_credit, TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
-		size_t index = (wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID ) * config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID;
+	void insert(size_t warehouseOffset, uint32_t cID, uint8_t dID, uint16_t wID, bool bad_credit, TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
+		size_t index = (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID ) * config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID;
 		headVersions->getRegion()[index].customer.initialize(cID, dID, wID, bad_credit, random, now);
 		headVersions->getRegion()[index].writeTimestamp.copy(ts);
 	}

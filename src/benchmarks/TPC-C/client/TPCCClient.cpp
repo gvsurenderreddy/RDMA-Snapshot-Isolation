@@ -470,9 +470,15 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 }
 
 TPCC::ServerContext* TPCC::TPCCClient::getServerContext(uint16_t wID){
-	(void) wID;
-	return dsCtx_[0];
+	size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
+	return dsCtx_[serverNum];
 }
+
+uint16_t TPCC::TPCCClient::getWarehouseOffsetOnServer(uint16_t wID){
+	size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
+	return (uint16_t)(wID - (serverNum * config::tpcc_settings::WAREHOUSE_PER_SERVER));
+}
+
 
 void TPCC::TPCCClient::getReadTimestamp() {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_.addr;
@@ -522,17 +528,18 @@ primitive::timestamp_t TPCC::TPCCClient::getNewCommitTimestamp() {
 
 void TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 
-	size_t tableOffset = (size_t)(wID * sizeof(TPCC::WarehouseVersion));				// offset of WarehouseVersion in WarehouseTable
-	size_t warehouseOffset = (size_t)TPCC::WarehouseVersion::getOffsetOfWarehouse();	// offset of Warehouse in WarehouseVersion
+	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
+	size_t payloadOffset = (size_t)TPCC::WarehouseVersion::getOffsetOfWarehouse();		// offset of Warehouse in WarehouseVersion
 	size_t fieldOffset = TPCC::Warehouse::getOffsetOfTax();								// offset of W_TAX in Warehouse
 
 	// The remote address to read the warehouse tax
 	float *lookupAddress =  (float*)(
 			tableOffset
-			+ warehouseOffset
+			+ payloadOffset
 			+ fieldOffset
 			+ ((uint64_t)remoteMemoryKeys->warehouseTableHeadVersions.rdmaHandler_.addr));
 
@@ -554,10 +561,11 @@ void TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 
 void TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
 	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
 	size_t fieldOffset = TPCC::District::getOffsetOfTax();		// offset of D_TAX in District
 
@@ -586,9 +594,10 @@ void TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 
 uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
 	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
 	size_t fieldOffset = TPCC::District::getOffsetOfNextOID();		// offset of D_NEXT_O_ID in District
 
@@ -618,9 +627,10 @@ uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uin
 
 TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)(((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
 			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID)
 			* sizeof(TPCC::CustomerVersion));										// offset of CustomerVersion in CustomerTable
 
@@ -677,11 +687,12 @@ TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID
 
 TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 	TPCC::StockVersion &stockV = localMemory_->getStockHead()->getRegion()[olNumber];
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 
 	// The remote address to read the item info
 	TPCC::StockVersion *lookupAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
@@ -706,9 +717,10 @@ TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t i
 
 void TPCC::TPCCClient::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled){
 	TPCC::ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
 	// The remote address to read the item info
 	Timestamp *readAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableTimestampList.rdmaHandler_.addr));
@@ -742,9 +754,11 @@ void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHe
 	versionArray[offset + 0] = oldHead->writeTimestamp;
 
 	TPCC::ServerContext* serverContext = getServerContext(oldHead->stock.S_W_ID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(oldHead->stock.S_W_ID);
+
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)((oldHead->stock.S_W_ID * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
 	// The remote address to read the item info
 	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableTimestampList.rdmaHandler_.addr));
@@ -773,9 +787,10 @@ void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *
 
 
 	TPCC::ServerContext* serverContext = getServerContext(oldHead->stock.S_W_ID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(oldHead->stock.S_W_ID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)((oldHead->stock.S_W_ID * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(StockVersion));
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(StockVersion));
 	size_t circularBufferOffset = (size_t) versionOffset * sizeof(StockVersion);
 
 	// The remote address to read the item info
@@ -799,6 +814,7 @@ void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *
 
 TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &cart, time_t timer, Timestamp writeTimestamp){
 	ServerContext* serverContext = getServerContext(cart.wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(cart.wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 	TPCC::OrderVersion *ov = localMemory_->getOrderHead()->getRegion();
@@ -814,7 +830,7 @@ TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &
 	ov->order.O_OL_CNT = (uint8_t)cart.items.size();
 	ov->order.O_ALL_LOCAL = 1;	// TODO: must be fixed
 
-	size_t tableOffset = (size_t)(((cart.wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
 			* config::tpcc_settings::ORDER_PER_DISTRICT + oID) * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
 
 	// The remote address to which the order will be written
@@ -839,6 +855,7 @@ TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &
 
 TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
@@ -849,7 +866,7 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
 	nov->newOrder.NO_W_ID = wID;
 	nov->newOrder.NO_D_ID = dID;
 
-	size_t tableOffset = (size_t)(((wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
 			* config::tpcc_settings::NEWORDER_PER_DISTRICT + oID) * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
 
 	// The remote address to which the order will be written
@@ -880,9 +897,11 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
  */
 error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV){
 	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(stockV->stock.S_W_ID);
+
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-	size_t tableOffset = (size_t)((stockV->stock.S_W_ID * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 
 	// The remote address to read the item info
 	TPCC::StockVersion *writeAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
@@ -913,7 +932,8 @@ error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVers
 // |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
 
 TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled){
-	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
+	ServerContext* serverContext = getServerContext(cart.wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(cart.wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 	TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
@@ -933,7 +953,7 @@ TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, 
 
 	size_t tableOffset = (size_t)(
 			(
-					(cart.wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
+					(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
 					* config::tpcc_settings::ORDER_PER_DISTRICT + oID
 			)
 			* tpcc_settings::ORDER_MAX_OL_CNT + olNumber
@@ -962,10 +982,11 @@ TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, 
 
 void TPCC::TPCCClient::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
 
 	// The remote address of the timestamp
@@ -986,10 +1007,11 @@ void TPCC::TPCCClient::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, T
 
 void TPCC::TPCCClient::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 
-	size_t tableOffset = (size_t)((wID * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
 
 	// The remote address of the timestamp
@@ -1006,6 +1028,14 @@ void TPCC::TPCCClient::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t 
 			(uintptr_t)writeAddress,
 			size,
 			true));
+}
+
+inline
+std::string TPCC::TPCCClient::pointer_to_string(Timestamp* ts) const{
+	std::ostringstream stream;
+	for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++)
+		stream << ts[i] << ", ";
+	return stream.str();
 }
 
 TPCC::TPCCClient::~TPCCClient(){

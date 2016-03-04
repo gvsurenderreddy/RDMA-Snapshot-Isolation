@@ -87,9 +87,9 @@ public:
 		olderVersions	= new RDMARegion<DistrictVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void insert(uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random, Timestamp &ts){
-		headVersions->getRegion()[wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].district.initialize(dID, wID, random);
-		headVersions->getRegion()[wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].writeTimestamp.copy(ts);
+	void insert(size_t warehouseOffset, uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random, Timestamp &ts){
+		headVersions->getRegion()[warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].district.initialize(dID, wID, random);
+		headVersions->getRegion()[warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].writeTimestamp.copy(ts);
 	}
 
 	void getMemoryHandler(MemoryHandler<DistrictVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<DistrictVersion> &olderVersionsMH){

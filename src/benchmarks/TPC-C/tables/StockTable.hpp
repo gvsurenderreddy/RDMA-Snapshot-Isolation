@@ -107,14 +107,14 @@ public:
 		olderVersions	= new RDMARegion<StockVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void populate(uint16_t wID, TPCC::RandomGenerator& random, size_t itemsCnt, Timestamp& ts){
+	void populate(size_t warehouseOffset, uint16_t wID, TPCC::RandomGenerator& random, size_t itemsCnt, Timestamp& ts){
 		// Select 10% of the stock to be marked "original"
 		std::set<int> selected_rows = random.selectUniqueIds(itemsCnt/10, 0, (int)(itemsCnt - 1));
 
 		for (uint32_t i = 0; i < itemsCnt; ++i) {
 			bool is_original = selected_rows.find(i) != selected_rows.end();
-			headVersions->getRegion()[wID * itemsCnt + i].stock.initialize(i, wID, is_original, random);
-			headVersions->getRegion()[wID * itemsCnt + i].writeTimestamp.copy(ts);
+			headVersions->getRegion()[warehouseOffset * itemsCnt + i].stock.initialize(i, wID, is_original, random);
+			headVersions->getRegion()[warehouseOffset * itemsCnt + i].writeTimestamp.copy(ts);
 		}
 	}
 

@@ -19,9 +19,8 @@
 #include "../../rdma-region/RDMAContext.hpp"
 #include "server/ServerMemoryKeys.hpp"
 #include "random/randomgenerator.hpp"
-
-
 #include <ctime>
+#include <vector>
 
 namespace TPCC{
 class TPCCDB {
@@ -44,7 +43,7 @@ public:
 	TPCC::NewOrderTable		newOrderTable;
 
 	TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
-	void populate();
+	void populate(std::vector<uint16_t> &warehouseIDs);
 	void getMemoryKeys(ServerMemoryKeys *k);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying

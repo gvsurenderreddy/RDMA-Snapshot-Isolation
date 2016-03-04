@@ -76,6 +76,7 @@ private:
 	TPCC::TransactionResult doNewOrder();
 	Cart buildCart();
 	ServerContext* getServerContext(uint16_t wID);
+	uint16_t getWarehouseOffsetOnServer(uint16_t wID);
 	bool isRecordAccessible(Timestamp &ts);
 	void getReadTimestamp();
 	void submitResult(TPCC::TransactionResult trxResult);
@@ -96,14 +97,9 @@ private:
 	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled);
 	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS);
 	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);
+	std::string pointer_to_string(Timestamp* ts) const;
 
-	inline
-	std::string pointer_to_string(Timestamp* ts) const{
-		std::ostringstream stream;
-		for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++)
-			stream << ts[i] << ", ";
-		return stream.str();
-	}
+
 
 
 public:
