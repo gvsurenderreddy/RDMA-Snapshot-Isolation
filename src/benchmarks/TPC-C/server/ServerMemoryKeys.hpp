@@ -25,39 +25,39 @@ namespace TPCC{
 struct ServerMemoryKeys{
 public:
 	MemoryHandler<TPCC::CustomerVersion>	customerTableHeadVersions;
-	MemoryHandler<Timestamp>				customerTabletsList;
+	MemoryHandler<Timestamp>				customerTableTimestampList;
 	MemoryHandler<TPCC::CustomerVersion>	customerTableOlderVersions;
 
 	MemoryHandler<TPCC::DistrictVersion>	districtTableHeadVersions;
-	MemoryHandler<Timestamp>				districtTabletsList;
+	MemoryHandler<Timestamp>				districtTableTimestampList;
 	MemoryHandler<TPCC::DistrictVersion>	districtTableOlderVersions;
 
 	MemoryHandler<TPCC::HistoryVersion>	historyTableHeadVersions;
-	MemoryHandler<Timestamp>			historyTabletsList;
+	MemoryHandler<Timestamp>			historyTableTimestampList;
 	MemoryHandler<TPCC::HistoryVersion>	historyTableOlderVersions;
 
 	MemoryHandler<TPCC::ItemVersion>	itemTableHeadVersions;
-	MemoryHandler<Timestamp>			itemTabletsList;
+	MemoryHandler<Timestamp>			itemTableTimestampList;
 	MemoryHandler<TPCC::ItemVersion>	itemTableOlderVersions;
 
 	MemoryHandler<TPCC::NewOrderVersion>	newOrderTableHeadVersions;
-	MemoryHandler<Timestamp>				newOrderTabletsList;
+	MemoryHandler<Timestamp>				newOrderTableTimestampList;
 	MemoryHandler<TPCC::NewOrderVersion>	newOrderTableOlderVersions;
 
 	MemoryHandler<TPCC::OrderLineVersion>	orderLineTableHeadVersions;
-	MemoryHandler<Timestamp>				orderLineTabletsList;
+	MemoryHandler<Timestamp>				orderLineTableTimestampList;
 	MemoryHandler<TPCC::OrderLineVersion>	orderLineTableOlderVersions;
 
 	MemoryHandler<TPCC::OrderVersion>	orderTableHeadVersions;
-	MemoryHandler<Timestamp>			orderTabletsList;
+	MemoryHandler<Timestamp>			orderTableTimestampList;
 	MemoryHandler<TPCC::OrderVersion>	orderTableOlderVersions;
 
 	MemoryHandler<TPCC::StockVersion>	stockTableHeadVersions;
-	MemoryHandler<Timestamp>			stockTabletsList;
+	MemoryHandler<Timestamp>			stockTableTimestampList;
 	MemoryHandler<TPCC::StockVersion>	stockTableOlderVersions;
 
 	MemoryHandler<TPCC::WarehouseVersion>	warehouseTableHeadVersions;
-	MemoryHandler<Timestamp>				warehouseTabletsList;
+	MemoryHandler<Timestamp>				warehouseTableTimestampList;
 	MemoryHandler<TPCC::WarehouseVersion>	warehouseTableOlderVersions;
 
 

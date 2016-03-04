@@ -88,15 +88,15 @@ void TPCC::TPCCDB::populate() {
 }
 
 void TPCC::TPCCDB::getMemoryKeys(TPCC::ServerMemoryKeys *k){
-	customerTable.getMemoryHandler(k->customerTableHeadVersions, k->customerTabletsList, k->customerTableOlderVersions);
-	districtTable.getMemoryHandler(k->districtTableHeadVersions, k->districtTabletsList, k->districtTableOlderVersions);
-	//historyTable.getMemoryHandler(k->historyTableHeadVersions, k->historyTabletsList, k->historyTableOlderVersions);
-	itemTable.getMemoryHandler(k->itemTableHeadVersions, k->itemTabletsList, k->itemTableOlderVersions);
-	newOrderTable.getMemoryHandler(k->newOrderTableHeadVersions, k->newOrderTabletsList, k->newOrderTableOlderVersions);
-	orderLineTable.getMemoryHandler(k->orderLineTableHeadVersions, k->orderLineTabletsList, k->orderLineTableOlderVersions);
-	orderTable.getMemoryHandler(k->orderTableHeadVersions, k->orderTabletsList, k->orderTableOlderVersions);
-	stockTable.getMemoryHandler(k->stockTableHeadVersions, k->stockTabletsList, k->stockTableOlderVersions);
-	warehouseTable.getMemoryHandler(k->warehouseTableHeadVersions, k->warehouseTabletsList, k->warehouseTableOlderVersions);
+	customerTable.getMemoryHandler(k->customerTableHeadVersions, k->customerTableTimestampList, k->customerTableOlderVersions);
+	districtTable.getMemoryHandler(k->districtTableHeadVersions, k->districtTableTimestampList, k->districtTableOlderVersions);
+	//historyTable.getMemoryHandler(k->historyTableHeadVersions, k->historyTableTimestampList, k->historyTableOlderVersions);
+	itemTable.getMemoryHandler(k->itemTableHeadVersions, k->itemTableTimestampList, k->itemTableOlderVersions);
+	newOrderTable.getMemoryHandler(k->newOrderTableHeadVersions, k->newOrderTableTimestampList, k->newOrderTableOlderVersions);
+	orderLineTable.getMemoryHandler(k->orderLineTableHeadVersions, k->orderLineTableTimestampList, k->orderLineTableOlderVersions);
+	orderTable.getMemoryHandler(k->orderTableHeadVersions, k->orderTableTimestampList, k->orderTableOlderVersions);
+	stockTable.getMemoryHandler(k->stockTableHeadVersions, k->stockTableTimestampList, k->stockTableOlderVersions);
+	warehouseTable.getMemoryHandler(k->warehouseTableHeadVersions, k->warehouseTableTimestampList, k->warehouseTableOlderVersions);
 
 }
 

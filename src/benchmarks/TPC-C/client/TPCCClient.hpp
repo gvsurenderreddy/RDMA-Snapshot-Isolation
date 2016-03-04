@@ -21,6 +21,7 @@
 #include <vector>
 #include <ctime>	// for std::time and time_t
 #include "NewOrderLocalMemory.hpp"
+#include <sstream>
 
 namespace TPCC{
 struct NewOrderItem {
@@ -84,13 +85,25 @@ private:
 	uint32_t retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID);
 	TPCC::CustomerVersion* getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID);
 	TPCC::ItemVersion *retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID);
-	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled);
+	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID);
+	void retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled);
+	void updateStockPointers(uint8_t olNumber, StockVersion *oldHead);
+	void updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead);
+
 	TPCC::OrderVersion* insertIntoOrder(uint32_t oID, Cart &cart, time_t timer, Timestamp writeTimestamp);
 	TPCC::NewOrderVersion* insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp);
 	error::ErrorType updateStock(uint8_t olNumber, TPCC::StockVersion *stockV);
 	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled);
 	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS);
 	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);
+
+	inline
+	std::string pointer_to_string(Timestamp* ts) const{
+		std::ostringstream stream;
+		for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++)
+			stream << ts[i] << ", ";
+		return stream.str();
+	}
 
 
 public:

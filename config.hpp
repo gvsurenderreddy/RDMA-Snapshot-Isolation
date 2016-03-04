@@ -15,7 +15,7 @@
 
 
 namespace config {
-#define DEBUG_ENABLED (false)
+#define DEBUG_ENABLED (true)
 
 /* Server settings */
 static const int			SERVER_CNT		= 1;
@@ -47,7 +47,7 @@ static const int	TIMEOUT_IN_MS			= 500;		/* ms */
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int		NEWORDER_TRANSACTION_CNT 	= 100000;
+static const int		NEWORDER_TRANSACTION_CNT 	= 10;
 
 /*	Database settings	*/
 static const int WAREHOUSE_CNT			= 1;
