@@ -77,6 +77,11 @@ public:
 	static size_t getOffsetOfTimestamp(){
 		return offsetof(StockVersion, writeTimestamp);
 	}
+
+	friend std::ostream& operator<<(std::ostream& os, const StockVersion& s) {
+		os << s.stock << " (" << s.writeTimestamp << ")";
+		return os;
+	}
 };
 
 //class StockVersion{

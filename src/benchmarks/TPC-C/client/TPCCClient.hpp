@@ -37,9 +37,9 @@ struct Cart{
 	std::vector<NewOrderItem> items;
 
 	friend std::ostream& operator<<(std::ostream& os, const Cart& c) {
-		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | cID:" << (int)c.cID << std::endl;
+		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | cID:" << (int)c.cID << ". --- Items (iID, suppWID):";
 		for(auto const& value: c.items)
-			os << " -- iID: " << value.I_ID << " | olSupplyWID: " << value.OL_SUPPLY_W_ID << " | olQuantity: " << (int)value.OL_QUANTITY << std::endl;
+			os << " {i: " << value.I_ID << " | W: " << value.OL_SUPPLY_W_ID << "}, ";
 		return os;
 	}
 };
@@ -88,12 +88,12 @@ private:
 	TPCC::ItemVersion *retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID);
 	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID);
 	void retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled);
-	void updateStockPointers(uint8_t olNumber, StockVersion *oldHead);
-	void updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead);
+	void updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID);
+	void updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID);
 
 	TPCC::OrderVersion* insertIntoOrder(uint32_t oID, Cart &cart, time_t timer, Timestamp writeTimestamp);
 	TPCC::NewOrderVersion* insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp);
-	error::ErrorType updateStock(uint8_t olNumber, TPCC::StockVersion *stockV);
+	error::ErrorType updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID);
 	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled);
 	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS);
 	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);

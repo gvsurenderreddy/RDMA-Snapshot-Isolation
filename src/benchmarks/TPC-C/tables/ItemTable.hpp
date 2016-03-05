@@ -60,6 +60,11 @@ public:
 	static size_t getOffsetOfItem(){
 		return offsetof(ItemVersion, item);
 	}
+
+	friend std::ostream& operator<<(std::ostream& os, const ItemVersion& i) {
+		os << i.item << " (" << i.writeTimestamp << ")";
+		return os;
+	}
 };
 
 

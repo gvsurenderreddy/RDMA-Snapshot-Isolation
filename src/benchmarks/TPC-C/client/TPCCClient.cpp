@@ -216,7 +216,7 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	//	Constructing the shopping cart
 	// ************************************************
 	Cart cart = buildCart();
-	//std::cout << cart;
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Cart: " << cart);
 
 
 	// ************************************************
@@ -231,18 +231,12 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	// ************************************************
 	// From Warehouse table, retrieve W_TAX
 	retrieveWarehouseTax(cart.wID);
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Warehouse " << (int)cart.wID);
-	//(void)wTax;
-
 
 	// From District table, retrieve D_TAX
 	retrieveDistrictTax(cart.wID, cart.dID);
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved District D_W_ID: " << (int)cart.wID << ", D_ID: " << (int)cart.dID);
-	//(void)dTax;
 
 	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
 	TPCC::CustomerVersion *customerV = getCustomerInformation(cart.wID, cart.dID, cart.cID);
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Customer " << customerV->customer);
 
 	std::vector<TPCC::ItemVersion*> items;
 	std::vector<TPCC::StockVersion*> stocks;
@@ -250,24 +244,31 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	// Retrieve item and stock
 	bool signaled = false;
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		items.push_back(retrieveItem(olNumber, cart.items.at(olNumber).I_ID, cart.wID));
-		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Item " << items[olNumber]->item);
+		ItemVersion* itemV = retrieveItem(olNumber, cart.items.at(olNumber).I_ID, cart.wID);
+		items.push_back(itemV);
 
 		StockVersion* stockV = retrieveStock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID);
 		stocks.push_back(stockV);
-		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Stock " << stocks[olNumber]->stock);
 
 		if (olNumber == cart.items.size() - 1)
 			// make the last request a signaled one
 			signaled = true;
 		retrieveStockPointerList(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, signaled);
-		size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
-		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved the pointer list for Stock " << (int)stocks[olNumber]->stock.S_I_ID
-				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) );
 	}
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Warehouse " << (int)cart.wID);
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved District D_W_ID: " << (int)cart.wID << ", D_ID: " << (int)cart.dID);
+	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Customer " << customerV->customer);
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved Item: " << items[olNumber]->item);
+		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved stock: " << *stocks[olNumber] << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
+
+		size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
+		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved the pointer list for Stock " << (int)stocks[olNumber]->stock.S_I_ID
+				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID );
+	}
 
 
 	// ************************************************
@@ -325,18 +326,21 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		primitive::client_id_t		clientID = clientID_;
 		Timestamp lockTS (lockStatus, versionOffset, clientID, cts);
 
-		lockStock(olNumber, cart.items.at(olNumber).I_ID, cart.wID, stocks.at(olNumber)->writeTimestamp, lockTS);
+		lockStock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, stocks.at(olNumber)->writeTimestamp, lockTS);
 	}
 
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	}
 
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 		// Byte swapping, since values read by atomic operations are in Big Endian order
 		//Timestamp& ts = localMemory_->getLockRegion()->getRegion()[olNumber];
-		localMemory_->getLockRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getLockRegion()->getRegion()[olNumber]);
 		//Timestamp correctlyOrderedTS(ts.toUUL());
 		//ts.copy(correctlyOrderedTS);
+		localMemory_->getLockRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getLockRegion()->getRegion()[olNumber]);
 	}
+
 
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " received the results for all the locks");
 
@@ -354,14 +358,15 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		}
 		else {
 			succesfulOrderLines.push_back(olNumber);
-			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << "'s attemp to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful");
+			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << "'s attemp to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful "
+					<< "(expected = existing = " << existingLock << ")");
 		}
 	}
 
 	if (unsuccesfulOrderLines.size() != 0){
 		// some locks couldn't get acquired. must first release the successful ones, then abort
 		for (auto const& olNumber: succesfulOrderLines){
-			revertStockLock(olNumber, cart.items.at(olNumber).I_ID, cart.wID);
+			revertStockLock(olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID);
 		}
 		for (auto const& olNumber: succesfulOrderLines){
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
@@ -379,10 +384,10 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	//	Append old version to the versions list, and update the pointers list
 	// ************************************************
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		updateStockPointers(olNumber, stocks[olNumber]);
-		updateStockOlderVersions(olNumber, stocks[olNumber]);
+		updateStockPointers(olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID);
+		updateStockOlderVersions(olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID);
 	}
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Step 6 : Client " << clientID_ << " added the pointers and pointers");
+	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " added the pointers and pointers");
 
 
 
@@ -443,8 +448,8 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		if (remote)
 			stocks[olNumber]->stock.S_REMOTE_CNT++;
 
-		updateStock(olNumber, stocks[olNumber]);
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " updated stock " << stocks[olNumber]->stock << " (" << stockUnlockTS << ")");
+		updateStock(olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID);
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " updated stock " << stocks[olNumber]->stock << " (" << stockUnlockTS << ")"  << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
 
 		if (olNumber == cart.items.size() - 1)
 			signaled = true;
@@ -742,7 +747,7 @@ void TPCC::TPCCClient::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, 
 }
 
 
-void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHead) {
+void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID) {
 	// first, shift the pointers one to the right (this effectively drops the last element)
 	Timestamp *versionArray = localMemory_->getStockTS()->getRegion();
 	size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
@@ -753,8 +758,8 @@ void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHe
 	// second, set the head of the pointer list to point to the head of the old versions
 	versionArray[offset + 0] = oldHead->writeTimestamp;
 
-	TPCC::ServerContext* serverContext = getServerContext(oldHead->stock.S_W_ID);
-	uint16_t warehouseOffset = getWarehouseOffsetOnServer(oldHead->stock.S_W_ID);
+	TPCC::ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
@@ -779,15 +784,15 @@ void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHe
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 }
 
-void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead) {
+void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID) {
 	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
 
 	StockVersion *localBuffer = &localMemory_->getStockOlderVersions()->getRegion()[olNumber];
 	memcpy(localBuffer, oldHead, sizeof(TPCC::StockVersion));
 
 
-	TPCC::ServerContext* serverContext = getServerContext(oldHead->stock.S_W_ID);
-	uint16_t warehouseOffset = getWarehouseOffsetOnServer(oldHead->stock.S_W_ID);
+	TPCC::ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(StockVersion));
@@ -895,9 +900,9 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
  * S_QUANTITY is updated to (S_QUANTITY - OL_QUANTITY)+91. S_YTD is increased by OL_QUANTITY and S_ORDER_CNT is incremented by 1.
  * If the order-line is remote, then S_REMOTE_CNT is incremented by 1.
  */
-error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV){
-	ServerContext* serverContext = getServerContext(stockV->stock.S_W_ID);
-	uint16_t warehouseOffset = getWarehouseOffsetOnServer(stockV->stock.S_W_ID);
+error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID){
+	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 

@@ -32,7 +32,7 @@ private:
 	int server_sockfd_;
 	uint16_t	tcp_port_;
 	uint8_t	ib_port_;
-	TPCCDB	*db;
+	TPCC::TPCCDB	*db;
 	RDMAContext *context_;
 
 
