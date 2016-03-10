@@ -62,7 +62,6 @@ public:
 		os << "S_I_ID:" << (int)s.S_I_ID << "|S_W_ID:" << (int)s.S_W_ID;
 		return os;
 	}
-
 };
 
 class StockVersion{
@@ -83,20 +82,6 @@ public:
 		return os;
 	}
 };
-
-//class StockVersion{
-//public:
-//	Stock stock;
-//	Timestamp writeTimestamp;
-//
-//	static size_t getOffsetOfStock(){
-//		return offsetof(StockVersion, stock);
-//	}
-//
-//	static size_t getOffsetOfTimestamp(){
-//		return offsetof(StockVersion, writeTimestamp);
-//	}
-//};
 
 class StockTable{
 public:

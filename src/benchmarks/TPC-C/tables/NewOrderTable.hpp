@@ -58,13 +58,13 @@ public:
 		olderVersions	= new RDMARegion<NewOrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void insert(size_t warehouseOffset, uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
-		size_t ind = ( warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-						+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT + oID;
-
-		headVersions->getRegion()[ind].newOrder.initialize(wID, dID, oID);
-		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-	}
+//	void insert(size_t warehouseOffset, uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
+//		size_t ind = ( warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+//						+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT + oID;
+//
+//		headVersions->getRegion()[ind].newOrder.initialize(wID, dID, oID);
+//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+//	}
 
 	void getMemoryHandler(MemoryHandler<NewOrderVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<NewOrderVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);

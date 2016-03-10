@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <time.h>		// for struct timespec
+#include <cassert>
 
 
 
@@ -21,7 +22,10 @@
 
 TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uint8_t ibPort)
 : instanceNum_(instanceNum),
-  ibPort_(ibPort){
+  ibPort_(ibPort),
+  nextOrderID_(0),
+  nextNewOrderID_(0),
+  nextOrderLineID_(0){
 	srand ((unsigned int)utils::generate_random_seed());		// initialize random seed
 	//zipf_initialize(config::SKEWNESS_IN_ITEM_ACCESS, config::ITEM_PER_SERVER);
 	// nextEpoch_ = (primitive::timestamp_t) 1ULL;
@@ -203,9 +207,6 @@ TPCC::Cart TPCC::TPCCClient::buildCart(){
 	return cart;
 }
 
-
-
-
 TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	time_t timer;
 	std::time(&timer);
@@ -268,6 +269,8 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 		DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << " retrieved the pointer list for Stock " << (int)stocks[olNumber]->stock.S_I_ID
 				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID );
+
+		(void) offset; // to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 	}
 
 
@@ -407,11 +410,13 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 	TPCC::OrderVersion* orderV = insertIntoOrder(oID, cart, timer, unlockTS);
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted Order " << orderV->order);
 	(void)orderV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
+	nextOrderID_++;
 
 
 	TPCC::NewOrderVersion* newOrderV = insertIntoNewOrder(oID, cart.wID, cart.dID, unlockTS);
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted NewOrder " << newOrderV->newOrder);
 	(void)newOrderV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
+	nextNewOrderID_++;
 
 
 	// For each O_OL_CNT item on the order:
@@ -456,6 +461,8 @@ TPCC::TransactionResult TPCC::TPCCClient::doNewOrder(){
 		TPCC::OrderLineVersion *orderLineV = insertIntoOrderLine(olNumber, oID, cart, cart.items.at(olNumber), items[olNumber], stocks[olNumber], unlockTS, signaled);
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " inserted OrderLine " << orderLineV->orderLine);
 		(void)orderLineV;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
+		nextOrderLineID_++;
+
 	}
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
@@ -485,16 +492,29 @@ uint16_t TPCC::TPCCClient::getWarehouseOffsetOnServer(uint16_t wID){
 }
 
 
+template <typename T>
+bool TPCC::TPCCClient::isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH) {
+	if ((lookupAddress < (uintptr_t) remoteMH.rdmaHandler_.addr) || (lookupAddress >= (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_)){
+		PRINT_CERR(CLASS_NAME, __func__, "Accessing outside the region: " << lookupAddress << " NOT IN ["
+				<< (uintptr_t) remoteMH.rdmaHandler_.addr << ", " << (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_ << ") range");
+		return false;
+	}
+	else return true;
+}
+
 void TPCC::TPCCClient::getReadTimestamp() {
-	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_.addr;
-	uint32_t size = (uint32_t)(oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.regionSize_ * sizeof(primitive::timestamp_t));
+	MemoryHandler<primitive::timestamp_t> &remoteMH = oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector;
+	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
+	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
+
+	assert(isAddressInRange<primitive::timestamp_t>((uintptr_t)lookupAddress, remoteMH) == true);
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
 			IBV_WR_RDMA_READ,
 			oracleContext_->getQP(),
 			localTimestampVector_->getRDMAHandler(),
 			(uintptr_t)localTimestampVector_->getRegion(),
-			&oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
@@ -506,17 +526,24 @@ void TPCC::TPCCClient::submitResult(TPCC::TransactionResult trxResult){
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	size_t tableOffset = (size_t)(clientID_ * sizeof(primitive::timestamp_t));		// offset of client's cts in timestampVector
 
+	MemoryHandler<primitive::timestamp_t> &remoteMH = oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector;
+
 	// The remote address of the timestamp
-	primitive::timestamp_t *writeAddress = (primitive::timestamp_t*)(tableOffset + (uint64_t)oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_.addr);
+	primitive::timestamp_t *writeAddress = (primitive::timestamp_t*)(tableOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
 
 	uint32_t size = (uint32_t) sizeof(primitive::timestamp_t);
+
+	if (isAddressInRange<primitive::timestamp_t>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: clientID_ = " << clientID_);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
 			IBV_WR_RDMA_WRITE,
 			oracleContext_->getQP(),
 			localTimestampVector_->getRDMAHandler(),
 			(uintptr_t)&localTimestampVector_->getRegion()[clientID_],
-			&oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			true));
@@ -536,26 +563,29 @@ void TPCC::TPCCClient::retrieveWarehouseTax(uint16_t wID){
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
 
-
 	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
 	size_t payloadOffset = (size_t)TPCC::WarehouseVersion::getOffsetOfWarehouse();		// offset of Warehouse in WarehouseVersion
 	size_t fieldOffset = TPCC::Warehouse::getOffsetOfTax();								// offset of W_TAX in Warehouse
 
+	MemoryHandler<TPCC::WarehouseVersion> &remoteMH = remoteMemoryKeys->warehouseTableHeadVersions;
+
 	// The remote address to read the warehouse tax
-	float *lookupAddress =  (float*)(
-			tableOffset
-			+ payloadOffset
-			+ fieldOffset
-			+ ((uint64_t)remoteMemoryKeys->warehouseTableHeadVersions.rdmaHandler_.addr));
+	float *lookupAddress =  (float*)(tableOffset + payloadOffset + fieldOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(float);	// Warehouse::W_TAX is of type float
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID );
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
 			localMemory_->getWarehouseHead()->getRDMAHandler(),
 			(uintptr_t)&(localMemory_->getWarehouseHead()->getRegion()->warehouse.W_TAX),
-			&remoteMemoryKeys->warehouseTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
@@ -574,60 +604,31 @@ void TPCC::TPCCClient::retrieveDistrictTax(uint16_t wID, uint8_t dID){
 	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
 	size_t fieldOffset = TPCC::District::getOffsetOfTax();		// offset of D_TAX in District
 
+	MemoryHandler<TPCC::DistrictVersion> &remoteMH = remoteMemoryKeys->districtTableHeadVersions;
+
 	// The remote address to read the district tax
-	float *lookupAddress =  (float *)(
-			tableOffset
-			+ districtOffset
-			+ fieldOffset
-			+ ((uint64_t)remoteMemoryKeys->districtTableHeadVersions.rdmaHandler_.addr));
+	float *lookupAddress =  (float *)(tableOffset + districtOffset + fieldOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(float);	// District::D_TAX is of type float
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
 			localMemory_->getDistrictHead()->getRDMAHandler(),
 			(uintptr_t)&(localMemory_->getDistrictHead()->getRegion()->district.D_TAX),
-			&remoteMemoryKeys->districtTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
 
 	// TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	// return localMemory_->getDistrictHead()->getRegion()->district.D_TAX;
-}
-
-uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
-	ServerContext* serverContext = getServerContext(wID);
-	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
-
-	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
-	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
-	size_t fieldOffset = TPCC::District::getOffsetOfNextOID();		// offset of D_NEXT_O_ID in District
-
-	// The remote address to read the district tax
-	uint64_t *lookupAddress =  (uint64_t *)(
-			tableOffset
-			+ districtOffset
-			+ fieldOffset
-			+ ((uint64_t)remoteMemoryKeys->districtTableHeadVersions.rdmaHandler_.addr));
-
-	// Size to be read from the remote side
-	size_t size = sizeof(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
-
-	TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
-			serverContext->getQP(),
-			localMemory_->getDistrictHead()->getRDMAHandler(),
-			(uintptr_t)&(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID),
-			&remoteMemoryKeys->districtTableHeadVersions.rdmaHandler_,
-			(uintptr_t)lookupAddress,
-			(uint64_t)1ULL,
-			(uint32_t)size));
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-
-	// Byte swapping, since values read by atomic operations are in Big Endian order
-	return (uint32_t) utils::bigEndianToHost(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
 }
 
 TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID){
@@ -639,17 +640,25 @@ TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, ui
 			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID)
 			* sizeof(TPCC::CustomerVersion));										// offset of CustomerVersion in CustomerTable
 
+	MemoryHandler<TPCC::CustomerVersion> &remoteMH = remoteMemoryKeys->customerTableHeadVersions;
+
 	// The remote address to read the customer info
-	TPCC::CustomerVersion *lookupAddress =  (TPCC::CustomerVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->customerTableHeadVersions.rdmaHandler_.addr));
+	TPCC::CustomerVersion *lookupAddress =  (TPCC::CustomerVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
+
+	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
 			localMemory_->getCustomerHead()->getRDMAHandler(),
 			(uintptr_t)localMemory_->getCustomerHead()->getRegion(),
-			&remoteMemoryKeys->customerTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
@@ -660,7 +669,6 @@ TPCC::CustomerVersion* TPCC::TPCCClient::getCustomerInformation(uint16_t wID, ui
 	return localMemory_->getCustomerHead()->getRegion();
 }
 
-
 TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
 	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
@@ -669,17 +677,25 @@ TPCC::ItemVersion* TPCC::TPCCClient::retrieveItem(uint8_t olNumber, uint32_t iID
 
 	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
 
+	MemoryHandler<TPCC::ItemVersion> &remoteMH = remoteMemoryKeys->itemTableHeadVersions;
+
 	// The remote address to read the item info
-	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->itemTableHeadVersions.rdmaHandler_.addr));
+	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::Item);
+
+	if (isAddressInRange<TPCC::ItemVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", wID = " << (int)wID << ", iID = " << (int)iID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
 			localMemory_->getItemHead()->getRDMAHandler(),
 			(uintptr_t)&itemV,
-			&remoteMemoryKeys->itemTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
@@ -700,16 +716,23 @@ TPCC::StockVersion* TPCC::TPCCClient::retrieveStock(uint8_t olNumber, uint32_t i
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 
 	// The remote address to read the item info
-	TPCC::StockVersion *lookupAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::StockVersion> &remoteMH = remoteMemoryKeys->stockTableHeadVersions;
+	TPCC::StockVersion *lookupAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			serverContext->getQP(),
 			localMemory_->getStockHead()->getRDMAHandler(),
 			(uintptr_t)&stockV,
-			&remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			false));
@@ -728,24 +751,28 @@ void TPCC::TPCCClient::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, 
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
 	// The remote address to read the item info
-	Timestamp *readAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableTimestampList.rdmaHandler_.addr));
+	MemoryHandler<Timestamp> &remoteMH = remoteMemoryKeys->stockTableTimestampList;
+	Timestamp *lookupAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
-
 	size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
+	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getStockTS()->getRDMAHandler(),
 			(uintptr_t)&localMemory_->getStockTS()->getRegion()[offset],
 			&remoteMemoryKeys->stockTableTimestampList.rdmaHandler_,
-			(uintptr_t)readAddress,
+			(uintptr_t)lookupAddress,
 			size,
 			signaled));
 }
-
 
 void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID) {
 	// first, shift the pointers one to the right (this effectively drops the last element)
@@ -766,22 +793,26 @@ void TPCC::TPCCClient::updateStockPointers(uint8_t olNumber, StockVersion *oldHe
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
 	// The remote address to read the item info
-	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableTimestampList.rdmaHandler_.addr));
+	MemoryHandler<Timestamp> &remoteMH = remoteMemoryKeys->stockTableTimestampList;
+	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
+	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getStockTS()->getRDMAHandler(),
 			(uintptr_t)&versionArray[offset],
-			&remoteMemoryKeys->stockTableTimestampList.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
-
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+			false));
 }
 
 void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID) {
@@ -799,10 +830,17 @@ void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *
 	size_t circularBufferOffset = (size_t) versionOffset * sizeof(StockVersion);
 
 	// The remote address to read the item info
-	StockVersion *writeAddress =  (StockVersion *)(tableOffset + circularBufferOffset + (uint64_t)remoteMemoryKeys->stockTableOlderVersions.rdmaHandler_.addr);
+	MemoryHandler<TPCC::StockVersion> &remoteMH = remoteMemoryKeys->stockTableOlderVersions;
+	StockVersion *writeAddress =  (StockVersion *)(tableOffset + circularBufferOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(StockVersion);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID);
+		exit(-1);
+	}
 
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
@@ -812,9 +850,44 @@ void TPCC::TPCCClient::updateStockOlderVersions(uint8_t olNumber, StockVersion *
 			&remoteMemoryKeys->stockTableOlderVersions.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			false));
+}
 
+uint32_t TPCC::TPCCClient::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID){
+	ServerContext* serverContext = getServerContext(wID);
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	TPCC::ServerMemoryKeys* remoteMemoryKeys = serverContext->getRemoteMemoryKeys()->getRegion();
+
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
+	size_t fieldOffset = TPCC::District::getOffsetOfNextOID();		// offset of D_NEXT_O_ID in District
+
+	MemoryHandler<TPCC::DistrictVersion> &remoteMH = remoteMemoryKeys->districtTableHeadVersions;
+
+	// The remote address to read the district tax
+	uint64_t *lookupAddress =  (uint64_t *)(tableOffset + districtOffset + fieldOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	size_t size = sizeof(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
+			serverContext->getQP(),
+			localMemory_->getDistrictHead()->getRDMAHandler(),
+			(uintptr_t)&(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			(uint64_t)1ULL,
+			(uint32_t)size));
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	// Byte swapping, since values read by atomic operations are in Big Endian order
+	return (uint32_t) utils::bigEndianToHost(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
 }
 
 TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &cart, time_t timer, Timestamp writeTimestamp){
@@ -835,20 +908,28 @@ TPCC::OrderVersion* TPCC::TPCCClient::insertIntoOrder(uint32_t oID, TPCC::Cart &
 	ov->order.O_OL_CNT = (uint8_t)cart.items.size();
 	ov->order.O_ALL_LOCAL = 1;	// TODO: must be fixed
 
-	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
-			* config::tpcc_settings::ORDER_PER_DISTRICT + oID) * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	//	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
+	//			* config::tpcc_settings::ORDER_PER_DISTRICT + oID) * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	size_t tableOffset = (size_t)( (clientID_ * config::tpcc_settings::ORDER_PER_CLIENT + nextOrderID_)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
 
 	// The remote address to which the order will be written
-	TPCC::OrderVersion *writeAddress =  (TPCC::OrderVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->orderTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::OrderVersion> &remoteMH = remoteMemoryKeys->orderTableHeadVersions;
+	TPCC::OrderVersion *writeAddress =  (TPCC::OrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be written tothe remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
+
+	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", oID = " << (int)oID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getOrderHead()->getRDMAHandler(),
 			(uintptr_t)ov,
-			&remoteMemoryKeys->orderTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			false));
@@ -871,20 +952,29 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
 	nov->newOrder.NO_W_ID = wID;
 	nov->newOrder.NO_D_ID = dID;
 
-	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
-			* config::tpcc_settings::NEWORDER_PER_DISTRICT + oID) * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+	//	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+	//			* config::tpcc_settings::NEWORDER_PER_DISTRICT + oID) * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+	size_t tableOffset = (size_t)( (clientID_ * config::tpcc_settings::ORDER_PER_CLIENT + nextNewOrderID_)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+
 
 	// The remote address to which the order will be written
-	TPCC::NewOrderVersion *writeAddress =  (TPCC::NewOrderVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->newOrderTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::NewOrderVersion> &remoteMH = remoteMemoryKeys->newOrderTableHeadVersions;
+	TPCC::NewOrderVersion *writeAddress =  (TPCC::NewOrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be written tothe remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
+
+	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", oID = " << (int)oID);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getNewOrderHead()->getRDMAHandler(),
 			(uintptr_t)nov,
-			&remoteMemoryKeys->newOrderTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			false));
@@ -894,12 +984,6 @@ TPCC::NewOrderVersion* TPCC::TPCCClient::insertIntoNewOrder(uint32_t oID, uint16
 	return nov;
 }
 
-
-/***
- * If the retrieved value for S_QUANTITY exceeds OL_QUANTITY by 10 or more, then S_QUANTITY is decreased by OL_QUANTITY; otherwise
- * S_QUANTITY is updated to (S_QUANTITY - OL_QUANTITY)+91. S_YTD is increased by OL_QUANTITY and S_ORDER_CNT is incremented by 1.
- * If the order-line is remote, then S_REMOTE_CNT is incremented by 1.
- */
 error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID){
 	ServerContext* serverContext = getServerContext(wID);
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
@@ -909,16 +993,23 @@ error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVers
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 
 	// The remote address to read the item info
-	TPCC::StockVersion *writeAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::StockVersion> &remoteMH = remoteMemoryKeys->stockTableHeadVersions;
+	TPCC::StockVersion *writeAddress =  (TPCC::StockVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)stockV->stock.S_I_ID << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getStockHead()->getRDMAHandler(),
 			(uintptr_t)&localMemory_->getStockHead()->getRegion()[olNumber],
-			&remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			false));
@@ -927,14 +1018,6 @@ error::ErrorType TPCC::TPCCClient::updateStock(uint8_t olNumber, TPCC::StockVers
 
 	return error::ErrorType::SUCCESS;
 }
-
-// |-- The amount for the item in the order (OL_AMOUNT) is computed as: OL_QUANTITY * I_PRICE
-// |
-// |-- The strings in I_DATA and S_DATA are examined. If they both include the string "ORIGINAL",
-// |   the brand-generic field for that item is set to "B", otherwise, the brand-generic field is set to "G".
-// |
-// |-- A new row is inserted into the ORDER-LINE table to reflect the item on the order. OL_DELIVERY_D is set to a null value, OL_NUMBER is set to a unique value within
-// |   all the ORDER-LINE rows that have the same OL_O_ID value, and OL_DIST_INFO is set to the content of S_DIST_xx, where xx represents the district number (OL_D_ID)
 
 TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled){
 	ServerContext* serverContext = getServerContext(cart.wID);
@@ -956,26 +1039,37 @@ TPCC::OrderLineVersion* TPCC::TPCCClient::insertIntoOrderLine(uint8_t olNumber, 
 	olv.orderLine.OL_AMOUNT 		= (float)newOrderItem.OL_QUANTITY * itemV->item.I_PRICE;
 	std::memcpy(olv.orderLine.OL_DIST_INFO, stockV->stock.S_DIST[cart.dID], 25);
 
-	size_t tableOffset = (size_t)(
-			(
-					(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
-					* config::tpcc_settings::ORDER_PER_DISTRICT + oID
-			)
-			* tpcc_settings::ORDER_MAX_OL_CNT + olNumber
-	)
-	* sizeof(TPCC::OrderLineVersion);
+	//	size_t tableOffset = (size_t)(
+	//			(
+	//					(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + cart.dID)
+	//					* config::tpcc_settings::ORDER_PER_DISTRICT + oID
+	//			)
+	//			* tpcc_settings::ORDER_MAX_OL_CNT + olNumber
+	//	)
+	//	* sizeof(TPCC::OrderLineVersion);
+
+	size_t tableOffset = (size_t)( ( (clientID_ * config::tpcc_settings::ORDER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + nextNewOrderID_)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+
 
 	// The remote address to read the item info
-	TPCC::OrderLineVersion *writeAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMemoryKeys->orderLineTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::OrderLineVersion> &remoteMH = remoteMemoryKeys->orderLineTableHeadVersions;
+	TPCC::OrderLineVersion *writeAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
+
+	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)cart.wID << ", dID = " << (int)cart.dID
+				<< ", oID = " << (int)oID << ", next = " << (int)oID  << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getOrderLineHead()->getRDMAHandler(),
 			(uintptr_t)&olv,
-			&remoteMemoryKeys->orderLineTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			signaled));
@@ -995,15 +1089,22 @@ void TPCC::TPCCClient::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, T
 	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
 
 	// The remote address of the timestamp
-	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::StockVersion> &remoteMH = remoteMemoryKeys->stockTableHeadVersions;
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
 			serverContext->getQP(),
 			localMemory_->getLockRegion()->getRDMAHandler(),
 			(uintptr_t)&localMemory_->getLockRegion()->getRegion()[olNumber],
-			&remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			oldTS.toUUL(),
@@ -1020,16 +1121,23 @@ void TPCC::TPCCClient::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t 
 	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
 
 	// The remote address of the timestamp
-	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_.addr));
+	MemoryHandler<TPCC::StockVersion> &remoteMH = remoteMemoryKeys->stockTableHeadVersions;
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: serverID = " << serverContext->getServerAddress()
+				<< ", warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
 			IBV_WR_RDMA_WRITE,
 			serverContext->getQP(),
 			localMemory_->getStockHead()->getRDMAHandler(),
 			(uintptr_t)&localMemory_->getStockHead()->getRegion()[olNumber].writeTimestamp,
-			&remoteMemoryKeys->stockTableHeadVersions.rdmaHandler_,
+			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			true));

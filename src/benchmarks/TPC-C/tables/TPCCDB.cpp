@@ -70,23 +70,23 @@ void TPCC::TPCCDB::populate(std::vector<uint16_t> &warehouseIDs) {
 			// for a c_id field, it seems to make sense to have it be a permutation of the customers.
 			// For the "real" thing this will be equivalent
 			int* permutation = random_.makePermutation(0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
-			for (unsigned int oID = 0; oID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++oID) {
-				// The last new_orders_per_district_ orders are new
-				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
-				TPCC::Order order;
-				order.initialize(oID, (unsigned short int)permutation[oID], dID, wID, isNewOrder,  random_, now_);
-				orderTable.insert(warehouseOffset, order, initialTS);
-
-				// Generate each OrderLine for the order
-				for (unsigned char olNumber = 0; olNumber < order.O_OL_CNT; ++olNumber) {
-					orderLineTable.insert(warehouseOffset, olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
-				}
-
-				if (isNewOrder) {
-					// This is a new order: make one for it
-					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
-				}
-			}
+//			for (unsigned int oID = 0; oID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++oID) {
+//				// The last new_orders_per_district_ orders are new
+//				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
+//				TPCC::Order order;
+//				order.initialize(oID, (unsigned short int)permutation[oID], dID, wID, isNewOrder,  random_, now_);
+//				orderTable.insert(warehouseOffset, order, initialTS);
+//
+//				// Generate each OrderLine for the order
+//				for (unsigned char olNumber = 0; olNumber < order.O_OL_CNT; ++olNumber) {
+//					orderLineTable.insert(warehouseOffset, olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
+//				}
+//
+//				if (isNewOrder) {
+//					// This is a new order: make one for it
+//					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
+//				}
+//			}
 			delete[] permutation;
 		}
 	}

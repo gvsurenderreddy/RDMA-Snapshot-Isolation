@@ -69,6 +69,7 @@ template <typename T>
 void RDMARegion<T>::getMemoryHandler(MemoryHandler<T>& mh){
 	mh.rdmaHandler_ = *rdmaHandler_;
 	mh.regionSize_ = regionSize_;
+	mh.regionSizeInBytes_ = regionSize_ * sizeof(T);
 	mh.region_ = region_;
 }
 

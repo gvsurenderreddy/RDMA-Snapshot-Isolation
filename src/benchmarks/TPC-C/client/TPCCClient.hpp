@@ -70,6 +70,10 @@ private:
 	OracleContext *oracleContext_;
 	SessionState *sessionState_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
+	uint64_t nextOrderID_;
+	uint64_t nextNewOrderID_;
+	uint64_t nextOrderLineID_;
+
 
 
 
@@ -99,6 +103,8 @@ private:
 	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);
 	std::string pointer_to_string(Timestamp* ts) const;
 
+	template <typename T>
+	bool isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH);
 
 
 

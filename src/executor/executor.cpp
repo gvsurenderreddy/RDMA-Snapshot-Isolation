@@ -26,9 +26,14 @@ int main (int argc, char *argv[]) {
 	}
 
 	if (strcmp(argv[1], "client")  == 0) {
-		unsigned instanceNum = 0;
-		uint8_t ibPort = 1;
-		uint16_t homeWarehouse = 0;
+		if (argc != 6 || strcmp(argv[2], "-p") != 0 || strcmp(argv[4], "-i") != 0) {
+			std::cerr << "Usage:" << std::endl;
+			std::cerr << argv[0] << " " << argv[1] << " -p #PORT_NUM -i #INSTANCE_NUM" << std::endl;
+			std::cerr << "starts a client" << std::endl;
+		}
+		uint8_t ibPort = (uint8_t)atoi(argv[3]);
+		unsigned instanceNum = atoi(argv[5]);
+		uint16_t homeWarehouse = (uint16_t)instanceNum;
 		TPCC::TPCCClient client(instanceNum, homeWarehouse, ibPort);
 	}
 	else if(strcmp(argv[1], "server") == 0) {

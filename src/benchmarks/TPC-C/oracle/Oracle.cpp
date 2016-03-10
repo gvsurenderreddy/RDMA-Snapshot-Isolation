@@ -49,7 +49,7 @@ TPCC::Oracle::Oracle(size_t clients_cnt)
 	// Open Socket
 	server_sockfd_ = socket (AF_INET, SOCK_STREAM, 0);
 	if (server_sockfd_ < 0) {
-		std::cerr << "Error opening socket" << std::endl;
+		PRINT_CERR(CLASS_NAME, __func__, "Error in opening socket");
 		exit(-1);
 	}
 
@@ -64,11 +64,12 @@ TPCC::Oracle::Oracle(size_t clients_cnt)
 	TEST_NZ(listen (server_sockfd_, (int)clients_cnt_));
 
 	// accept connections from clients
-	std::cout << "[Info] Waiting for " << clients_cnt_ << " client(s) on port " << tcp_port_ << std::endl;
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Waiting for " << clients_cnt_ << " client(s) on port " << tcp_port_);
+
 	for (primitive::client_id_t c = 0; c < clients_cnt_; c++){
 		int sockfd = accept (server_sockfd_, (struct sockaddr *) &returned_addr, &len);
 		if (sockfd < 0) {
-			std::cerr << "ERROR on accept() client #" << c << std::endl;
+			PRINT_CERR(CLASS_NAME, __func__, "ERROR on accept() client #" << c );
 			exit(-1);
 		}
 		workerCtxs.push_back(new WorkerContext(sockfd, *context_));
@@ -79,7 +80,8 @@ TPCC::Oracle::Oracle(size_t clients_cnt)
 
 		workerCtxs[c]->clientIp_ = std::string(inet_ntoa (returned_addr.sin_addr));
 		workerCtxs[c]->clientPort_ = (int) ntohs(returned_addr.sin_port);
-		std::cout << "[Conn] Received client (" << *workerCtxs[c] <<  ")" << std::endl;
+		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client (" << *workerCtxs[c] <<  ")");
+
 
 		// prepare the message before sending to client
 		workerCtxs[c]->getMemoryKeysMessage()->getRegion()->client_cnt = clients_cnt;
@@ -100,8 +102,7 @@ TPCC::Oracle::Oracle(size_t clients_cnt)
 		TEST_NZ (utils::sock_sync (workerCtxs[c]->getSockFd()));	// just send a dummy char back and forth
 		delete workerCtxs[c];
 	}
-
-	std::cout << "[Info] Server is done." << std::endl;
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Oracle is done.");
 }
 
 TPCC::Oracle::~Oracle(){

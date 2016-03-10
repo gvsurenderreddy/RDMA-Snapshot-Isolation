@@ -16,6 +16,7 @@ public:
 	struct ibv_mr	rdmaHandler_;	// for remote access
 	T				*region_;		// for local access
 	size_t			regionSize_;
+	size_t			regionSizeInBytes_;
 };
 
 

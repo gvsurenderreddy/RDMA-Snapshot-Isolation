@@ -35,20 +35,20 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 
 	context_ = new RDMAContext(ib_port_);
 
-	size_t warehouseCnt = WAREHOUSE_PER_SERVER;
-	size_t districtCnt = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t customerCnt = CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t orderCnt = ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t orderLineCnt = tpcc_settings::ORDER_MAX_OL_CNT * ORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t newOrderCnt = NEWORDER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t stockCnt = STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t itemCnt = ITEMS_CNT;
+	size_t warehouseTableSize = WAREHOUSE_PER_SERVER;
+	size_t districtTableSize = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t customerTableSize = CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t orderTableSize = clientsCnt_ * ORDER_PER_CLIENT;
+	size_t orderLineTableSize = clientsCnt_ * tpcc_settings::ORDER_MAX_OL_CNT * ORDER_PER_CLIENT;
+	size_t newOrderTableSize = clientsCnt_ * ORDER_PER_CLIENT;
+	size_t stockTableSize = STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
+	size_t itemTableSize = ITEMS_CNT;
 	size_t versionNum = VERSION_NUM;
 
-	db = new TPCC::TPCCDB( warehouseCnt, districtCnt, customerCnt, orderCnt, orderLineCnt, newOrderCnt, stockCnt, itemCnt, versionNum, random, *context_);
+	db = new TPCC::TPCCDB(warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, versionNum, random, *context_);
 	std::vector<uint16_t> warehouseIDs;
 	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
-		warehouseIDs.push_back((uint16_t)(serverNum * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
+		warehouseIDs.push_back((uint16_t)(serverNum_ * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
 
 	db->populate(warehouseIDs);
 
@@ -57,8 +57,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	db->getMemoryKeys(memoryKeysMessage_->getRegion());
 	memoryKeysMessage_->getRegion()->serverInstanceNum = instanceNum_;
 
-	std::cout << "[Info] Server " << serverNum_ << " is waiting for " << clientsCnt_
-			<< " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_ << std::endl;
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is waiting for " << clientsCnt_
+			<< " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_);
 
 	struct sockaddr_in serv_addr, cli_addr;
 	socklen_t clilen = sizeof(cli_addr);
@@ -89,7 +89,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 			std::cerr << "ERROR on accept" << std::endl;
 			exit(-1);
 		}
-		std::cout << "[Conn] Received client #" << i << " on socket " << sockfd << std::endl;
+		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client #" << i << " on socket " << sockfd);
 		clientCtxs.push_back(new ClientContext(sockfd, *context_));
 
 		// connect the QPs
@@ -114,7 +114,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		delete clientCtxs[i];
 	}
 
-	std::cout << "[Info] Server's ready to gracefully get destroyed" << std::endl;
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
 }
 
 TPCC::TPCCServer::~TPCCServer() {

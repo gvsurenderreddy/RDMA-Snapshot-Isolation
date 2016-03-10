@@ -81,15 +81,15 @@ public:
 		olderVersions	= new RDMARegion<OrderLineVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
-		size_t ind = ( (
-				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
-				+ oID) * ORDER_MAX_OL_CNT + olNumber;
-
-		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
-		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-	}
+//	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
+//		size_t ind = ( (
+//				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+//				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
+//				+ oID) * ORDER_MAX_OL_CNT + olNumber;
+//
+//		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
+//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+//	}
 
 	void getMemoryHandler(MemoryHandler<OrderLineVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<OrderLineVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);
