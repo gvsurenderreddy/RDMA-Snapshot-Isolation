@@ -19,7 +19,7 @@ TPC			:= benchmarks/TPC-C
 #MODULES		:= util basic-types executor $(AGENTS_MODULES)
 #MODULES		:= util auxilary $(BENCHMARK_MODULES)
 UNIT_TESTS	:= unit-tests unit-tests/tpcw-tests 
-MODULES		:= util executor basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(TPC)/server $(TPC)/oracle $(TPC)/client #$(UNIT_TESTS) 
+MODULES		:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(TPC)/server $(TPC)/client #$(UNIT_TESTS) 
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))

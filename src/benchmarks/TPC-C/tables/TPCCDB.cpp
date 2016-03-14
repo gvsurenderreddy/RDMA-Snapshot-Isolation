@@ -69,7 +69,7 @@ void TPCC::TPCCDB::populate(std::vector<uint16_t> &warehouseIDs) {
 			// TODO: TPC-C 4.3.3.1. says that this should be a permutation of [1, 3000]. But since it is
 			// for a c_id field, it seems to make sense to have it be a permutation of the customers.
 			// For the "real" thing this will be equivalent
-			int* permutation = random_.makePermutation(0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+//			int* permutation = random_.makePermutation(0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 //			for (unsigned int oID = 0; oID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++oID) {
 //				// The last new_orders_per_district_ orders are new
 //				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
@@ -87,7 +87,7 @@ void TPCC::TPCCDB::populate(std::vector<uint16_t> &warehouseIDs) {
 //					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
 //				}
 //			}
-			delete[] permutation;
+//			delete[] permutation;
 		}
 	}
 }

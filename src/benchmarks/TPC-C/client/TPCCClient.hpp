@@ -8,11 +8,13 @@
 #ifndef SRC_BENCHMARKS_TPC_C_CLIENT_TPCCCLIENT_HPP_
 #define SRC_BENCHMARKS_TPC_C_CLIENT_TPCCCLIENT_HPP_
 
-#include "../../../../config.hpp"
-#include "../../../basic-types/PrimitiveTypes.hpp"
 #include "SessionState.hpp"
 #include "ServerContext.hpp"
-#include "OracleContext.hpp"
+#include "NewOrderLocalMemory.hpp"
+#include "DBExecutor.hpp"
+#include "../../../oracle/OracleContext.hpp"
+#include "../../../../config.hpp"
+#include "../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../random/randomgenerator.hpp"
 #include "../../../basic-types/Error.hpp"
@@ -20,7 +22,6 @@
 #include <stdlib.h>
 #include <vector>
 #include <ctime>	// for std::time and time_t
-#include "NewOrderLocalMemory.hpp"
 #include <sstream>
 
 namespace TPCC{
@@ -69,43 +70,19 @@ private:
 	RDMAContext *context_;
 	OracleContext *oracleContext_;
 	SessionState *sessionState_;
+	DBExecutor executor_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
 	uint64_t nextOrderID_;
 	uint64_t nextNewOrderID_;
 	uint64_t nextOrderLineID_;
 
 
-
-
 	TPCC::TransactionResult doNewOrder();
 	Cart buildCart();
 	ServerContext* getServerContext(uint16_t wID);
-	uint16_t getWarehouseOffsetOnServer(uint16_t wID);
 	bool isRecordAccessible(Timestamp &ts);
-	void getReadTimestamp();
-	void submitResult(TPCC::TransactionResult trxResult);
 	primitive::timestamp_t getNewCommitTimestamp();
-	void retrieveWarehouseTax(uint16_t wID);
-	void retrieveDistrictTax(uint16_t wID, uint8_t dID);
-	uint32_t retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID);
-	TPCC::CustomerVersion* getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID);
-	TPCC::ItemVersion *retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID);
-	TPCC::StockVersion* retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID);
-	void retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, bool signaled);
-	void updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID);
-	void updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID);
-
-	TPCC::OrderVersion* insertIntoOrder(uint32_t oID, Cart &cart, time_t timer, Timestamp writeTimestamp);
-	TPCC::NewOrderVersion* insertIntoNewOrder(uint32_t oID, uint16_t wID, uint8_t dID, Timestamp writeTimestamp);
-	error::ErrorType updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID);
-	TPCC::OrderLineVersion* insertIntoOrderLine(uint8_t olNumber, uint32_t oID, Cart &cart, NewOrderItem &newOrderItem, TPCC::ItemVersion *itemV, TPCC::StockVersion *stockV, Timestamp &ts, bool signaled);
-	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS);
-	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID);
 	std::string pointer_to_string(Timestamp* ts) const;
-
-	template <typename T>
-	bool isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH);
-
 
 
 public:

@@ -9,7 +9,7 @@
 //#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
 //#include "../TSM-SI/client/RDMAClient.hpp"
 #include "../benchmarks/TPC-C/server/TPCCServer.hpp"
-#include "../benchmarks/TPC-C/oracle/Oracle.hpp"
+#include "../oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/client/TPCCClient.hpp"
 #include <iostream>
 #include <cstring>
@@ -58,7 +58,7 @@ int main (int argc, char *argv[]) {
 			return 1;
 		}
 		uint32_t clients_cnt = atoi(argv[3]);
-		TPCC::Oracle ts(clients_cnt);
+		Oracle ts(clients_cnt);
 	}
 
 	/*
