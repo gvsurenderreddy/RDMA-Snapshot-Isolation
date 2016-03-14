@@ -16,11 +16,10 @@
 namespace TPCC {
 
 DBExecutor::~DBExecutor() {
-	// TODO Auto-generated destructor stub
+	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Destructor called");
 }
 
 DBExecutor::DBExecutor() {
-	// TODO Auto-generated constructor stub
 
 }
 

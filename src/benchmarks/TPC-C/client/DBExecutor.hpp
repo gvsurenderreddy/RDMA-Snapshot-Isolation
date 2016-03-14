@@ -34,6 +34,8 @@ private:
 public:
 	virtual ~DBExecutor();
 	DBExecutor();
+	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
+	DBExecutor(const DBExecutor&) = delete;				// Disallow copying
 
 	void getReadTimestamp(RDMARegion<primitive::timestamp_t> &, MemoryHandler<primitive::timestamp_t> &, ibv_qp *);
 	void submitResult(primitive::client_id_t, RDMARegion<primitive::timestamp_t> &,  MemoryHandler<primitive::timestamp_t> &, ibv_qp *);
