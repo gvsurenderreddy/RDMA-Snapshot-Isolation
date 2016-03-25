@@ -65,11 +65,15 @@ class District{
 
 class DistrictVersion{
 public:
-	District district;
 	Timestamp writeTimestamp;
+	District district;
 
 	static size_t getOffsetOfDistrict(){
 		return offsetof(DistrictVersion, district);
+	}
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(DistrictVersion, writeTimestamp);
 	}
 };
 

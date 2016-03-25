@@ -78,6 +78,30 @@ void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primit
 			true));
 }
 
+void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the warehouse tax
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
+	TPCC::WarehouseVersion *lookupAddress =  (WarehouseVersion*)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(WarehouseVersion);
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID );
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
 void DBExecutor::retrieveWarehouseTax(uint16_t wID, RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp){
 	// The remote address to read the warehouse tax
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
@@ -102,6 +126,213 @@ void DBExecutor::retrieveWarehouseTax(uint16_t wID, RDMARegion<TPCC::WarehouseVe
 			(uintptr_t)lookupAddress,
 			size,
 			false));
+}
+
+void DBExecutor::retrieveWarehousePointerList(uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	Timestamp *lookupAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::lockWarehouse(TPCC::WarehouseVersion &warehouseV, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp){
+	// The remote address of the timestamp
+	uint16_t wID = warehouseV.warehouse.W_ID;
+	uint64_t oldTS_UUL = warehouseV.writeTimestamp.toUUL();
+	uint64_t newTS_UUL = newTS.toUUL();
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
+	size_t timestampOffset = (size_t)TPCC::WarehouseVersion::getOffsetOfTimestamp();		// offset of Timestamp in WarehouseVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			oldTS_UUL,
+			newTS_UUL));
+}
+
+void DBExecutor::revertWarehouseLock(RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	uint16_t wID = localRegion.getRegion()->warehouse.W_ID;
+
+	// The remote address of the timestamp
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
+	size_t timestampOffset = (size_t)TPCC::WarehouseVersion::getOffsetOfTimestamp();	// offset of Timestamp in WarehouseVersion
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()->writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateWarehousePointers(TPCC::WarehouseVersion &oldHead, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
+	// first, shift the pointers one to the right (this effectively drops the last element)
+	Timestamp *versionArray = localRegion.getRegion();
+
+	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
+		versionArray[i + 1] = versionArray[i];
+
+	// second, set the head of the pointer list to point to the head of the old versions
+	versionArray[0] = oldHead.writeTimestamp;
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead.warehouse.W_ID;
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)versionArray,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateWarehouseOlderVersions(RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled) {
+	TPCC::WarehouseVersion *oldHead = localRegion.getRegion();
+	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead->warehouse.W_ID;
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * config::tpcc_settings::VERSION_NUM * sizeof(TPCC::WarehouseVersion));
+	size_t circularBufferOffset = (size_t) versionOffset * sizeof(TPCC::WarehouseVersion);
+	WarehouseVersion *writeAddress =  (WarehouseVersion *)(tableOffset + circularBufferOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateWarehouse(RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t wID = localRegion.getRegion()->warehouse.W_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));
+	TPCC::WarehouseVersion *writeAddress =  (TPCC::WarehouseVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
+
+	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void DBExecutor::retrieveDistrict(uint16_t wID, uint8_t dID, RDMARegion<DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp* qp, bool signaled){
+	// The remote address to read the district tax
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	TPCC::DistrictVersion* lookupAddress =  (TPCC::DistrictVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
 }
 
 void DBExecutor::retrieveDistrictTax(uint16_t wID, uint8_t dID, RDMARegion<DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp* qp){
@@ -130,7 +361,215 @@ void DBExecutor::retrieveDistrictTax(uint16_t wID, uint8_t dID, RDMARegion<Distr
 			false));
 }
 
-void DBExecutor::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::retrieveDistrictPointerList(uint16_t wID, uint8_t dID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	Timestamp *lookupAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID, RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp){
+	// The remote address to read the district tax
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
+	size_t fieldOffset = TPCC::District::getOffsetOfNextOID();		// offset of D_NEXT_O_ID in District
+	uint64_t *lookupAddress =  (uint64_t *)(tableOffset + districtOffset + fieldOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	size_t size = sizeof(localRegion.getRegion()->district.D_NEXT_O_ID);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&(localRegion.getRegion()->district.D_NEXT_O_ID),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			(uint64_t)1ULL,
+			(uint32_t)size));
+}
+
+void DBExecutor::lockDistrict(TPCC::DistrictVersion &districtV, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp){
+	// The remote address of the timestamp
+	uint16_t wID = districtV.district.D_W_ID;
+	uint8_t dID = districtV.district.D_ID;
+
+	uint64_t oldTS_UUL = districtV.writeTimestamp.toUUL();
+	uint64_t newTS_UUL = newTS.toUUL();
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t timestampOffset = (size_t)TPCC::DistrictVersion::getOffsetOfTimestamp();		// offset of Timestamp in DistrictVersion
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			oldTS_UUL,
+			newTS_UUL));
+}
+
+void DBExecutor::revertDistrictLock(RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	uint16_t wID = localRegion.getRegion()->district.D_W_ID;
+	uint8_t dID = localRegion.getRegion()->district.D_ID;
+
+	// The remote address of the timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(localRegion.getRegion()->district.D_W_ID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t timestampOffset = (size_t)TPCC::DistrictVersion::getOffsetOfTimestamp();	// offset of Timestamp in DistrictVersion
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()->writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateDistrictPointers(TPCC::DistrictVersion &oldHead, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
+	// first, shift the pointers one to the right (this effectively drops the last element)
+	Timestamp *versionArray = localRegion.getRegion();
+
+	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
+		versionArray[i + 1] = versionArray[i];
+
+	// second, set the head of the pointer list to point to the head of the old versions
+	versionArray[0] = oldHead.writeTimestamp;
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead.district.D_W_ID;
+	uint8_t dID = oldHead.district.D_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));	// offset of DistrictVersion in DistrictTable
+	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)versionArray,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateDistrictOlderVersions(RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp, bool signaled) {
+	TPCC::DistrictVersion *oldHead = localRegion.getRegion();
+	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead->district.D_W_ID;
+	uint8_t dID = oldHead->district.D_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * config::tpcc_settings::VERSION_NUM * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	size_t circularBufferOffset = (size_t) versionOffset * sizeof(TPCC::DistrictVersion);
+	DistrictVersion *writeAddress =  (DistrictVersion *)(tableOffset + circularBufferOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateDistrict(RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t wID = localRegion.getRegion()->district.D_W_ID;
+	uint8_t dID = localRegion.getRegion()->district.D_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
+	TPCC::DistrictVersion *writeAddress =  (TPCC::DistrictVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
+
+	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+
+
+
+
+
+void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp){
 	// The remote address to read the customer info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
@@ -155,6 +594,200 @@ void DBExecutor::getCustomerInformation(uint16_t wID, uint8_t dID, uint32_t cID,
 			size,
 			false));
 }
+
+void DBExecutor::retrieveCustomerPointerList(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID)
+			* config::tpcc_settings::VERSION_NUM  * sizeof(Timestamp));
+
+	Timestamp *lookupAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::lockCustomer(TPCC::CustomerVersion &customerV, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp){
+	// The remote address of the timestamp
+	uint16_t wID = customerV.customer.C_W_ID;
+	uint8_t dID = customerV.customer.C_D_ID;
+	uint32_t cID = customerV.customer.C_ID;
+
+	uint64_t oldTS_UUL = customerV.writeTimestamp.toUUL();
+	uint64_t newTS_UUL = newTS.toUUL();
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID) * sizeof(TPCC::CustomerVersion));
+	size_t timestampOffset = (size_t)TPCC::CustomerVersion::getOffsetOfTimestamp();		// offset of Timestamp in CustomerVersion
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << cID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			oldTS_UUL,
+			newTS_UUL));
+}
+
+void DBExecutor::revertCustomerLock(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	uint16_t wID = localRegion.getRegion()->customer.C_W_ID;
+	uint8_t dID = localRegion.getRegion()->customer.C_D_ID;
+	uint32_t cID = localRegion.getRegion()->customer.C_ID;
+
+	// The remote address of the timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID) * sizeof(TPCC::CustomerVersion));	// offset of CustomerVersion in CustomerTable
+	size_t timestampOffset = (size_t)TPCC::CustomerVersion::getOffsetOfTimestamp();	// offset of Timestamp in CustomerVersion
+	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()->writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateCustomerPointers(TPCC::CustomerVersion &oldHead, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
+	// first, shift the pointers one to the right (this effectively drops the last element)
+	Timestamp *versionArray = localRegion.getRegion();
+
+	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
+		versionArray[i + 1] = versionArray[i];
+
+	// second, set the head of the pointer list to point to the head of the old versions
+	versionArray[0] = oldHead.writeTimestamp;
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead.customer.C_W_ID;
+	uint8_t dID = oldHead.customer.C_D_ID;
+	uint32_t cID = oldHead.customer.C_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+	Timestamp *writeAddress =  (Timestamp *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
+
+	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)versionArray,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateCustomerOlderVersions(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled) {
+	TPCC::CustomerVersion *oldHead = localRegion.getRegion();
+	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
+
+	// The remote address to read the item info
+	uint16_t wID = oldHead->customer.C_W_ID;
+	uint8_t dID = oldHead->customer.C_D_ID;
+	uint32_t cID = oldHead->customer.C_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID) * config::tpcc_settings::VERSION_NUM * sizeof(TPCC::CustomerVersion));
+	size_t circularBufferOffset = (size_t) versionOffset * sizeof(TPCC::CustomerVersion);
+	CustomerVersion *writeAddress =  (CustomerVersion *)(tableOffset + circularBufferOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
+
+	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t wID = localRegion.getRegion()->customer.C_W_ID;
+	uint8_t dID = localRegion.getRegion()->customer.C_D_ID;
+	uint32_t cID = localRegion.getRegion()->customer.C_ID;
+
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
+			* config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID)  * sizeof(TPCC::CustomerVersion));
+
+	TPCC::CustomerVersion *writeAddress =  (TPCC::CustomerVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
+
+	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+
+
 
 void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<ItemVersion> &localRegion, MemoryHandler<TPCC::ItemVersion> &remoteMH, ibv_qp *qp){
 	// The remote address to read the item info
@@ -218,7 +851,7 @@ void DBExecutor::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16
 		exit(-1);
 	}
 
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			qp,
 			localRegion.getRDMAHandler(),
 			(uintptr_t)&localRegion.getRegion()[offset],
@@ -342,33 +975,6 @@ void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHea
 			false));
 }
 
-
-void DBExecutor::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID, RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp){
-	// The remote address to read the district tax
-	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
-	size_t districtOffset = (size_t)TPCC::DistrictVersion::getOffsetOfDistrict();		// offset of District in DistrictVersion
-	size_t fieldOffset = TPCC::District::getOffsetOfNextOID();		// offset of D_NEXT_O_ID in District
-	uint64_t *lookupAddress =  (uint64_t *)(tableOffset + districtOffset + fieldOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
-
-	// Size to be read from the remote side
-	size_t size = sizeof(localRegion.getRegion()->district.D_NEXT_O_ID);
-
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
-		exit(-1);
-	}
-
-	TEST_NZ (RDMACommon::post_RDMA_FETCH_ADD(
-			qp,
-			localRegion.getRDMAHandler(),
-			(uintptr_t)&(localRegion.getRegion()->district.D_NEXT_O_ID),
-			&remoteMH.rdmaHandler_,
-			(uintptr_t)lookupAddress,
-			(uint64_t)1ULL,
-			(uint32_t)size));
-}
-
 void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
@@ -464,5 +1070,31 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t o
 			size,
 			signaled));
 }
+
+void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID, RDMARegion<TPCC::HistoryVersion> &localRegion, MemoryHandler<TPCC::HistoryVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t wID = localRegion.getRegion()->history.H_W_ID;
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::HISTORY_PER_CLIENT) + hID)  * sizeof(TPCC::HistoryVersion));
+	TPCC::HistoryVersion *writeAddress = (TPCC::HistoryVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::HistoryVersion);
+
+	if (isAddressInRange<TPCC::HistoryVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", hID = " << (int)hID);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
 
 } /* namespace TPCC */

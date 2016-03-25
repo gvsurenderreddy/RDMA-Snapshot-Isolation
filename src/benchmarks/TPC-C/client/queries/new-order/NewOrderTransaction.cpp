@@ -6,7 +6,7 @@
  */
 
 #include "NewOrderTransaction.hpp"
-#include "../../../../util/utils.hpp"
+#include "../../../../../util/utils.hpp"
 
 #define CLASS_NAME "NewOrderTrx"
 namespace TPCC {
@@ -22,8 +22,8 @@ NewOrderTransaction::~NewOrderTransaction() {
 }
 
 
-TPCC::Cart NewOrderTransaction::buildCart(){
-	Cart cart;
+NewOrderCart NewOrderTransaction::buildCart(){
+	NewOrderCart cart;
 
 	// 2.4.1.1 the home warehouse number (W_ID) is constant over the whole measurement interval
 	// cart.wID = (uint16_t) random_.number(0, config::tpcc_settings::WAREHOUSE_CNT - 1);
@@ -76,7 +76,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	//	Constructing the shopping cart
 	// ************************************************
-	Cart cart = buildCart();
+	NewOrderCart cart = buildCart();
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Cart: " << cart);
 
 
@@ -106,7 +106,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getQP());
 
 	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
-	executor_.getCustomerInformation(
+	executor_.retrieveCustomer(
 			cart.wID,
 			cart.dID,
 			cart.cID,
@@ -242,6 +242,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
+	// Byte swapping, since values read by atomic operations are in Big Endian order
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
 		localMemory_->getLockRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getLockRegion()->getRegion()[olNumber]);
 
@@ -280,11 +281,11 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		for (auto const& olNumber: succesfulOrderLines){
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] (Client " << clientID_ << ") Lock reverted on stock " << stocks[olNumber]->stock);
+			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << " reverted lock on stock " << stocks[olNumber]->stock);
 			(void)olNumber;	// to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 
 		}
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] (Client " << clientID_ << ") Lock on all items could not be acquired --> ** ABORT **");
+		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << " could not acquire lock on all items --> ** ABORT **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;

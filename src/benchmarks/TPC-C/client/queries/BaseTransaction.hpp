@@ -34,6 +34,7 @@ protected:
 	uint64_t nextOrderID_;
 	uint64_t nextNewOrderID_;
 	uint64_t nextOrderLineID_;
+	uint64_t nextHistoryID_;
 
 	virtual TransactionResult doOne() = 0;
 	ServerContext* getServerContext(uint16_t wID);

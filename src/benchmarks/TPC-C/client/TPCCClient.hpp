@@ -16,7 +16,8 @@
 #include "../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../random/randomgenerator.hpp"
-#include "queries/NewOrderTransaction.hpp"
+#include "queries/new-order/NewOrderTransaction.hpp"
+#include "queries/payment/PaymentTransaction.hpp"
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
@@ -36,7 +37,6 @@ private:
 	OracleContext *oracleContext_;
 	SessionState *sessionState_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
-	NewOrderTransaction *newOrderTrx_;
 
 
 public:

@@ -57,8 +57,8 @@ public:
 
 class OrderVersion{
 public:
-	Order order;
 	Timestamp writeTimestamp;
+	Order order;
 };
 
 class OrderTable{

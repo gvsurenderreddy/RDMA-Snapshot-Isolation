@@ -43,9 +43,10 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	size_t newOrderTableSize = clientsCnt_ * ORDER_PER_CLIENT;
 	size_t stockTableSize = STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
 	size_t itemTableSize = ITEMS_CNT;
+	size_t historyTableSize = clientsCnt_ * TRANSACTION_CNT;
 	size_t versionNum = VERSION_NUM;
 
-	db = new TPCC::TPCCDB(warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, versionNum, random, *context_);
+	db = new TPCC::TPCCDB(warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 	std::vector<uint16_t> warehouseIDs;
 	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
 		warehouseIDs.push_back((uint16_t)(serverNum_ * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));

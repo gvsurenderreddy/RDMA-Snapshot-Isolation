@@ -18,7 +18,7 @@
 #define CLASS_NAME	"TPCCDB"
 
 
-TPCC::TPCCDB::TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
+TPCC::TPCCDB::TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t historyCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
 itemCnt_(itemCnt),
 customerCnt_(customerCnt),
 warehouseCnt_(warehouseCnt),
@@ -32,7 +32,8 @@ warehouseTable (warehouseCnt, versionNum, context, mrFlags_),
 districtTable (districtCnt, versionNum, context, mrFlags_),
 orderTable (orderCnt, versionNum, context, mrFlags_),
 orderLineTable(orderLineCnt, versionNum, context, mrFlags_),
-newOrderTable(newOrderCnt, versionNum, context, mrFlags_) {
+newOrderTable(newOrderCnt, versionNum, context, mrFlags_),
+historyTable(historyCnt, versionNum, context, mrFlags_){
 	;
 }
 
@@ -95,7 +96,7 @@ void TPCC::TPCCDB::populate(std::vector<uint16_t> &warehouseIDs) {
 void TPCC::TPCCDB::getMemoryKeys(TPCC::ServerMemoryKeys *k){
 	customerTable.getMemoryHandler(k->customerTableHeadVersions, k->customerTableTimestampList, k->customerTableOlderVersions);
 	districtTable.getMemoryHandler(k->districtTableHeadVersions, k->districtTableTimestampList, k->districtTableOlderVersions);
-	//historyTable.getMemoryHandler(k->historyTableHeadVersions, k->historyTableTimestampList, k->historyTableOlderVersions);
+	historyTable.getMemoryHandler(k->historyTableHeadVersions, k->historyTableTimestampList, k->historyTableOlderVersions);
 	itemTable.getMemoryHandler(k->itemTableHeadVersions, k->itemTableTimestampList, k->itemTableOlderVersions);
 	newOrderTable.getMemoryHandler(k->newOrderTableHeadVersions, k->newOrderTableTimestampList, k->newOrderTableOlderVersions);
 	orderLineTable.getMemoryHandler(k->orderLineTableHeadVersions, k->orderLineTableTimestampList, k->orderLineTableOlderVersions);

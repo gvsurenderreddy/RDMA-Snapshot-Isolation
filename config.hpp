@@ -14,7 +14,7 @@
 
 
 namespace config {
-#define DEBUG_ENABLED (true)
+#define DEBUG_ENABLED (false)
 
 /* Server settings */
 static const int			SERVER_CNT				= 1;
@@ -43,16 +43,19 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int		NEWORDER_TRANSACTION_CNT 	= 10;//100000;
+static const int		TRANSACTION_CNT 	= 10000;//100000;
+static const double		NEW_ORDER_TRX_RATIO	= 0.5;
+static const double		PAYMENT_TRX_RATIO	= 0.5;
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER	= 1;
 static const int WAREHOUSE_CNT			= WAREHOUSE_PER_SERVER * SERVER_CNT;
-static const int ITEMS_CNT				= 15;//100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
-static const int DISTRICT_PER_WAREHOUSE	= 10; 	// TPCC default is 10;
-static const int CUSTOMER_PER_DISTRICT	= 3000; 	// TPCC default is 3000;
+static const int ITEMS_CNT				= 5;//100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
+static const int DISTRICT_PER_WAREHOUSE	= 4;//10; 	// TPCC default is 10;
+static const int CUSTOMER_PER_DISTRICT	= 3;//3000; 	// TPCC default is 3000;
 static const int STOCK_PER_WAREHOUSE	= ITEMS_CNT;
-static const int ORDER_PER_CLIENT		= NEWORDER_TRANSACTION_CNT;
+static const int ORDER_PER_CLIENT		= TRANSACTION_CNT;
+static const int HISTORY_PER_CLIENT		= TRANSACTION_CNT;
 static const double REMOTE_WAREHOUSE_PROB	= 0.01; // probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
 
 static const int VERSION_NUM = 2;

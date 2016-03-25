@@ -10,7 +10,7 @@
 #include "../tables/TPCCUtil.hpp"
 #include <infiniband/verbs.h>	// for ibv_qp
 
-#define CLASS_NAME	"NewOrderLocalMemory"
+#define CLASS_NAME	"NewOrdLocMem"
 
 TPCC::NewOrderLocalMemory::NewOrderLocalMemory(RDMAContext &context){
 	customerHead_			= new RDMARegion<TPCC::CustomerVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);

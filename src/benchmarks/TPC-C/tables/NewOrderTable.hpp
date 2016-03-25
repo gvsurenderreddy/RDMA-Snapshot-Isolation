@@ -39,8 +39,8 @@ public:
 
 class NewOrderVersion{
 public:
-	NewOrder newOrder;
 	Timestamp writeTimestamp;
+	NewOrder newOrder;
 };
 
 

@@ -37,7 +37,10 @@ namespace utils {
 
 #else
 #define DEBUG_COUT(className,funcName,message) do {} while (false)
-#define DEBUG_CERR(className,funcName,message) do {} while (false)
+#define DEBUG_CERR(className,funcName,message) do { \
+		std::string header = std::string("[") + className + "::" + funcName + "] "; \
+		std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+} while( false )
 #define ASSERT(x) do { (void)sizeof(x); } while(0)
 #endif	// #if(DEBUG_ENABLED)
 

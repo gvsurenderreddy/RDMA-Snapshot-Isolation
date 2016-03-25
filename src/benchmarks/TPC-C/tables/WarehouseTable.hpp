@@ -59,11 +59,15 @@ public:
 
 class WarehouseVersion{
 public:
-	Warehouse warehouse;
 	Timestamp writeTimestamp;
+	Warehouse warehouse;
 
 	static size_t getOffsetOfWarehouse(){
 		return offsetof(WarehouseVersion, warehouse);
+	}
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(WarehouseVersion, writeTimestamp);
 	}
 };
 

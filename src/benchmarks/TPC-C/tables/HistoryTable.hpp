@@ -18,6 +18,7 @@ using namespace tpcc_settings;
 
 namespace TPCC{
 class History{
+public:
 	//	Primary Key: none
 	//	(H_C_W_ID, H_C_D_ID, H_C_ID) Foreign Key, references (C_W_ID, C_D_ID, C_ID)
 	//	(H_W_ID, H_D_ID) Foreign Key, references (D_W_ID, D_ID)
@@ -50,11 +51,12 @@ class History{
 
 class HistoryVersion{
 public:
-	History history;
 	Timestamp writeTimestamp;
+	History history;
 };
 
 class HistoryTable{
+public:
 	RDMARegion<HistoryVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<HistoryVersion>	*olderVersions;

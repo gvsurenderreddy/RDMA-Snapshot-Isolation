@@ -21,7 +21,8 @@ BaseTransaction::BaseTransaction(primitive::client_id_t clientID, size_t clientC
   localTimestampVector_(localTimestampVector),
   nextOrderID_(0),
   nextNewOrderID_(0),
-  nextOrderLineID_(0){
+  nextOrderLineID_(0),
+  nextHistoryID_(0){
 }
 
 BaseTransaction::~BaseTransaction() {

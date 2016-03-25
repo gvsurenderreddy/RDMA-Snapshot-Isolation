@@ -63,8 +63,8 @@ public:
 
 class OrderLineVersion{
 public:
-	OrderLine orderLine;
 	Timestamp writeTimestamp;
+	OrderLine orderLine;
 };
 
 class OrderLineTable{

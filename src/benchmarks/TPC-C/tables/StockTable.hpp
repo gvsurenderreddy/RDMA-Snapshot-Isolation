@@ -66,8 +66,8 @@ public:
 
 class StockVersion{
 public:
-	Stock stock;
 	Timestamp writeTimestamp;
+	Stock stock;
 
 	static size_t getOffsetOfStock(){
 		return offsetof(StockVersion, stock);

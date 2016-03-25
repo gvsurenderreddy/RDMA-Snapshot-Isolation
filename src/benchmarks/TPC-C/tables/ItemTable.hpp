@@ -54,8 +54,8 @@ public:
 
 class ItemVersion{
 public:
-	Item item;
 	Timestamp writeTimestamp;
+	Item item;
 
 	static size_t getOffsetOfItem(){
 		return offsetof(ItemVersion, item);

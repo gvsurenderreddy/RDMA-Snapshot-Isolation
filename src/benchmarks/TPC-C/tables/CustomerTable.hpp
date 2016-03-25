@@ -90,11 +90,15 @@ public:
 
 class CustomerVersion{
 public:
-	Customer customer;
 	Timestamp writeTimestamp;
+	Customer customer;
 
 	static size_t getOffsetOfCustomer(){
 		return offsetof(CustomerVersion, customer);
+	}
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(CustomerVersion, writeTimestamp);
 	}
 };
 
