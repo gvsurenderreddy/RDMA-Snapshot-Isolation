@@ -56,7 +56,8 @@ private:
 	RDMARegion<Timestamp> 				*warehouseTS_;
 	RDMARegion<TPCC::WarehouseVersion>	*warehouseOlderVersions_;
 
-	RDMARegion<uint64_t>	*lockRegion_;
+	RDMARegion<uint64_t>	*districtLockRegion_;
+	RDMARegion<uint64_t>	*stocksLocksRegion_;
 
 public:
 	NewOrderLocalMemory(RDMAContext &context);
@@ -93,7 +94,8 @@ public:
 	RDMARegion<Timestamp>* getWarehouseTS();
 	RDMARegion<TPCC::WarehouseVersion>* getWarehouseOlderVersions();
 
-	RDMARegion<uint64_t>* getLockRegion();
+	RDMARegion<uint64_t>* getDistrictLockRegion();
+	RDMARegion<uint64_t>* getStocksLocksRegion();
 };
 }	// namespace TPCC
 

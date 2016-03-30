@@ -32,7 +32,7 @@ template <typename T>
 bool DBExecutor::isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH) {
 	if ((lookupAddress < (uintptr_t) remoteMH.rdmaHandler_.addr) || (lookupAddress >= (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_)){
 		PRINT_CERR(CLASS_NAME, __func__, "Accessing outside the region: " << lookupAddress << " NOT IN ["
-				<< (uintptr_t) remoteMH.rdmaHandler_.addr << ", " << (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_ << ") range");
+				<< (uintptr_t) remoteMH.rdmaHandler_.addr << ", " << (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_ << ") range. Region size: " << (int)remoteMH.regionSize_);
 		return false;
 	}
 	else return true;
@@ -42,7 +42,10 @@ void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegio
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
 
-	assert(isAddressInRange<primitive::timestamp_t>((uintptr_t)lookupAddress, remoteMH) == true);
+	if(isAddressInRange<primitive::timestamp_t>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Error in timestamp acquisition");
+		exit(-1);
+	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
 			IBV_WR_RDMA_READ,
@@ -155,8 +158,8 @@ void DBExecutor::retrieveWarehousePointerList(uint16_t wID, RDMARegion<Timestamp
 void DBExecutor::lockWarehouse(TPCC::WarehouseVersion &warehouseV, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp){
 	// The remote address of the timestamp
 	uint16_t wID = warehouseV.warehouse.W_ID;
-	uint64_t oldTS_UUL = warehouseV.writeTimestamp.toUUL();
-	uint64_t newTS_UUL = newTS.toUUL();
+	uint64_t* oldTS_UUL = (uint64_t *) &warehouseV.writeTimestamp;
+	uint64_t* newTS_UUL = (uint64_t *) &newTS;
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	size_t tableOffset = (size_t)(warehouseOffset * sizeof(TPCC::WarehouseVersion));	// offset of WarehouseVersion in WarehouseTable
@@ -177,8 +180,8 @@ void DBExecutor::lockWarehouse(TPCC::WarehouseVersion &warehouseV, Timestamp &ne
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			oldTS_UUL,
-			newTS_UUL));
+			*oldTS_UUL,
+			*newTS_UUL));
 }
 
 void DBExecutor::revertWarehouseLock(RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled){
@@ -416,8 +419,8 @@ void DBExecutor::lockDistrict(TPCC::DistrictVersion &districtV, Timestamp &newTS
 	uint16_t wID = districtV.district.D_W_ID;
 	uint8_t dID = districtV.district.D_ID;
 
-	uint64_t oldTS_UUL = districtV.writeTimestamp.toUUL();
-	uint64_t newTS_UUL = newTS.toUUL();
+	uint64_t* oldTS_UUL = (uint64_t *) &districtV.writeTimestamp;
+	uint64_t* newTS_UUL = (uint64_t *) &newTS;
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID) * sizeof(TPCC::DistrictVersion));	// offset of DistrictVersion in DistrictTable
@@ -438,8 +441,8 @@ void DBExecutor::lockDistrict(TPCC::DistrictVersion &districtV, Timestamp &newTS
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			oldTS_UUL,
-			newTS_UUL));
+			*oldTS_UUL,
+			*newTS_UUL));
 }
 
 void DBExecutor::revertDistrictLock(RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp, bool signaled){
@@ -567,9 +570,7 @@ void DBExecutor::updateDistrict(RDMARegion<TPCC::DistrictVersion> &localRegion, 
 
 
 
-
-
-void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the customer info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
@@ -592,7 +593,7 @@ void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMAR
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			false));
+			signaled));
 }
 
 void DBExecutor::retrieveCustomerPointerList(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
@@ -628,8 +629,8 @@ void DBExecutor::lockCustomer(TPCC::CustomerVersion &customerV, Timestamp &newTS
 	uint8_t dID = customerV.customer.C_D_ID;
 	uint32_t cID = customerV.customer.C_ID;
 
-	uint64_t oldTS_UUL = customerV.writeTimestamp.toUUL();
-	uint64_t newTS_UUL = newTS.toUUL();
+	uint64_t* oldTS_UUL = (uint64_t *) &customerV.writeTimestamp;
+	uint64_t* newTS_UUL = (uint64_t *) &newTS;
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	size_t tableOffset = (size_t)(((warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID)
@@ -651,8 +652,8 @@ void DBExecutor::lockCustomer(TPCC::CustomerVersion &customerV, Timestamp &newTS
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			oldTS_UUL,
-			newTS_UUL));
+			*oldTS_UUL,
+			*newTS_UUL));
 }
 
 void DBExecutor::revertCustomerLock(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled){
@@ -789,7 +790,7 @@ void DBExecutor::updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, 
 
 
 
-void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<ItemVersion> &localRegion, MemoryHandler<TPCC::ItemVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<ItemVersion> &localRegion, MemoryHandler<TPCC::ItemVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
 	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
@@ -809,10 +810,10 @@ void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMA
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			false));
+			signaled));
 }
 
-void DBExecutor::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -833,7 +834,7 @@ void DBExecutor::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDM
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			false));
+			signaled));
 }
 
 void DBExecutor::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
@@ -866,7 +867,7 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
 	size_t timestampOffset = (size_t)TPCC::StockVersion::getOffsetOfTimestamp();		// offset of Timestamp in StockVersion
-	Timestamp *writeAddress = (Timestamp *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
@@ -875,6 +876,9 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 		exit(-1);
 	}
 
+	uint64_t *oldTS_ULL = (uint64_t *)&oldTS;
+	uint64_t *newTS_ULL = (uint64_t *)&newTS;
+
 	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
 			qp,
 			localRegion.getRDMAHandler(),
@@ -882,11 +886,11 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			oldTS.toUUL(),
-			newTS.toUUL()));
+			*oldTS_ULL,
+			*newTS_ULL));
 }
 
-void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address of the timestamp
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -908,10 +912,10 @@ void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, R
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			signaled));
 }
 
-void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp) {
+void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
 	// first, shift the pointers one to the right (this effectively drops the last element)
 	Timestamp *versionArray = localRegion.getRegion();
 	size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
@@ -942,10 +946,10 @@ void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, ui
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			false));
+			signaled));
 }
 
-void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp) {
+void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled) {
 	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
 
 	StockVersion *localBuffer = &localRegion.getRegion()[olNumber];
@@ -961,7 +965,9 @@ void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHea
 	uint32_t size = (uint32_t) sizeof(StockVersion);
 
 	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID);
+		std::cout << "timestamp: " << oldHead->writeTimestamp << std::endl;
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID
+				<< ", versionOffset: " << (int)versionOffset << ", tableOffset: " << (int)tableOffset << ", circularBufferOffset: " << (int)circularBufferOffset);
 		exit(-1);
 	}
 
@@ -972,7 +978,7 @@ void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHea
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			false));
+			signaled));
 }
 
 void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp){

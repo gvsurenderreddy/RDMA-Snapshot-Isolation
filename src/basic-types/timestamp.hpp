@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include "PrimitiveTypes.hpp"
 
 class Timestamp {
@@ -18,6 +19,7 @@ private:
 	primitive::client_id_t clientID_;
 	primitive::lock_status_t lockStatus_;
 	primitive::version_offset_t versionOffset_;
+
 
 public:
 	Timestamp();
@@ -33,6 +35,8 @@ public:
 	void setTimestamp(const primitive::timestamp_t timestamp);
 	void setAll(const primitive::lock_status_t lockStatus, const primitive::version_offset_t versionOffset, const primitive::client_id_t clientID, const primitive::timestamp_t timestamp);
 	const uint64_t toUUL() const;
+	std::string serializeAsBinary() const;
+
 	void increment();
 	const bool isEqual(const Timestamp& ts) const;
 	void copy(const Timestamp& original);

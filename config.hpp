@@ -17,10 +17,10 @@ namespace config {
 #define DEBUG_ENABLED (false)
 
 /* Server settings */
-static const int			SERVER_CNT				= 1;
-static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.1.1"};
-static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680};
-static const uint8_t		IB_PORT[SERVER_CNT]		= {1};
+static const int			SERVER_CNT				= 2;
+static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.1.1", "192.168.1.1"};
+static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680, 45681};
+static const uint8_t		IB_PORT[SERVER_CNT]		= {1, 1};
 
 
 /* Oracle settings */
@@ -43,16 +43,16 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int		TRANSACTION_CNT 	= 10000;//100000;
+static const int		TRANSACTION_CNT 	= 100000;
 static const double		NEW_ORDER_TRX_RATIO	= 0.5;
 static const double		PAYMENT_TRX_RATIO	= 0.5;
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER	= 1;
 static const int WAREHOUSE_CNT			= WAREHOUSE_PER_SERVER * SERVER_CNT;
-static const int ITEMS_CNT				= 5;//100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
-static const int DISTRICT_PER_WAREHOUSE	= 4;//10; 	// TPCC default is 10;
-static const int CUSTOMER_PER_DISTRICT	= 3;//3000; 	// TPCC default is 3000;
+static const int ITEMS_CNT				= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
+static const int DISTRICT_PER_WAREHOUSE	= 10; 			// TPCC default is 10;
+static const int CUSTOMER_PER_DISTRICT	= 3000; 		// TPCC default is 3000;
 static const int STOCK_PER_WAREHOUSE	= ITEMS_CNT;
 static const int ORDER_PER_CLIENT		= TRANSACTION_CNT;
 static const int HISTORY_PER_CLIENT		= TRANSACTION_CNT;

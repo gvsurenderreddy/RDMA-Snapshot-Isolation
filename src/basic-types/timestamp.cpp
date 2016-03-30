@@ -7,6 +7,9 @@
 
 #include "../basic-types/timestamp.hpp"
 
+#include <bitset>
+#include <climits>
+
 Timestamp::Timestamp(){
 	timestamp_ = 0;
 	clientID_ = 0;
@@ -69,16 +72,33 @@ void Timestamp::setAll(const primitive::lock_status_t lockStatus, const primitiv
 	timestamp_ = timestamp;
 }
 
+//const uint64_t Timestamp::toUUL() const {
+//	uint64_t uul;
+//	uul = (uint64_t)timestamp_;
+//	uul = uul << 32;
+//	uul += (uint64_t)clientID_;
+//	uul = uul << 16;
+//	uul += (uint64_t)lockStatus_;
+//	uul = uul << 8;
+//	uul += (uint64_t)versionOffset_;
+//	return uul;
+//}
+
 const uint64_t Timestamp::toUUL() const {
-	uint64_t uul;
-	uul = (uint64_t)timestamp_;
-	uul = uul << 32;
-	uul += (uint64_t)clientID_;
-	uul = uul << 16;
-	uul += (uint64_t)lockStatus_;
-	uul = uul << 8;
-	uul += (uint64_t)versionOffset_;
-	return uul;
+    std::string str = serializeAsBinary();
+    std::bitset<CHAR_BIT * sizeof(Timestamp)> bitRep(str);
+    return bitRep.to_ullong();
+}
+
+std::string Timestamp::serializeAsBinary() const {
+    std::string str("");
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(this);
+    for(size_t s = 0; s < sizeof(Timestamp); ++s, ++p) {
+        // Code to serialize one byte
+        std::bitset<CHAR_BIT> x(*p);
+        str += x.to_string();
+    }
+    return str;
 }
 
 void Timestamp::increment() {

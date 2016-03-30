@@ -116,16 +116,16 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 	}
 	clock_gettime(CLOCK_REALTIME, &lastRequestTime);
 
-//	double microElapsedTime = ( (double)( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + (double)( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
-//	double abort_rate = 1 - (double)committedCnt / config::tpcc_settings::NEWORDER_TRANSACTION_CNT;
-//	double inconsistentSnapshotRatio = (abortCnt==0) ? 0 : (double)abortDueToInconsistentSnapshot/abortCnt;
-//	double unsuccessfulLockRatio = (abortCnt==0) ? 0 : (double)abortDueToUnsuccessfulLock/abortCnt;
-//	double trxsPerSec = (double)(committedCnt / (double)(microElapsedTime / (1000 * 1000) ));
-//
-//	std::cout << "[Stat] " << committedCnt << " committed, " << abortCnt << " aborted. abort rate:	" << abort_rate << std::endl;
-//	std::cout << "[Stat] Avg abort type I (snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
-//	std::cout << "[Stat] Avg abort type II (lock) ratio	" << unsuccessfulLockRatio << std::endl;
-//	std::cout << "[Stat] Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
+	double microElapsedTime = ( (double)( lastRequestTime.tv_sec - firstRequestTime.tv_sec ) * 1E9 + (double)( lastRequestTime.tv_nsec - firstRequestTime.tv_nsec ) ) / 1000;
+	double abort_rate = 1 - (double)committedCnt / config::tpcc_settings::TRANSACTION_CNT;
+	double inconsistentSnapshotRatio = (abortCnt==0) ? 0 : (double)abortDueToInconsistentSnapshot/abortCnt;
+	double unsuccessfulLockRatio = (abortCnt==0) ? 0 : (double)abortDueToUnsuccessfulLock/abortCnt;
+	double trxsPerSec = (double)(committedCnt / (double)(microElapsedTime / (1000 * 1000) ));
+
+	std::cout << "[Stat] " << committedCnt << " committed, " << abortCnt << " aborted. abort rate:	" << abort_rate << std::endl;
+	std::cout << "[Stat] Avg abort type I (snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
+	std::cout << "[Stat] Avg abort type II (lock) ratio	" << unsuccessfulLockRatio << std::endl;
+	std::cout << "[Stat] Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");
 	for (int i = 0; i < config::SERVER_CNT; i++){

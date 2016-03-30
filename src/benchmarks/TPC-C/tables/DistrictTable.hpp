@@ -24,7 +24,7 @@ class District{
 
 		uint8_t		D_ID;			// 20 unique IDs 10 are populated per warehouse
 		uint16_t 	D_W_ID; 		// 2*W unique IDs
-		uint64_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number
+		uint32_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number
 		char 		D_NAME[11];		// variable text, size 10
 		char 		D_STREET_1[21];	// variable text, size 20
 		char 		D_STREET_2[21]; // variable text, size 20

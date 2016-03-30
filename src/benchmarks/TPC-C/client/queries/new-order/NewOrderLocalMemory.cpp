@@ -45,7 +45,8 @@ TPCC::NewOrderLocalMemory::NewOrderLocalMemory(RDMAContext &context){
 	warehouseTS_			= new RDMARegion<Timestamp>(config::tpcc_settings::VERSION_NUM, context, IBV_ACCESS_LOCAL_WRITE);
 	warehouseOlderVersions_ = new RDMARegion<TPCC::WarehouseVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);
 
-	lockRegion_				= new RDMARegion<uint64_t>(tpcc_settings::ORDER_MAX_OL_CNT, context, IBV_ACCESS_LOCAL_WRITE);
+	districtLockRegion_		= new RDMARegion<uint64_t>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	stocksLocksRegion_		= new RDMARegion<uint64_t>(tpcc_settings::ORDER_MAX_OL_CNT, context, IBV_ACCESS_LOCAL_WRITE);
 }
 
 RDMARegion<TPCC::CustomerVersion>* TPCC::NewOrderLocalMemory::getCustomerHead() {
@@ -130,8 +131,12 @@ RDMARegion<TPCC::WarehouseVersion>* TPCC::NewOrderLocalMemory::getWarehouseOlder
 	return warehouseOlderVersions_;
 }
 
-RDMARegion<uint64_t>* TPCC::NewOrderLocalMemory::getLockRegion(){
-	return lockRegion_;
+RDMARegion<uint64_t>* TPCC::NewOrderLocalMemory::getDistrictLockRegion(){
+	return districtLockRegion_;
+}
+
+RDMARegion<uint64_t>* TPCC::NewOrderLocalMemory::getStocksLocksRegion(){
+	return stocksLocksRegion_;
 }
 
 
@@ -170,5 +175,6 @@ TPCC::NewOrderLocalMemory::~NewOrderLocalMemory(){
 	delete warehouseTS_;
 	delete warehouseOlderVersions_;
 
-	delete lockRegion_;
+	delete districtLockRegion_;
+	delete stocksLocksRegion_;
 }
