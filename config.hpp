@@ -10,6 +10,8 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
+
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 
@@ -17,11 +19,10 @@ namespace config {
 #define DEBUG_ENABLED (false)
 
 /* Server settings */
-static const int			SERVER_CNT				= 2;
-static const std::string	SERVER_ADDR[SERVER_CNT]	= {"192.168.1.1", "192.168.1.1"};
-static const uint16_t		TCP_PORT[SERVER_CNT]	= {45680, 45681};
-static const uint8_t		IB_PORT[SERVER_CNT]		= {1, 1};
-
+static const int						SERVER_CNT	= 1;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680};
+static const std::vector<uint8_t>		IB_PORT		= {1};
 
 /* Oracle settings */
 static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
@@ -43,9 +44,8 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int		TRANSACTION_CNT 	= 100000;
-static const double		NEW_ORDER_TRX_RATIO	= 0.5;
-static const double		PAYMENT_TRX_RATIO	= 0.5;
+static const int					TRANSACTION_CNT 		= 100000;
+static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {0.7, 0.3};	// 1st is New Order, 2nd is Payment
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER	= 1;

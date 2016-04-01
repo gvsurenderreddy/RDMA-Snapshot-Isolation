@@ -16,10 +16,15 @@ BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
 TPC			:= benchmarks/TPC-C
 
 # the rest of the modules should go here.
-#MODULES		:= util basic-types executor $(AGENTS_MODULES)
-#MODULES		:= util auxilary $(BENCHMARK_MODULES)
 UNIT_TESTS	:= unit-tests unit-tests/tpcw-tests 
-MODULES		:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(TPC)/server $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment
+CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment
+SERVER_MODULES	:= $(TPC)/server 
+TEST_MODULES	:= unit-tests unit-tests/index
+INDEX_MODULES	:= index/hash 
+EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES)
+UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 
+
+MODULES		:= $(EXPERIMENT_MODULES)
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))

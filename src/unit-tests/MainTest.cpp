@@ -10,7 +10,11 @@
 #include <functional>	// std::function
 #include <vector>
 
-#include "tpcw-tests/Item_Test.hpp"
+//#include "tpcw-tests/Item_Test.hpp"
+#include "index/HashIndex_Test.hpp"
+#include "index/MultiValueHashIndex_Test.hpp"
+#include "index/TPCCIndices_Test.hpp"
+
 
 template <typename T>
 void appendVector(std::vector<T> &mainVec, const std::vector<T> &toBeAppendedVec) {
@@ -18,20 +22,15 @@ void appendVector(std::vector<T> &mainVec, const std::vector<T> &toBeAppendedVec
 }
 
 int main() {
-	std::vector<std::function<void(TestBase&)>> allTestFunctions;
-//	appendVector(allTestFunctions, PointerTest::getFunctionList());
-//	appendVector(allTestFunctions, KeyValueTest::getFunctionList());
-//	appendVector(allTestFunctions, DependencyTest::getFunctionList());
-//	appendVector(allTestFunctions, LogEntryTest::getFunctionList());
-//	appendVector(allTestFunctions, LocalRegionContextTest::getFunctionList());
-	//appendVector(allTestFunctions, SingleTreadedExecutionTest::getFunctionList());
-	//appendVector(allTestFunctions, CoordinatorTest::getFunctionList());
-	appendVector(allTestFunctions, Item_Test::getFunctionList());
+	std::vector<std::function<void()>> allTestFunctions;
+	appendVector(allTestFunctions, HashIndex_Test::getFunctionList());
+	appendVector(allTestFunctions, MultiValueHashIndex_Test::getFunctionList());
+	appendVector(allTestFunctions, TPCCIndices_Test::getFunctionList());
 
-	Item_Test itemTest;
+
 
 	for (std::size_t i = 0; i < allTestFunctions.size(); i++){
-		allTestFunctions.at(i)(itemTest);
+		allTestFunctions.at(i)();
 	}
 
 	std::cout << std::endl << "All tests passed!" << std::endl;

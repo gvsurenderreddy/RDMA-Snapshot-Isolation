@@ -22,6 +22,8 @@ TPCC::ServerContext::ServerContext(const int sockfd, const std::string &serverAd
   ibPort_(ibPort),
   instanceNum_(instanceNum){
 	peerMemoryKeys_			= new RDMARegion<ServerMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexRequestMessage_ 	= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexResponseMessage_ 	= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
 
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 
@@ -47,6 +49,14 @@ RDMARegion<TPCC::ServerMemoryKeys>* TPCC::ServerContext::getRemoteMemoryKeys(){
 	return peerMemoryKeys_;
 }
 
+RDMARegion<TPCC::IndexRequestMessage>* TPCC::ServerContext::getIndexRequestMessage(){
+	return indexRequestMessage_;
+}
+
+RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getIndexResponseMessage(){
+	return indexResponseMessage_;
+}
+
 void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }
@@ -56,5 +66,8 @@ TPCC::ServerContext::~ServerContext(){
 
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
 	delete peerMemoryKeys_;
+	delete indexRequestMessage_;
+	delete indexResponseMessage_;
+
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

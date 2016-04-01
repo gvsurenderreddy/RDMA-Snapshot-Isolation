@@ -15,6 +15,7 @@
 //#include <sys/types.h>	// for listen
 #include <sys/socket.h>
 
+
 using namespace config::tpcc_settings;
 
 #define CLASS_NAME	"TPCCServer"
@@ -46,12 +47,11 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	size_t historyTableSize = clientsCnt_ * TRANSACTION_CNT;
 	size_t versionNum = VERSION_NUM;
 
-	db = new TPCC::TPCCDB(warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 	std::vector<uint16_t> warehouseIDs;
 	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
 		warehouseIDs.push_back((uint16_t)(serverNum_ * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
 
-	db->populate(warehouseIDs);
+	db = new TPCC::TPCCDB(warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 
 	// Put the memory keys into the message that is to be sent to clients
 	memoryKeysMessage_ = new RDMARegion<ServerMemoryKeys>(1, *context_, IBV_ACCESS_LOCAL_WRITE);
@@ -83,38 +83,110 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	TEST_NZ(listen (server_sockfd_, clientsCnt_));
 
 	// accept connections
-	for (size_t i = 0; i < clientsCnt_; i++){
+	for (size_t c = 0; c < clientsCnt_; c++){
 		int sockfd;
 		sockfd = accept (server_sockfd_, (struct sockaddr *) &cli_addr, &clilen);
 		if (sockfd < 0){
 			std::cerr << "ERROR on accept" << std::endl;
 			exit(-1);
 		}
-		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client #" << i << " on socket " << sockfd);
+		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client #" << c << " on socket " << sockfd);
 		clientCtxs.push_back(new ClientContext(sockfd, *context_));
 
 		// connect the QPs
-		clientCtxs[i]->activateQueuePair(*context_);
-		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Established QP to client " << i);
+		clientCtxs[c]->activateQueuePair(*context_);
+		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Established QP to client " << c);
+
+		uint32_t qp_num = clientCtxs[c]->getQP()->qp_num;
+		qpNum_to_clientIndex_map[qp_num] = (primitive::client_id_t)c;
 	}
 
-	for (size_t i = 0; i < clientsCnt_; i++){
+	for (size_t c = 0; c < clientsCnt_; c++){
+		// post indexRequestMessage prior to establish the connection to the client
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				clientCtxs[c]->getQP(),
+				clientCtxs[c]->getIndexRequestMessageRegion()->getRDMAHandler(),
+				(uintptr_t)clientCtxs[c]->getIndexRequestMessageRegion()->getRegion(),
+				sizeof(IndexRequestMessage)));
+
 		// send memory locations using SEND
-		TEST_NZ (RDMACommon::post_SEND (clientCtxs[i]->getQP(), memoryKeysMessage_->getRDMAHandler(), (uintptr_t)memoryKeysMessage_->getRegion(), sizeof(struct ServerMemoryKeys), true));
+		TEST_NZ (RDMACommon::post_SEND (clientCtxs[c]->getQP(), memoryKeysMessage_->getRDMAHandler(), (uintptr_t)memoryKeysMessage_->getRegion(), sizeof(struct ServerMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-		DEBUG_COUT(CLASS_NAME, __func__, "[Sent] buffer info to client " << i);
+		DEBUG_COUT(CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
 	}
+
+	handleIndexRequests();
 
 	/*
 		Server waits for the client to muck with its memory
 	 */
 
-	for (size_t i = 0; i < clientsCnt_; i++) {
-		TEST_NZ (utils::sock_sync (clientCtxs[i]->getSockFd()));	// just send a dummy char back and forth
-		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Client " << i << " notified it's finished");
-		delete clientCtxs[i];
+	for (size_t c = 0; c < clientsCnt_; c++) {
+		TEST_NZ (utils::sock_sync (clientCtxs[c]->getSockFd()));	// just send a dummy char back and forth
+		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Client " << c << " notified it's finished");
+		delete clientCtxs[c];
 	}
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
+}
+
+void TPCC::TPCCServer::handleIndexRequests() {
+	size_t liveClientCnt = clientsCnt_;
+	while (liveClientCnt > 0){
+		uint32_t qpNum = -1;
+		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq(), qpNum));
+		size_t clientIndex =  qpNum_to_clientIndex_map[qpNum];	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
+
+		TPCC::IndexRequestMessage *req = clientCtxs[clientIndex]->getIndexRequestMessageRegion()->getRegion();
+		TPCC::IndexResponseMessage *res = clientCtxs[clientIndex]->getIndexResponseMessageRegion()->getRegion();
+
+		primitive::client_id_t clientID = req->clientID;
+		(void) clientID;	// to avoid unused variable warning
+
+		if (req->operationType == TPCC::IndexRequestMessage::TERMINATE){
+			DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID  << " :: TERMINATE");
+			liveClientCnt--;
+		}
+		else{
+			if (req->indexType == TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX){
+				uint16_t wID = req->parameters.lastNameIndex.warehouseOffset;
+				uint8_t dID = req->parameters.lastNameIndex.dID;
+				std::string lastName = std::string(req->parameters.lastNameIndex.customerLastName);
+
+				DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID
+						<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
+
+				assert(req->operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
+				try{
+					res->result.lastNameIndex.cID = db->customerTable.getMiddleIDByLastName(wID, dID, lastName);
+					res->isSuccessful = true;
+				}
+				catch (const std::exception& e) {
+					PRINT_CERR(CLASS_NAME, __func__, "Looking for a non-existing customer");
+					res->result.lastNameIndex.cID = -1;
+					res->isSuccessful = false;
+				}
+			}
+			else
+				assert(1==2);
+
+			// to avoid race, post the next indexRequest message before sending the response
+			TEST_NZ (RDMACommon::post_RECEIVE (
+					clientCtxs[clientIndex ]->getQP(),
+					clientCtxs[clientIndex ]->getIndexRequestMessageRegion()->getRDMAHandler(),
+					(uintptr_t)clientCtxs[clientIndex ]->getIndexRequestMessageRegion()->getRegion(),
+					sizeof(IndexRequestMessage)));
+
+			TEST_NZ (RDMACommon::post_SEND(
+					clientCtxs[clientIndex ]->getQP(),
+					clientCtxs[clientIndex ]->getIndexResponseMessageRegion()->getRDMAHandler(),
+					(uintptr_t)clientCtxs[clientIndex ]->getIndexResponseMessageRegion()->getRegion(),
+					sizeof(IndexResponseMessage),
+					true));
+
+			DEBUG_COUT(CLASS_NAME, __func__, "[Send] Index response to client " << (int)clientID);
+			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+		}
+	}
 }
 
 TPCC::TPCCServer::~TPCCServer() {

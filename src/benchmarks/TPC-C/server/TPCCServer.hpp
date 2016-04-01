@@ -18,11 +18,14 @@
 #include <unistd.h>	// for close()
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <vector>	// for std::vector
+#include <unordered_map>
+
 
 namespace TPCC{
 class TPCCServer {
 public:
 	TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt);
+	void handleIndexRequests();
 	virtual ~TPCCServer();
 
 private:
@@ -34,11 +37,9 @@ private:
 	uint8_t	ib_port_;
 	TPCC::TPCCDB	*db;
 	RDMAContext *context_;
-
-
 	std::vector<ClientContext*> clientCtxs;
-
 	RDMARegion<ServerMemoryKeys> *memoryKeysMessage_;
+	std::unordered_map<uint32_t, primitive::client_id_t> qpNum_to_clientIndex_map;	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
 };
 }
 

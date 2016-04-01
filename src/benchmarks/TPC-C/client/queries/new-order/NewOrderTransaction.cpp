@@ -12,7 +12,7 @@
 namespace TPCC {
 
 NewOrderTransaction::NewOrderTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction(clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+: BaseTransaction("New Order", clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
 	localMemory_ 	= new NewOrderLocalMemory(*context_);
 }
 
@@ -67,11 +67,11 @@ NewOrderCart NewOrderTransaction::buildCart(){
 	return cart;
 }
 
+
 TPCC::TransactionResult NewOrderTransaction::doOne(){
 	time_t timer;
 	std::time(&timer);
 	TransactionResult trxResult;
-
 
 	// ************************************************
 	//	Constructing the shopping cart

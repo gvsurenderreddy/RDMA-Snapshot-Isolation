@@ -15,7 +15,7 @@
 class TestBase {
 protected:
 	static void printMessage(std::string className, std::string functionName) {
-		std::cout << "Testing " << className << "::" << functionName << "() ... " << std::endl;
+		std::cout << "[Unit Testing] " << className << "::" << functionName << "() ... " << std::endl;
 	}
 };
 

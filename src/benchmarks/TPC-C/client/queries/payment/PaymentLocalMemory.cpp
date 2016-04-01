@@ -33,7 +33,6 @@ PaymentLocalMemory::PaymentLocalMemory(RDMAContext &context){
 	warehouseLockRegion_	= new RDMARegion<uint64_t>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	districtLockRegion_		= new RDMARegion<uint64_t>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	customerLockRegion_		= new RDMARegion<uint64_t>(1, context, IBV_ACCESS_LOCAL_WRITE);
-
 }
 
 RDMARegion<TPCC::CustomerVersion>* PaymentLocalMemory::getCustomerHead() {
@@ -113,4 +112,4 @@ PaymentLocalMemory::~PaymentLocalMemory(){
 	delete districtLockRegion_;
 	delete customerLockRegion_;
 }
-}
+}	// namespace TPCC

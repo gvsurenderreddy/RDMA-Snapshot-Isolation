@@ -8,6 +8,7 @@
 //#include "../TSM-SI/server/RDMAServer.hpp"
 //#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
 //#include "../TSM-SI/client/RDMAClient.hpp"
+#include "../../config.hpp"
 #include "../benchmarks/TPC-C/server/TPCCServer.hpp"
 #include "../oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/client/TPCCClient.hpp"
@@ -18,6 +19,10 @@
 #include <thread>
 #include <chrono>         // std::chrono::seconds
 
+#define CLASS_NAME "executor"
+
+void checkConfigFile();
+
 
 int main (int argc, char *argv[]) {
 	if (argc < 2) {
@@ -25,12 +30,17 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 
+	checkConfigFile();
+
 	if (strcmp(argv[1], "client")  == 0) {
 		if (argc != 6 || strcmp(argv[2], "-p") != 0 || strcmp(argv[4], "-i") != 0) {
 			std::cerr << "Usage:" << std::endl;
 			std::cerr << argv[0] << " " << argv[1] << " -p #PORT_NUM -i #INSTANCE_NUM" << std::endl;
 			std::cerr << "starts a client" << std::endl;
+			return 1;
 		}
+
+
 		uint8_t ibPort = (uint8_t)atoi(argv[3]);
 		unsigned instanceNum = atoi(argv[5]);
 		uint16_t homeWarehouse = (uint16_t)instanceNum;
@@ -146,4 +156,16 @@ int main (int argc, char *argv[]) {
 	}
 	 */
 	return 0;
+}
+
+void checkConfigFile() {
+	// check if different ratios in the transaction mix are correct.
+	double d = 0;
+	for (unsigned i = 0; i < config::tpcc_settings::TRANSACTION_MIX_RATIOS.size(); i++)
+		d += config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i);
+
+	if (d != 1) {
+		PRINT_CERR(CLASS_NAME, __func__, "Transactions' ratios in the config file do not add up to 1");
+		exit(-1);
+	}
 }

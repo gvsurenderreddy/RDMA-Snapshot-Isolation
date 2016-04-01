@@ -10,8 +10,9 @@
 
 namespace TPCC {
 
-BaseTransaction::BaseTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: clientID_(clientID),
+BaseTransaction::BaseTransaction(std::string transactionName, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
+: transactionName_(transactionName),
+  clientID_(clientID),
   clientCnt_(clientCnt),
   dsCtx_(dsCtx),
   sessionState_(sessionState),
@@ -28,6 +29,11 @@ BaseTransaction::BaseTransaction(primitive::client_id_t clientID, size_t clientC
 BaseTransaction::~BaseTransaction() {
 	// TODO Auto-generated destructor stub
 }
+
+std::string BaseTransaction::getTransactionName() const{
+	return transactionName_;
+}
+
 
 bool BaseTransaction::isRecordAccessible(Timestamp &ts){
 	if (ts.isLocked())

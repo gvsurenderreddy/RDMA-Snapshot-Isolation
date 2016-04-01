@@ -38,6 +38,32 @@ bool DBExecutor::isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remo
 	else return true;
 }
 
+void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::LOOKUP;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX;
+	req->parameters.lastNameIndex.warehouseOffset = warehouseOffset;
+	req->parameters.lastNameIndex.dID = dID;
+	std::memcpy(req->parameters.lastNameIndex.customerLastName, cLastName,  17);
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(IndexResponseMessage)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
 void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp) {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));

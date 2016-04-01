@@ -265,7 +265,7 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		if(wc.status != IBV_WC_SUCCESS) {
 			std::cerr << "RDMA completion event in CQ with error!" << std::endl;
 			std::cerr << "wc_status: " << wc.status << std::endl;
-			
+
 			return -1;
 		}
 	}while(ne==0);
@@ -274,6 +274,29 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 		std::cerr << "RDMA polling from CQ failed!" << std::endl;
 		return -1;
 	}
+	return 0;
+}
+
+int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num)
+{
+	struct ibv_wc wc;
+	int ne;
+	do {
+		wc.status = IBV_WC_SUCCESS;
+		ne = ibv_poll_cq(cq, 1, &wc);
+		if(wc.status != IBV_WC_SUCCESS) {
+			std::cerr << "RDMA completion event in CQ with error!" << std::endl;
+			std::cerr << "wc_status: " << wc.status << std::endl;
+
+			return -1;
+		}
+	}while(ne==0);
+
+	if(ne<0) {
+		std::cerr << "RDMA polling from CQ failed!" << std::endl;
+		return -1;
+	}
+	returned_qp_num = wc.qp_num;
 	return 0;
 }
 

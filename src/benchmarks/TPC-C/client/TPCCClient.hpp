@@ -16,6 +16,7 @@
 #include "../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../random/randomgenerator.hpp"
+#include "queries/BaseTransaction.hpp"
 #include "queries/new-order/NewOrderTransaction.hpp"
 #include "queries/payment/PaymentTransaction.hpp"
 #include <stdint.h>
@@ -37,7 +38,6 @@ private:
 	OracleContext *oracleContext_;
 	SessionState *sessionState_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
-
 
 public:
 	TPCCClient(unsigned instance_num, uint16_t homeWarehouseID, uint8_t ibPort);

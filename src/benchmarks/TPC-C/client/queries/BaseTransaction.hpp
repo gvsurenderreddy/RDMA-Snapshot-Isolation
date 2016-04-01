@@ -15,12 +15,14 @@
 #include "../../../../oracle/OracleContext.hpp"
 #include "../../../../basic-types/PrimitiveTypes.hpp"
 #include <vector>
+#include <string>
 
 
 namespace TPCC {
 
 class BaseTransaction {
 protected:
+	std::string transactionName_;
 	DBExecutor executor_;
 
 	primitive::client_id_t clientID_;
@@ -36,7 +38,6 @@ protected:
 	uint64_t nextOrderLineID_;
 	uint64_t nextHistoryID_;
 
-	virtual TransactionResult doOne() = 0;
 	ServerContext* getServerContext(uint16_t wID);
 	bool isRecordAccessible(Timestamp &ts);
 	primitive::timestamp_t getNewCommitTimestamp();
@@ -44,7 +45,9 @@ protected:
 
 
 public:
-	BaseTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	BaseTransaction(std::string transactionName, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	std::string getTransactionName() const;
+	virtual TransactionResult doOne() = 0;
 	virtual ~BaseTransaction();
 };
 

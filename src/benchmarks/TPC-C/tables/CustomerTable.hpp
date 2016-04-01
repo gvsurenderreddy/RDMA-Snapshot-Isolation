@@ -13,8 +13,11 @@
 #include "../random/randomgenerator.hpp"
 #include "../../../../config.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
+#include "../../../index/hash/MultiValueHashIndex.hpp"
 #include <ctime>
 #include <iostream>
+#include <string>
+#include <vector>
 
 using namespace tpcc_settings;
 
@@ -48,37 +51,37 @@ public:
 	char		C_DATA[501];	// variable text, size 500 Miscellaneous information
 
 	void initialize(uint32_t cID, uint8_t dID, uint16_t wID, bool bad_credit, TPCC::RandomGenerator& random, time_t now) {
-	    C_ID = cID;
-	    C_D_ID = dID;
-	    C_W_ID = wID;
-	    C_CREDIT_LIM = CUSTOMER_INITIAL_CREDIT_LIM;
-	    C_DISCOUNT = random.fixedPoint(4, CUSTOMER_MIN_DISCOUNT, CUSTOMER_MAX_DISCOUNT);
-	    C_BALANCE = CUSTOMER_INITIAL_BALANCE;
-	    C_YTD_PAYMENT = CUSTOMER_INITIAL_YTD_PAYMENT;
-	    C_PAYMENT_CNT = CUSTOMER_INITIAL_PAYMENT_CNT;
-	    C_DELIVERY_CNT = CUSTOMER_INITIAL_DELIVERY_CNT;
-	    random.astring(C_FIRST, CUSTOMER_MIN_FIRST, CUSTOMER_MAX_FIRST);
-	    strcpy(C_MIDDLE, "OE");
+		C_ID = cID;
+		C_D_ID = dID;
+		C_W_ID = wID;
+		C_CREDIT_LIM = CUSTOMER_INITIAL_CREDIT_LIM;
+		C_DISCOUNT = random.fixedPoint(4, CUSTOMER_MIN_DISCOUNT, CUSTOMER_MAX_DISCOUNT);
+		C_BALANCE = CUSTOMER_INITIAL_BALANCE;
+		C_YTD_PAYMENT = CUSTOMER_INITIAL_YTD_PAYMENT;
+		C_PAYMENT_CNT = CUSTOMER_INITIAL_PAYMENT_CNT;
+		C_DELIVERY_CNT = CUSTOMER_INITIAL_DELIVERY_CNT;
+		random.astring(C_FIRST, CUSTOMER_MIN_FIRST, CUSTOMER_MAX_FIRST);
+		strcpy(C_MIDDLE, "OE");
 
-	    if (cID < 1000) {
-	        TPCC::makeLastName(cID, C_LAST);
-	    } else {
-	        random.lastName(C_LAST, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
-	    }
+		if (cID < 1000) {
+			TPCC::makeLastName(cID, C_LAST);
+		} else {
+			random.lastName(C_LAST, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+		}
 
-	    random.astring(C_STREET_1, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
-	    random.astring(C_STREET_2, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
-	    random.astring(C_CITY, ADDRESS_MIN_CITY, ADDRESS_MAX_CITY);
-	    random.astring(C_STATE, ADDRESS_STATE, ADDRESS_STATE);
-	    makeZip(random, C_ZIP);
-	    random.nstring(C_PHONE, CUSTOMER_PHONE, CUSTOMER_PHONE);
-	    C_SINCE = now;
-	    if (bad_credit) {
-	        strcpy(C_CREDIT, "BC");
-	    } else {
-	        strcpy(C_CREDIT, "GC");
-	    }
-	    random.astring(C_DATA, CUSTOMER_MIN_DATA, CUSTOMER_MAX_DATA);
+		random.astring(C_STREET_1, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
+		random.astring(C_STREET_2, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
+		random.astring(C_CITY, ADDRESS_MIN_CITY, ADDRESS_MAX_CITY);
+		random.astring(C_STATE, ADDRESS_STATE, ADDRESS_STATE);
+		makeZip(random, C_ZIP);
+		random.nstring(C_PHONE, CUSTOMER_PHONE, CUSTOMER_PHONE);
+		C_SINCE = now;
+		if (bad_credit) {
+			strcpy(C_CREDIT, "BC");
+		} else {
+			strcpy(C_CREDIT, "GC");
+		}
+		random.astring(C_DATA, CUSTOMER_MIN_DATA, CUSTOMER_MAX_DATA);
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const Customer& c) {
@@ -104,10 +107,14 @@ public:
 
 
 class CustomerTable{
+private:
+	MultiValueHashIndex<std::string, uint32_t> customerLastNameToID_Index_;
+
 public:
 	RDMARegion<CustomerVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<CustomerVersion>	*olderVersions;
+
 
 	CustomerTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
 	: size_(size),
@@ -115,6 +122,13 @@ public:
 		headVersions 	= new RDMARegion<CustomerVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<CustomerVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+	}
+
+	~CustomerTable(){
+		DEBUG_COUT("CustomerTable", __func__, "[Info] Deconstructor called");
+		delete headVersions;
+		delete tsList;
+		delete olderVersions;
 	}
 
 	void insert(size_t warehouseOffset, uint32_t cID, uint8_t dID, uint16_t wID, bool bad_credit, TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
@@ -129,11 +143,26 @@ public:
 		olderVersions->getMemoryHandler(olderVersionsMH);
 	}
 
-	~CustomerTable(){
-		DEBUG_COUT("CustomerTable", __func__, "[Info] Deconstructor called");
-		delete headVersions;
-		delete tsList;
-		delete olderVersions;
+	void buildIndexOnLastName() {
+		for (size_t i = 0; i < headVersions->getRegionSize(); i++){
+			uint16_t wID = headVersions->getRegion()[i].customer.C_W_ID;
+			uint8_t dID = headVersions->getRegion()[i].customer.C_D_ID;
+			uint32_t cID = headVersions->getRegion()[i].customer.C_ID;
+			std::string lastName = std::string(headVersions->getRegion()[i].customer.C_LAST);
+			std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_c_" + lastName;
+			customerLastNameToID_Index_.append(key, cID);
+		}
+	}
+
+	Customer& getCustomer(size_t warehouseOffset, uint8_t dID, uint32_t cID){
+		size_t index = (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID ) * config::tpcc_settings::CUSTOMER_PER_DISTRICT + cID;
+		return headVersions->getRegion()[index].customer;
+	}
+
+	uint32_t getMiddleIDByLastName(uint16_t wID, uint8_t dID, std::string lastName) {
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_c_" + lastName;
+		std::vector<uint32_t> ids = customerLastNameToID_Index_.get(key);
+		return ids.at(ids.size() / 2);
 	}
 
 private:

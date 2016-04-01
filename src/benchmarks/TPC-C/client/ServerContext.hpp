@@ -10,6 +10,8 @@
 
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../server/ServerMemoryKeys.hpp"
+#include "../../../tables/IndexRequestMessage.hpp"
+#include "../../../tables/IndexResponseMessage.hpp"
 #include <string>	// for std::string
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <cstdint>	// uintX_t
@@ -27,6 +29,11 @@ private:
 	// RDMA region for storing remote memory keys
 	RDMARegion<ServerMemoryKeys> *peerMemoryKeys_;
 
+	// RDMA region for index request and response
+	RDMARegion<TPCC::IndexRequestMessage>	*indexRequestMessage_;
+	RDMARegion<TPCC::IndexResponseMessage>	*indexResponseMessage_;
+
+
 public:
 	ServerContext(const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context);
 	~ServerContext();
@@ -35,6 +42,8 @@ public:
 	int getSockFd() const;
 	ibv_qp* getQP() const;
 	RDMARegion<ServerMemoryKeys>* getRemoteMemoryKeys();
+	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessage();
+	RDMARegion<TPCC::IndexResponseMessage>* getIndexResponseMessage();
 
 	void activateQueuePair(RDMAContext &context);
 

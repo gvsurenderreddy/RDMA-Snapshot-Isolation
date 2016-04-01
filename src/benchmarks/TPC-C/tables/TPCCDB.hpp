@@ -31,6 +31,10 @@ private:
 	TPCC::RealRandomGenerator random_;
 	time_t now_;
 	int mrFlags_;
+	std::vector<uint16_t> warehouseIDs_;
+
+	void populate();
+	void buildIndices();
 
 public:
 	TPCC::ItemTable 		itemTable;
@@ -43,8 +47,7 @@ public:
 	TPCC::NewOrderTable		newOrderTable;
 	TPCC::HistoryTable		historyTable;
 
-	TPCCDB(size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
-	void populate(std::vector<uint16_t> &warehouseIDs);
+	TPCCDB(std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
 	void getMemoryKeys(ServerMemoryKeys *k);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying

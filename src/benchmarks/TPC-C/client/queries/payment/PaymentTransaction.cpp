@@ -15,7 +15,7 @@ namespace TPCC {
 
 
 PaymentTransaction::PaymentTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction(clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+: BaseTransaction("Payment", clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
 	localMemory_ 	= new PaymentLocalMemory(*context_);
 }
 
@@ -37,15 +37,23 @@ TPCC::PaymentCart PaymentTransaction::buildCart(){
 	// 2.5.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
 	cart.dID = (uint8_t) random_->number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
-	// 2.5.1.2 The customer is randomly selected 60% of the time by last name (C_W_ID , C_D_ID, C_LAST) and 40% of the time by number
-	cart.customerSelectionMode = PaymentCart::ID;
-	cart.cID = (uint32_t) random_->NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
-
 	// 2.5.1.2 the customer resident warehouse is the home warehouse 85% of the time and is a randomly selected remote warehouse 15% of the time
 	if (x <= 85 || config::tpcc_settings::WAREHOUSE_CNT == 1)
 		cart.residentWarehouseID = cart.wID;
 	else
 		cart.residentWarehouseID = (uint16_t) random_->numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, cart.wID);
+
+	// 2.5.1.2 The customer is randomly selected 60% of the time by last name (C_W_ID , C_D_ID, C_LAST) and 40% of the time by number
+	if (y <= 60){
+		// selection by LastName
+		cart.customerSelectionMode = PaymentCart::LAST_NAME;
+		random_->lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+	}
+	else {
+		// selection by ID
+		cart.customerSelectionMode = PaymentCart::ID;
+		cart.cID = (uint32_t) random_->NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+	}
 
 	// 2.5.1.3 The payment amount (H_AMOUNT) is random ly selected within [1.00 .. 5,000.00].
 	cart.hAmount = random_->fixedPoint(2, 1.00, 5.00);
@@ -108,32 +116,53 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			*localMemory_->getDistrictTS(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
 			getServerContext(cart.wID)->getQP(),
-			false);
+			true);
 	TPCC::DistrictVersion *districtV = localMemory_->getDistrictHead()->getRegion();
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 
-	if (cart.customerSelectionMode == PaymentCart::ID) {
-		// From Customer table, retrieve the row with matching C_W_ID (customer resident warehouse), C_D_ID and C_ID
+	if (cart.customerSelectionMode == PaymentCart::LAST_NAME) {
+		// First, use the index on the server to find the cID for the given last name
+		TPCC::ServerContext *serverCtx = getServerContext(cart.residentWarehouseID);
 
-		executor_.retrieveCustomer(
-				cart.residentWarehouseID ,
-				cart.dID,
-				cart.cID,
-				*localMemory_->getCustomerHead(),
-				getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-				getServerContext(cart.residentWarehouseID)->getQP(),
-				false);
-
-		executor_.retrieveCustomerPointerList(
+		executor_.lookupCustomerByLastName(
+				clientID_,
 				cart.residentWarehouseID,
 				cart.dID,
-				cart.cID,
-				*localMemory_->getDistrictTS(),
-				getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
-				getServerContext(cart.residentWarehouseID)->getQP(),
+				cart.cLastName,
+				*serverCtx->getIndexRequestMessage(),
+				*serverCtx->getIndexResponseMessage(),
+				serverCtx->getQP(),
 				true);
+
+		DEBUG_COUT(CLASS_NAME, __func__, "[Send] Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
+		assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
+		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
+		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index Response Message received. cID = " << (int)cart.cID);
 	}
-	else exit(-1);
+
+	// From Customer table, retrieve the row with matching C_W_ID (customer resident warehouse), C_D_ID and C_ID
+	executor_.retrieveCustomer(
+			cart.residentWarehouseID ,
+			cart.dID,
+			cart.cID,
+			*localMemory_->getCustomerHead(),
+			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
+			getServerContext(cart.residentWarehouseID)->getQP(),
+			false);
+
+	executor_.retrieveCustomerPointerList(
+			cart.residentWarehouseID,
+			cart.dID,
+			cart.cID,
+			*localMemory_->getDistrictTS(),
+			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
+			getServerContext(cart.residentWarehouseID)->getQP(),
+			true);
+
 	TPCC::CustomerVersion *customerV = localMemory_->getCustomerHead()->getRegion();
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
@@ -435,19 +464,19 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 
 	// insert new history
-    TPCC::HistoryVersion *historyV = localMemory_->getHistoryHead()->getRegion();
-    versionOffset = 0;
+	TPCC::HistoryVersion *historyV = localMemory_->getHistoryHead()->getRegion();
+	versionOffset = 0;
 	historyV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
 	historyV->history.H_D_ID	= cart.dID;
-    historyV->history.H_C_W_ID	= cart.residentWarehouseID;
-    historyV->history.H_C_D_ID	= cart.dID;
-    historyV->history.H_C_ID	= cart.cID;
-    historyV->history.H_C_ID	= cart.wID;
-    historyV->history.H_AMOUNT	= cart.hAmount;
-    historyV->history.H_DATE	= timer;
-    strcpy(historyV->history.H_DATA, warehouseV->warehouse.W_NAME);
-    strcat(historyV->history.H_DATA, "    ");
-    strcat(historyV->history.H_DATA, districtV->district.D_NAME);
+	historyV->history.H_C_W_ID	= cart.residentWarehouseID;
+	historyV->history.H_C_D_ID	= cart.dID;
+	historyV->history.H_C_ID	= cart.cID;
+	historyV->history.H_C_ID	= cart.wID;
+	historyV->history.H_AMOUNT	= cart.hAmount;
+	historyV->history.H_DATE	= timer;
+	strcpy(historyV->history.H_DATA, warehouseV->warehouse.W_NAME);
+	strcat(historyV->history.H_DATA, "    ");
+	strcat(historyV->history.H_DATA, districtV->district.D_NAME);
 	executor_.insertIntoHistory(
 			clientID_,
 			nextHistoryID_,

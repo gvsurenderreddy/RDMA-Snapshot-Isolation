@@ -21,7 +21,8 @@
 #include "../../../rdma-region/MemoryHandler.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../basic-types/timestamp.hpp"
-
+#include "../tables/IndexRequestMessage.hpp"
+#include "../tables/IndexResponseMessage.hpp"
 
 namespace TPCC {
 
@@ -37,6 +38,7 @@ public:
 	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
 	DBExecutor(const DBExecutor&) = delete;				// Disallow copying
 
+	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
 	void getReadTimestamp(RDMARegion<primitive::timestamp_t> &, MemoryHandler<primitive::timestamp_t> &, ibv_qp *);
 	void submitResult(primitive::client_id_t, RDMARegion<primitive::timestamp_t> &,  MemoryHandler<primitive::timestamp_t> &, ibv_qp *);
 
