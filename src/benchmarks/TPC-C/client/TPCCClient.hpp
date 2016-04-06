@@ -17,8 +17,6 @@
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../random/randomgenerator.hpp"
 #include "queries/BaseTransaction.hpp"
-#include "queries/new-order/NewOrderTransaction.hpp"
-#include "queries/payment/PaymentTransaction.hpp"
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
@@ -40,7 +38,7 @@ private:
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
 
 public:
-	TPCCClient(unsigned instance_num, uint16_t homeWarehouseID, uint8_t ibPort);
+	TPCCClient(unsigned instance_num, uint8_t ibPort);
 	~TPCCClient();
 
 	TPCCClient& operator=(const TPCCClient&) = delete;	// Disallow copying

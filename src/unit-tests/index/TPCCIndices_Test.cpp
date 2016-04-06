@@ -18,6 +18,11 @@ std::vector<std::function<void()>> TPCCIndices_Test::functionList_ {
 	setup,
 	test_getExistingCustomerByLastName,
 	test_getNonExistingCustomerByLastName,
+	test_clearOrderIndex,
+	test_getExistingOrderAddressByOrderID,
+	test_getNonExistingOrderAddressByOrderID,
+	test_getLastOrderOfCustomer,
+	test_getNonExistingLastOrderOfCustomer,
 	cleanup
 };
 
@@ -66,6 +71,7 @@ void TPCCIndices_Test::setup() {
 			versionNum,
 			random,
 			*context);
+
 }
 
 void TPCCIndices_Test::cleanup() {
@@ -110,4 +116,118 @@ void TPCCIndices_Test::test_getNonExistingCustomerByLastName(){
 	catch (const std::exception& e){
 		assert(1 == 1);
 	}
+}
+
+
+void TPCCIndices_Test::test_clearOrderIndex(){
+	TestBase::printMessage(CLASS_NAME, __func__);
+
+	uint16_t wID = 0;
+	uint8_t dID = 1;
+	uint32_t cID = 12;
+
+	uint32_t oID = 123;
+	primitive::client_id_t clientID = 1;
+	size_t regionOffset = 1234;
+
+	try{
+		db->orderTable.registerNewOrderInIndex(wID, dID, cID, oID, clientID, regionOffset);
+		db->orderTable.clearIndex();
+
+		assert(db->orderTable.isIndexEmpty() == true);
+	}
+	catch (const std::exception& e){
+		std::cerr << e.what() << std::endl;
+		assert(1 == 2);
+	}
+	db->orderTable.clearIndex();
+}
+
+void TPCCIndices_Test::test_getExistingOrderAddressByOrderID(){
+	TestBase::printMessage(CLASS_NAME, __func__);
+
+	try{
+		uint16_t wID = 0;
+		uint8_t dID = 1;
+		uint32_t cID = 12;
+		uint32_t oID = 123;
+		primitive::client_id_t clientID = 1;
+		size_t regionOffset = 1234;
+		db->orderTable.registerNewOrderInIndex(wID, dID, cID, oID, clientID, regionOffset);
+
+		primitive::client_id_t returnedClientWhoOrdered;
+		size_t returnedRegionOffset;
+
+		db->orderTable.getOrderMemoryAddress(oID, &returnedClientWhoOrdered, &returnedRegionOffset);
+		assert(returnedClientWhoOrdered == clientID);
+		assert(returnedRegionOffset == regionOffset);
+
+	}
+	catch (const std::exception& e){
+		std::cerr << e.what() << std::endl;
+		assert(1 == 2);
+	}
+	db->orderTable.clearIndex();
+
+}
+
+void TPCCIndices_Test::test_getNonExistingOrderAddressByOrderID(){
+	TestBase::printMessage(CLASS_NAME, __func__);
+
+	try{
+		uint32_t oID = 123;
+		primitive::client_id_t returnedClientWhoOrdered;
+		size_t returnedRegionOffset;
+
+		db->orderTable.getOrderMemoryAddress(oID, &returnedClientWhoOrdered, &returnedRegionOffset);
+		assert(1 == 2);
+	}
+	catch (const std::exception& e){
+		assert(1 == 1);
+	}
+	db->orderTable.clearIndex();
+
+}
+void TPCCIndices_Test::test_getLastOrderOfCustomer(){
+	TestBase::printMessage(CLASS_NAME, __func__);
+
+	uint16_t wID = 0;
+	uint8_t dID = 1;
+	uint32_t cID = 12;
+
+	uint32_t oID_1 = 123;
+	primitive::client_id_t clientID_1 = 1;
+	size_t regionOffset_1 = 1234;
+
+	uint32_t oID_2 = 234;
+	primitive::client_id_t clientID_2 = 2;
+	size_t regionOffset_2 = 2345;
+
+	try{
+		db->orderTable.registerNewOrderInIndex(wID, dID, cID, oID_1, clientID_1, regionOffset_1);
+		db->orderTable.registerNewOrderInIndex(wID, dID, cID, oID_2, clientID_2, regionOffset_2);
+
+		uint32_t biggestOID = db->orderTable.getBiggestOrderIDForCustomer(wID, dID, cID);
+		assert (biggestOID == oID_2);
+	}
+	catch (const std::exception& e){
+		std::cerr << e.what() << std::endl;
+		assert(1 == 2);
+	}
+	db->orderTable.clearIndex();
+}
+void TPCCIndices_Test::test_getNonExistingLastOrderOfCustomer(){
+	TestBase::printMessage(CLASS_NAME, __func__);
+
+	uint16_t wID = 0;
+	uint8_t dID = 1;
+	uint32_t cID = 12;
+	try{
+		db->orderTable.getBiggestOrderIDForCustomer(wID, dID, cID);
+		assert (1 == 2);
+	}
+	catch (const std::exception& e){
+		assert(1 == 1);
+	}
+	db->orderTable.clearIndex();
 }

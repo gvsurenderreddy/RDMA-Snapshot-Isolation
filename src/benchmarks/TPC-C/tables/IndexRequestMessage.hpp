@@ -9,20 +9,23 @@
 #define SRC_BENCHMARKS_TPC_C_TABLES_INDEXREQUESTMESSAGE_HPP_
 
 #include "../../../basic-types/PrimitiveTypes.hpp"
+#include  <cstring>
 
 namespace TPCC {
 struct IndexRequestMessage {
 	primitive::client_id_t clientID;
 
 	enum OperationType {
-		INSERT,
+		UPDATE,
 		LOOKUP,
 		DELETE,
 		TERMINATE
 	} operationType;
 
 	enum IndexType {
-		CUSTOMER_LAST_NAME_INDEX
+		CUSTOMER_LAST_NAME_INDEX,
+		LARGEST_ORDER_FOR_CUSTOMER_INDEX,
+		REGISTER_ORDER
 	} indexType;
 
 	union Parameters {
@@ -31,6 +34,23 @@ struct IndexRequestMessage {
 			uint8_t dID;
 			char customerLastName[17];
 		} lastNameIndex;
+
+		struct LargestOrderIndex {
+			uint16_t warehouseOffset;
+			uint8_t dID;
+			uint32_t cID;
+		} largestOrderIndex;
+
+		struct RegisterOrderIndex {
+			uint16_t warehouseOffset;
+			uint8_t dID;
+			uint32_t cID;
+			uint32_t oID;
+			size_t orderRegionOffset;
+			size_t newOrderRegionOffset;
+			size_t orderLineRegionOffset;
+			uint8_t numOfOrderlines;
+		} registerOrderIndex;
 	} parameters;
 };
 

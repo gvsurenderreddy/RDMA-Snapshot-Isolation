@@ -64,6 +64,65 @@ void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint1
 			signaled));
 }
 
+void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::LOOKUP;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX;
+	req->parameters.largestOrderIndex.warehouseOffset = warehouseOffset;
+	req->parameters.largestOrderIndex.dID = dID;
+	req->parameters.largestOrderIndex.cID= cID;
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(IndexResponseMessage)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
+void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::UPDATE;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::REGISTER_ORDER;
+	req->parameters.registerOrderIndex.warehouseOffset = warehouseOffset;
+	req->parameters.registerOrderIndex.dID = dID;
+	req->parameters.registerOrderIndex.cID = cID;
+	req->parameters.registerOrderIndex.oID = oID;
+	req->parameters.registerOrderIndex.orderRegionOffset = orderRegionOffset;
+	req->parameters.registerOrderIndex.newOrderRegionOffset = newOrderRegionOffset;
+	req->parameters.registerOrderIndex.orderLineRegionOffset = orderLineRegionOffset;
+	req->parameters.registerOrderIndex.numOfOrderlines = numOfOrderlines;
+
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(IndexResponseMessage)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
+
 void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp) {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
@@ -1007,7 +1066,7 @@ void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHea
 			signaled));
 }
 
-void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_PER_CLIENT + nextOrderID)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
@@ -1028,10 +1087,10 @@ void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextO
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			false));
+			signaled));
 }
 
-void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t nextNewOrderID, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t nextNewOrderID, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_PER_CLIENT + nextNewOrderID)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
@@ -1052,10 +1111,10 @@ void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t ne
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			false));
+			signaled));
 }
 
-void DBExecutor::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp){
+void DBExecutor::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -1076,7 +1135,7 @@ void DBExecutor::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint1
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			false));
+			signaled));
 }
 
 void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t olID, uint8_t olNumber, uint16_t wID,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
@@ -1089,7 +1148,7 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t o
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
 
 	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", olNumber = " << (int)olNumber);
 		exit(-1);
 	}
 
@@ -1102,6 +1161,31 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t o
 			size,
 			signaled));
 }
+
+void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wID, size_t clientRegionOffset, uint8_t numOfOrderlines,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	TPCC::OrderLineVersion *lookupAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
+
+	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", #orderlines = " << (int)numOfOrderlines);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
 
 void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID, RDMARegion<TPCC::HistoryVersion> &localRegion, MemoryHandler<TPCC::HistoryVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info

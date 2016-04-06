@@ -17,7 +17,7 @@ TPC			:= benchmarks/TPC-C
 
 # the rest of the modules should go here.
 UNIT_TESTS	:= unit-tests unit-tests/tpcw-tests 
-CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment
+CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status
 SERVER_MODULES	:= $(TPC)/server 
 TEST_MODULES	:= unit-tests unit-tests/index
 INDEX_MODULES	:= index/hash 

@@ -10,9 +10,13 @@
 
 #include "../../../basic-types/timestamp.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
+#include "../../../basic-types/PrimitiveTypes.hpp"
 #include "TPCCUtil.hpp"
+#include "../../../index/hash/HashIndex.hpp"
 #include <ctime>
+#include <string>
 #include <iostream>
+
 
 using namespace tpcc_settings;
 
@@ -62,6 +66,15 @@ public:
 };
 
 class OrderTable{
+private:
+	struct OrderAddressIdentifier {
+		primitive::client_id_t clientWhoOrdered;
+		size_t clientRegionOffset;
+	};
+
+	HashIndex<std::string, uint32_t> largestOrderForCustomer_Index_;	// the key is concatenation of wID, dID, and cID
+	HashIndex<std::string, OrderAddressIdentifier> orderToMemoryAddress_Index_;	// the key is concatentation of wID, dID, and oID
+
 public:
 	RDMARegion<OrderVersion> 	*headVersions;
 	RDMARegion<Timestamp> 		*tsList;
@@ -75,28 +88,67 @@ public:
 		olderVersions	= new RDMARegion<OrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-//	void insert(uint32_t oID, uint32_t cID, uint8_t dID, uint16_t wID, bool newOrder,  TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
-//		size_t ind =
-//				(wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-//						+ dID) * config::tpcc_settings::CUSTOMER_PER_DISTRICT
-//						+ oID;
-//		headVersions->getRegion()[ind].order.initialize(oID, cID, dID, wID, newOrder, random, now);
-//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-//	}
-//
-//	void insert(size_t warehouseOffset, Order &order, Timestamp &ts) {
-//		size_t ind =
-//				(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-//						+ order.O_D_ID) * config::tpcc_settings::CUSTOMER_PER_DISTRICT
-//						+ order.O_ID;
-//		std::memcpy(&headVersions->getRegion()[ind].order, &order, sizeof(Order));
-//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-//	}
+	//	void insert(uint32_t oID, uint32_t cID, uint8_t dID, uint16_t wID, bool newOrder,  TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
+	//		size_t ind =
+	//				(wID * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	//						+ dID) * config::tpcc_settings::CUSTOMER_PER_DISTRICT
+	//						+ oID;
+	//		headVersions->getRegion()[ind].order.initialize(oID, cID, dID, wID, newOrder, random, now);
+	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+	//	}
+	//
+	//	void insert(size_t warehouseOffset, Order &order, Timestamp &ts) {
+	//		size_t ind =
+	//				(warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	//						+ order.O_D_ID) * config::tpcc_settings::CUSTOMER_PER_DISTRICT
+	//						+ order.O_ID;
+	//		std::memcpy(&headVersions->getRegion()[ind].order, &order, sizeof(Order));
+	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+	//	}
 
 	void getMemoryHandler(MemoryHandler<OrderVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<OrderVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);
 		tsList->getMemoryHandler(tsListMH);
 		olderVersions->getMemoryHandler(olderVersionsMH);
+	}
+
+	void registerOrderInIndex(uint16_t warehouseOffset, uint8_t dID, uint32_t cID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t regionOffset) {
+		// First, register its physical address
+		OrderAddressIdentifier addr;
+		addr.clientWhoOrdered = clientWhoOrdered;
+		addr.clientRegionOffset = regionOffset;
+		std::string key1 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		orderToMemoryAddress_Index_.put(key1, addr);
+
+		// then, update the customer's biggest order, if necessary
+		std::string key2 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
+		if (largestOrderForCustomer_Index_.hasKey(key2)) {
+			uint32_t existingOID = largestOrderForCustomer_Index_.get(key2);
+			if (existingOID < oID)
+				largestOrderForCustomer_Index_.put(key2, oID);
+		}
+		else largestOrderForCustomer_Index_.put(key2, oID);
+	}
+
+	uint32_t getBiggestOrderIDForCustomer(uint16_t warehouseOffset, uint8_t dID, uint32_t cID){
+		std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
+		return largestOrderForCustomer_Index_.get(key);
+	}
+
+	void getOrderMemoryAddress(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
+		std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		OrderAddressIdentifier addr = orderToMemoryAddress_Index_.get(key);
+		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
+		*regionOffset_OUTPUT = addr.clientRegionOffset;
+	}
+
+	void clearIndex(){
+		orderToMemoryAddress_Index_.clear();
+		largestOrderForCustomer_Index_.clear();
+	}
+
+	bool isIndexEmpty(){
+		return (orderToMemoryAddress_Index_.size() == 0 && largestOrderForCustomer_Index_.size() == 0);
 	}
 
 	~OrderTable(){

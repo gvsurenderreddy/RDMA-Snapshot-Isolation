@@ -11,6 +11,8 @@
 #define CLASS_NAME "NewOrderTrx"
 namespace TPCC {
 
+int NewOrderTransaction::oops = 0;
+
 NewOrderTransaction::NewOrderTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
 : BaseTransaction("New Order", clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
 	localMemory_ 	= new NewOrderLocalMemory(*context_);
@@ -183,12 +185,14 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	//	Check whether fetched items are from a consistent snapshot, and not locked
 	// ************************************************
 	bool abortFlag = false;
+	bool realAbort = false;
 	if (! isRecordAccessible(warehouseV->writeTimestamp)){
 		abortFlag = true;
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << warehouseV->warehouse
 				<< " (" << warehouseV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	if (! isRecordAccessible(districtV->writeTimestamp)){
+		realAbort  = true;
 		abortFlag = true;
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
 				<< " (" << districtV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
@@ -206,11 +210,16 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 						<< " (" << items[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 			}
 			else if (! isRecordAccessible(stocks[olNumber]->writeTimestamp)){
+				realAbort = true;
 				abortFlag = true;
 				DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": stock " << (int)stocks[olNumber]->stock.S_I_ID
 						<< " (" << stocks[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 			}
 		}
+	}
+
+	if (realAbort == false && abortFlag == true) {
+		oops++;
 	}
 
 	if (abortFlag == true) {
@@ -384,17 +393,15 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// update district (increment the next available order number D_NEXT_O_ID)
 	lockStatus = 0;
 	versionOffset = (primitive::version_offset_t)(districtV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-
 	districtV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
-	uint32_t oID = (uint32_t)districtV->district.D_NEXT_O_ID + 1;
-	districtV->district.D_NEXT_O_ID = oID;
+	uint32_t oID = (uint32_t)districtV->district.D_NEXT_O_ID;
+	districtV->district.D_NEXT_O_ID = (uint32_t)districtV->district.D_NEXT_O_ID + 1;
 	executor_.updateDistrict(
 			*localMemory_->getDistrictHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
-
 
 	// insert a new row into New-Order and Order table.
 	// O_CARRIER_ID is set to a null value. If the order includes only home order-lines, then O_ALL_LOCAL is set to 1, otherwise O_ALL_LOCAL is set to 0.
@@ -417,10 +424,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			cart.wID,
 			*localMemory_->getOrderHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->orderTableHeadVersions,
-			getServerContext(cart.wID)->getQP());
+			getServerContext(cart.wID)->getQP(),
+			false);
 
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order with oID: " << nextOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
-	nextOrderID_++;
 
 
 	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
@@ -436,9 +443,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			cart.wID,
 			*localMemory_->getNewOrderHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions,
-			getServerContext(cart.wID)->getQP());
+			getServerContext(cart.wID)->getQP(),
+			false);
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder with noID: " << nextNewOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
-	nextNewOrderID_++;
 
 	// For each O_OL_CNT item on the order:
 	// |-- In Item table, I_PRICE, I_NAME and I_DATA are retrieved
@@ -479,7 +486,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				cart.items.at(olNumber).OL_SUPPLY_W_ID,
 				*localMemory_->getStockHead(),
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions,
-				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getQP());
+				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getQP(),
+				false);
 		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated stock " << stocks[olNumber]->stock << " (" << stockUnlockTS << ")"  << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
 
 		if (olNumber == cart.items.size() - 1)
@@ -516,6 +524,30 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
+	// update the index
+	TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
+	executor_.registerOrder(
+			clientID_,
+			cart.wID,
+			cart.dID,
+			cart.cID,
+			oID,
+			nextOrderID_,
+			nextNewOrderID_,
+			nextOrderLineID_,
+			(uint8_t)cart.items.size(),
+			*serverCtx->getIndexRequestMessage(),
+			*serverCtx->getIndexResponseMessage(),
+			serverCtx->getQP(),
+			false);
+	DEBUG_COUT(CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_INDEX. Parameters: wID = " << (int)cart.wID
+			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)oID << ", regionOffset: " << (int)nextOrderID_ << ", #orderlines: " << cart.items.size());
+
+	// receive the acknowledgement of the index update request
+	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
+	assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
+	DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_ORDER");
+
 
 	// ************************************************
 	//	Submit the result to the oracle
@@ -527,6 +559,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_COUT (CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
+
+	nextOrderID_++;
+	nextNewOrderID_++;
 
 	return trxResult;
 }

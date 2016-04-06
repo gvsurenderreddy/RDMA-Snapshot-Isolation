@@ -9,6 +9,9 @@
 #include "../../../util/utils.hpp"
 #include "../tables/TPCCUtil.hpp"
 #include "../tables/WarehouseTable.hpp"
+#include "queries/new-order/NewOrderTransaction.hpp"
+#include "queries/payment/PaymentTransaction.hpp"
+#include "queries/order-status/OrderStatusTransaction.hpp"
 #include <infiniband/verbs.h>
 #include <string>
 #include <vector>
@@ -18,7 +21,7 @@
 
 #define CLASS_NAME "TPCCClient"
 
-TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uint8_t ibPort)
+TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 : instanceNum_(instanceNum),
   ibPort_(ibPort){
 	srand ((unsigned int)utils::generate_random_seed());		// initialize random seed
@@ -29,6 +32,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 	random_.setC(cLoad);
 
 	context_ 		= new RDMAContext(ibPort_);
+	uint16_t homeWarehouseID = (uint16_t)(instanceNum * config::tpcc_settings::WAREHOUSE_PER_SERVER + random_.number(0, config::tpcc_settings::WAREHOUSE_PER_SERVER - 1));
 	sessionState_ 	= new SessionState(homeWarehouseID, (primitive::timestamp_t) 1ULL);
 
 	// ************************************************
@@ -85,13 +89,14 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] QPed to server " << i);
 
 		TEST_NZ(RDMACommon::poll_completion(context_->getRecvCq()));
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] buffers info from server " << i);
+		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Buffers info from server " << i);
 	}
 
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 
 
 
@@ -157,10 +162,12 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint16_t homeWarehouseID, uin
 		double trxsPerSec = (double)(committedCnt / (double)(elapsedMicroSec[n] / (1000 * 1000) ));
 
 		std::cout << "[Stat] (Trx: " << n << ") committed: " << committedCnt << ", aborted: " << abortCnt[n] << ". abort rate:	" << abortRate << std::endl;
-		std::cout << "[Stat] (Trx: " << n << ") Avg abort type I (snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
-		std::cout << "[Stat] (Trx: " << n << ") Avg abort type II (lock) ratio	" << unsuccessfulLockRatio << std::endl;
+		std::cout << "[Stat] (Trx: " << n << ") Avg abort type I (stale snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
+		std::cout << "[Stat] (Trx: " << n << ") Avg abort type II (failed locks) ratio	" << unsuccessfulLockRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
 	}
+
+	std::cout << "oops: " << TPCC::NewOrderTransaction::oops << std::endl;
 
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");

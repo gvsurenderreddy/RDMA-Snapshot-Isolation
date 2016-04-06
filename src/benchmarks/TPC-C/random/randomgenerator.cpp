@@ -170,10 +170,9 @@ void makeLastName(int num, char* name) {
 RealRandomGenerator::RealRandomGenerator() {
 	// Set the random state to zeros. glibc will attempt to access the old state if not NULL.
 	memset(&state, 0, sizeof(state));
-	int result = initstate_r(static_cast<unsigned int>(time(NULL)), state_array,
+	int result = initstate_r(static_cast<unsigned int>(utils::generate_random_seed()), state_array,
 			sizeof(state_array), &state);
 	ASSERT(result == 0);
-
 }
 
 int RealRandomGenerator::number(int lower, int upper) {

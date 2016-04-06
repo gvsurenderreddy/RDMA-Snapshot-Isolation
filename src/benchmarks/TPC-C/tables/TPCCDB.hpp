@@ -19,10 +19,13 @@
 #include "../../rdma-region/RDMAContext.hpp"
 #include "server/ServerMemoryKeys.hpp"
 #include "random/randomgenerator.hpp"
+#include "IndexRequestMessage.hpp"
+#include "IndexResponseMessage.hpp"
 #include <ctime>
 #include <vector>
 
 namespace TPCC{
+
 class TPCCDB {
 private:
 	size_t itemCnt_;
@@ -49,6 +52,7 @@ public:
 
 	TPCCDB(std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
 	void getMemoryKeys(ServerMemoryKeys *k);
+	void handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying
 	~TPCCDB();

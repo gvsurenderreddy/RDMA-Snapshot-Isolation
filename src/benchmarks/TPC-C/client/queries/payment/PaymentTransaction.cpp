@@ -135,13 +135,17 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 				serverCtx->getQP(),
 				true);
 
-		DEBUG_COUT(CLASS_NAME, __func__, "[Send] Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
+		DEBUG_COUT(CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
-		assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
+		if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
+			DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
+			trxResult.result = TransactionResult::Result::COMMITTED;
+			return trxResult;
+		}
 		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index Response Message received. cID = " << (int)cart.cID);
+		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 
 	// From Customer table, retrieve the row with matching C_W_ID (customer resident warehouse), C_D_ID and C_ID

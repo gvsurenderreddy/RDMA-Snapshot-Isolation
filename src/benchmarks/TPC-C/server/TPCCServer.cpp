@@ -147,27 +147,7 @@ void TPCC::TPCCServer::handleIndexRequests() {
 			liveClientCnt--;
 		}
 		else{
-			if (req->indexType == TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX){
-				uint16_t wID = req->parameters.lastNameIndex.warehouseOffset;
-				uint8_t dID = req->parameters.lastNameIndex.dID;
-				std::string lastName = std::string(req->parameters.lastNameIndex.customerLastName);
-
-				DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID
-						<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
-
-				assert(req->operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
-				try{
-					res->result.lastNameIndex.cID = db->customerTable.getMiddleIDByLastName(wID, dID, lastName);
-					res->isSuccessful = true;
-				}
-				catch (const std::exception& e) {
-					PRINT_CERR(CLASS_NAME, __func__, "Looking for a non-existing customer");
-					res->result.lastNameIndex.cID = -1;
-					res->isSuccessful = false;
-				}
-			}
-			else
-				assert(1==2);
+			db->handleIndexRequest(*req, *res);
 
 			// to avoid race, post the next indexRequest message before sending the response
 			TEST_NZ (RDMACommon::post_RECEIVE (

@@ -23,8 +23,12 @@ public:
 
     void put(const KeyT &k, const ValueT &v);
     ValueT get(const KeyT &k) const;
+    bool hasKey(const KeyT &k) const;
     void erase(const KeyT &k);
+    void clear();
+    size_t size();
     void printAll() const;
+
 };
 
 
@@ -56,8 +60,23 @@ ValueT HashIndex<KeyT, ValueT>::get(const KeyT &k) const{
 }
 
 template <class KeyT, class ValueT>
+bool HashIndex<KeyT, ValueT>::hasKey(const KeyT &k) const{
+	return hashMap_.find(k) != hashMap_.end();
+}
+
+template <class KeyT, class ValueT>
 void HashIndex<KeyT, ValueT>::erase(const KeyT &k){
 	hashMap_.erase(k);
+}
+
+template <class KeyT, class ValueT>
+void HashIndex<KeyT, ValueT>::clear(){
+	hashMap_.clear();
+}
+
+template <class KeyT, class ValueT>
+size_t HashIndex<KeyT, ValueT>::size(){
+	return hashMap_.size();
 }
 
 template <class KeyT, class ValueT>

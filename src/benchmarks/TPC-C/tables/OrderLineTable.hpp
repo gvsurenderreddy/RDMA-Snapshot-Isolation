@@ -11,7 +11,8 @@
 #include "../../../basic-types/timestamp.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "TPCCUtil.hpp"
-#include <ctime>
+#include "../../../index/hash/HashIndex.hpp"
+#include <string>
 #include <iostream>
 
 using namespace tpcc_settings;
@@ -68,6 +69,15 @@ public:
 };
 
 class OrderLineTable{
+private:
+	struct OrderLineAddressIdentifier {
+		primitive::client_id_t clientWhoOrdered;
+		size_t clientRegionOffset;
+		uint8_t orderLineCnt;
+	};
+
+	HashIndex<std::string, OrderLineAddressIdentifier> orderLineToMemoryAddress_Index_;
+
 public:
 	RDMARegion<OrderLineVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
@@ -95,6 +105,24 @@ public:
 		headVersions->getMemoryHandler(headVersionsMH);
 		tsList->getMemoryHandler(tsListMH);
 		olderVersions->getMemoryHandler(olderVersionsMH);
+	}
+
+	void registerOrderLineInIndex(uint16_t wID, uint8_t dID, uint32_t oID, uint8_t orderLineCnt, primitive::client_id_t clientWhoOrdered, size_t orderLineRegionOffset) {
+		// First, register its physical address
+		OrderLineAddressIdentifier addr;
+		addr.clientWhoOrdered = clientWhoOrdered;
+		addr.clientRegionOffset = orderLineRegionOffset;
+		addr.orderLineCnt = orderLineCnt;
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		orderLineToMemoryAddress_Index_.put(key, addr);
+	}
+
+	void getOrderLineMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT, uint8_t *orderLineCnt_OUTPUT){
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		OrderLineAddressIdentifier addr = orderLineToMemoryAddress_Index_.get(key);
+		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
+		*regionOffset_OUTPUT = addr.clientRegionOffset;
+		*orderLineCnt_OUTPUT = addr.orderLineCnt;
 	}
 
 	~OrderLineTable(){

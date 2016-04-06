@@ -29,6 +29,13 @@ public:
 	static void setup();
 	static void test_getExistingCustomerByLastName();
 	static void test_getNonExistingCustomerByLastName();
+
+	// Order indices
+	static void test_clearOrderIndex();
+	static void test_getExistingOrderAddressByOrderID();
+	static void test_getNonExistingOrderAddressByOrderID();
+	static void test_getLastOrderOfCustomer();
+	static void test_getNonExistingLastOrderOfCustomer();
 	static void cleanup();
 
 };

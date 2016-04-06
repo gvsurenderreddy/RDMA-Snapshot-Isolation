@@ -35,6 +35,13 @@ struct PaymentCart{
 	}
 };
 
+// ************************************************
+//	Transaction Info:
+//		- Read Set: {1 warehouse, 1 district, 1 customer}
+//		- Write Set:
+//			- Modify set: {1 warehouse, 1 district, 1 customer}
+//			- New: {1 history}
+// ************************************************
 class PaymentTransaction : public BaseTransaction {
 private:
 	PaymentLocalMemory* localMemory_;

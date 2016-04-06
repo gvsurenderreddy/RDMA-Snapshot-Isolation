@@ -9,6 +9,8 @@
 #define SRC_BENCHMARKS_TPC_C_TABLES_NEWORDERTABLE_HPP_
 
 #include "../../../rdma-region/RDMARegion.hpp"
+#include "../../../index/hash/HashIndex.hpp"
+#include <string>
 
 using namespace tpcc_settings;
 
@@ -26,9 +28,9 @@ public:
 	uint16_t	NO_W_ID;	// 2*W unique IDs
 
 	void initialize(uint16_t wID, uint8_t dID, uint32_t oID){
-	    NO_D_ID = dID;
-	    NO_W_ID = wID;
-	    NO_O_ID = oID;
+		NO_D_ID = dID;
+		NO_W_ID = wID;
+		NO_O_ID = oID;
 	}
 
 	friend std::ostream& operator<<(std::ostream& os, const NewOrder& no) {
@@ -45,6 +47,14 @@ public:
 
 
 class NewOrderTable{
+private:
+	struct NewOrderAddressIdentifier {
+		primitive::client_id_t clientWhoOrdered;
+		size_t clientRegionOffset ;
+	};
+
+	HashIndex<std::string, NewOrderAddressIdentifier> newOrderToMemoryAddress_Index_;
+
 public:
 	RDMARegion<NewOrderVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
@@ -58,18 +68,34 @@ public:
 		olderVersions	= new RDMARegion<NewOrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 	}
 
-//	void insert(size_t warehouseOffset, uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
-//		size_t ind = ( warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-//						+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT + oID;
-//
-//		headVersions->getRegion()[ind].newOrder.initialize(wID, dID, oID);
-//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-//	}
+	//	void insert(size_t warehouseOffset, uint16_t wID, uint8_t dID, uint32_t oID, Timestamp &ts){
+	//		size_t ind = ( warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	//						+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT + oID;
+	//
+	//		headVersions->getRegion()[ind].newOrder.initialize(wID, dID, oID);
+	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+	//	}
 
 	void getMemoryHandler(MemoryHandler<NewOrderVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<NewOrderVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);
 		tsList->getMemoryHandler(tsListMH);
 		olderVersions->getMemoryHandler(olderVersionsMH);
+	}
+
+	void registerNewOrderInIndex(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t newOrderRegionOffset) {
+		// First, register its physical address
+		NewOrderAddressIdentifier addr;
+		addr.clientWhoOrdered = clientWhoOrdered;
+		addr.clientRegionOffset = newOrderRegionOffset;
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		newOrderToMemoryAddress_Index_.put(key, addr);
+	}
+
+	void getNewOrderMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		NewOrderAddressIdentifier addr = newOrderToMemoryAddress_Index_.get(key);
+		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
+		*regionOffset_OUTPUT = addr.clientRegionOffset;
 	}
 
 	~NewOrderTable(){

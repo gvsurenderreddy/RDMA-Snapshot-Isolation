@@ -34,6 +34,13 @@ struct NewOrderCart{
 	}
 };
 
+// ************************************************
+//	Transaction Info:
+//		- Read Set: {1 warehouse, 1 district, 1 customer, 5-15 items, 5-15 stocks}
+//		- Write Set:
+//			- Modify set: {1 district, 5-15 stocks}
+//			- New: {1 order, 1 neworder, 5-15 orderlines}
+// ************************************************
 class NewOrderTransaction : public BaseTransaction {
 private:
 	NewOrderLocalMemory* localMemory_;
@@ -43,6 +50,7 @@ public:
 	NewOrderTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
 	virtual ~NewOrderTransaction();
 	TPCC::TransactionResult doOne();
+	static int oops;
 
 	NewOrderTransaction& operator=(const NewOrderTransaction&) = delete;	// Disallow copying
 	NewOrderTransaction(const NewOrderTransaction&) = delete;				// Disallow copying

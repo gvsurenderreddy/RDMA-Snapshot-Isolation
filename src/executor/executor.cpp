@@ -43,8 +43,7 @@ int main (int argc, char *argv[]) {
 
 		uint8_t ibPort = (uint8_t)atoi(argv[3]);
 		unsigned instanceNum = atoi(argv[5]);
-		uint16_t homeWarehouse = (uint16_t)instanceNum;
-		TPCC::TPCCClient client(instanceNum, homeWarehouse, ibPort);
+		TPCC::TPCCClient client(instanceNum, ibPort);
 	}
 	else if(strcmp(argv[1], "server") == 0) {
 		if (argc != 5 || strcmp(argv[3], "-n") != 0) {
