@@ -11,8 +11,9 @@
 
 #define CLASS_NAME "WorkerContext"
 
-WorkerContext::WorkerContext(int sockfd, RDMAContext &context)
-: sockfd_(sockfd){
+WorkerContext::WorkerContext(std::ostream &os, int sockfd, RDMAContext &context)
+: os_(os),
+  sockfd_(sockfd){
 	memoryKeysMessage_ = new RDMARegion<OracleMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 }

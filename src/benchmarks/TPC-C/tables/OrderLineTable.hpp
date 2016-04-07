@@ -70,6 +70,8 @@ public:
 
 class OrderLineTable{
 private:
+	std::ostream &os_;
+
 	struct OrderLineAddressIdentifier {
 		primitive::client_id_t clientWhoOrdered;
 		size_t clientRegionOffset;
@@ -83,8 +85,9 @@ public:
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<OrderLineVersion>	*olderVersions;
 
-	OrderLineTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	OrderLineTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<OrderLineVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -126,7 +129,7 @@ public:
 	}
 
 	~OrderLineTable(){
-		DEBUG_COUT("OrderLineTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "OrderLineTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;

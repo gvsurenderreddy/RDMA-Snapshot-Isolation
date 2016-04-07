@@ -10,8 +10,10 @@
 
 namespace TPCC {
 
-BaseTransaction::BaseTransaction(std::string transactionName, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: transactionName_(transactionName),
+BaseTransaction::BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
+: os_(os),
+  transactionName_(transactionName),
+  executor_(executor),
   clientID_(clientID),
   clientCnt_(clientCnt),
   dsCtx_(dsCtx),

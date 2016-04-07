@@ -18,6 +18,8 @@ namespace TPCC {
 
 class OrderStatusLocalMemory {
 private:
+	std::ostream &os_;
+
 	// RDMA region for local buffers
 	RDMARegion<TPCC::OrderVersion>	*orderHead_;
 	RDMARegion<Timestamp> 			*orderTS_;
@@ -28,7 +30,7 @@ private:
 	RDMARegion<TPCC::OrderLineVersion>	*orderLineOlderVersions_;
 
 public:
-	OrderStatusLocalMemory(RDMAContext &context);
+	OrderStatusLocalMemory(std::ostream &os, RDMAContext &context);
 	~OrderStatusLocalMemory();
 
 	RDMARegion<TPCC::OrderVersion>* getOrderHead();

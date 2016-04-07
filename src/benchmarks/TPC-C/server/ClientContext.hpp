@@ -16,13 +16,14 @@
 namespace TPCC{
 class ClientContext {
 public:
+	std::ostream &os_;
 	int 			sockfd_;
 	struct	ibv_qp	*qp_;	/* QP handle */
 
 	RDMARegion<TPCC::IndexRequestMessage>	*indexRequestMessage_;
 	RDMARegion<TPCC::IndexResponseMessage>	*indexResponseMessage_;
 
-	ClientContext(int sockfd, RDMAContext &context);
+	ClientContext(std::ostream &os, int sockfd, RDMAContext &context);
 	int getSockFd() const;
 	ibv_qp* getQP() const;
 	void activateQueuePair(RDMAContext &context);

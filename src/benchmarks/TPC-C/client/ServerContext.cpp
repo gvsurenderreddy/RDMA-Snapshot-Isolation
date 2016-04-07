@@ -15,8 +15,9 @@
 
 #define CLASS_NAME	"ServerContext"
 
-TPCC::ServerContext::ServerContext(const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context)
-: sockfd_(sockfd),
+TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context)
+: os_(os),
+  sockfd_(sockfd),
   serverAddress_(serverAddress),
   tcpPort_(tcpPort),
   ibPort_(ibPort),
@@ -62,7 +63,7 @@ void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
 }
 
 TPCC::ServerContext::~ServerContext(){
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called ");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
 
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
 	delete peerMemoryKeys_;

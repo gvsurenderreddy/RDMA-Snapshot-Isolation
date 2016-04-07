@@ -11,13 +11,13 @@
 #define CLASS_NAME "OrdStatTrx"
 namespace TPCC {
 
-OrderStatusTransaction::OrderStatusTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction("OrderStatus", clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
-	localMemory_ 	= new OrderStatusLocalMemory(*context_);
+OrderStatusTransaction::OrderStatusTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
+: BaseTransaction(os, "OrderStatus", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+	localMemory_ 	= new OrderStatusLocalMemory(os_, *context_);
 }
 
 OrderStatusTransaction::~OrderStatusTransaction() {
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Destructor called");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Destructor called");
 	delete localMemory_;
 }
 
@@ -56,14 +56,14 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	//	Constructing the shopping cart
 	// ************************************************
 	OrderStatusCart cart = buildCart();
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
 
 
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
 	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 
 	// ************************************************
@@ -83,13 +83,13 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 				serverCtx->getQP(),
 				true);
 
-		DEBUG_COUT(CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
 		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 
 	// get the largest existing O_ID for (O_W_ID = cart.wID, O_D_ID = cart.dID, O_C_ID = cart.CID).
@@ -103,13 +103,13 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			serverCtx->getQP(),
 			true);
 
-	DEBUG_COUT(CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", cID = " << cart.cID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", cID = " << cart.cID);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 
 	if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 		trxResult.result = TransactionResult::Result::COMMITTED;
 		return trxResult;
 	}
@@ -119,8 +119,10 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	size_t orderRegionOffset = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.orderRegionOffset;
 	size_t orderLineRegionOffset = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.orderLineRegionOffset;
 	uint8_t numOfOrderlines = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.numOfOrderlines;
+	(void)oID;	// to get rid of the "unused variable" warning
+	(void)orderRegionOffset;	// to get rid of the "unused variable" warning
 
-	DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index Response Message received. oID = " << (int)oID << ", client_who_ordered: " << (int)clientWhoOrdered
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index Response Message received. oID = " << (int)oID << ", client_who_ordered: " << (int)clientWhoOrdered
 			<< ", order_region_offset: " << (int)orderRegionOffset << ", orderLine_region_offset: " << (int)orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
 
 
@@ -136,7 +138,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	DEBUG_COUT(CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)numOfOrderlines << " lineitems for order with oID = " << (int)oID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)numOfOrderlines << " lineitems for order with oID = " << (int)oID);
 
 
 	trxResult.result = TransactionResult::Result::COMMITTED;

@@ -24,18 +24,24 @@ namespace utils {
 
 #if(DEBUG_ENABLED)
 #define DEBUG_COUT(className,funcName,message) do { \
-		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		std::cout << std::setw(35) << std::left << header << message << std::endl; \
+		DEBUG_WRITE(std::cout, className, funcName, message); \
 } while( false )
 
 #define DEBUG_CERR(className,funcName,message) do { \
+		DEBUG_WRITE(std::cout, className, funcName, message); \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
 		std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+} while( false )
+
+#define DEBUG_WRITE(outputStream, className,funcName,message) do { \
+		std::string header = std::string("[") + className + "::" + funcName + "] "; \
+		outputStream << std::setw(35) << std::left << header << message << std::endl; \
 } while( false )
 
 #define ASSERT(x) assert(x)
 
 #else
+#define DEBUG_WRITE(outputStream, className,funcName,message) do {} while(false)
 #define DEBUG_COUT(className,funcName,message) do {} while (false)
 #define DEBUG_CERR(className,funcName,message) do { \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \

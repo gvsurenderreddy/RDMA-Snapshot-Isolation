@@ -10,10 +10,11 @@
 
 #include <cstdint>	// for uintX_t
 #include <infiniband/verbs.h>
-
+#include <ostream>	// std::ostream
 
 class RDMAContext {
 private:
+	std::ostream &os_;
 	uint8_t	ib_port_;
 	struct	ibv_device_attr device_attr_;
 	struct	ibv_port_attr port_attr_;				/* IB port attributes */
@@ -25,7 +26,7 @@ private:
 	struct	ibv_comp_channel *recv_comp_channel_;	/* receive CQ channel */
 
 public:
-	RDMAContext(uint8_t ib_port);
+	RDMAContext(std::ostream &os, uint8_t ib_port);
 	uint8_t getIbPort();
 	ibv_context* getIbCtx();
 	ibv_pd* getPd();

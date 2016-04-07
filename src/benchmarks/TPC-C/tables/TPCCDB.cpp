@@ -18,7 +18,8 @@
 #define CLASS_NAME	"TPCCDB"
 
 
-TPCC::TPCCDB::TPCCDB(std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t historyCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
+TPCC::TPCCDB::TPCCDB(std::ostream &os, std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t historyCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context):
+os_(os),
 itemCnt_(itemCnt),
 customerCnt_(customerCnt),
 warehouseCnt_(warehouseCnt),
@@ -26,15 +27,15 @@ random_(random),
 now_(std::time(nullptr)),
 mrFlags_(IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC),
 warehouseIDs_(warehouseIDs),
-itemTable (itemCnt, versionNum, context, mrFlags_),
-customerTable(customerCnt, versionNum, context, mrFlags_),
-stockTable(stockCnt, versionNum, context, mrFlags_),
-warehouseTable (warehouseCnt, versionNum, context, mrFlags_),
-districtTable (districtCnt, versionNum, context, mrFlags_),
-orderTable (orderCnt, versionNum, context, mrFlags_),
-orderLineTable(orderLineCnt, versionNum, context, mrFlags_),
-newOrderTable(newOrderCnt, versionNum, context, mrFlags_),
-historyTable(historyCnt, versionNum, context, mrFlags_){
+itemTable (os_, itemCnt, versionNum, context, mrFlags_),
+customerTable(os_, customerCnt, versionNum, context, mrFlags_),
+stockTable(os_, stockCnt, versionNum, context, mrFlags_),
+warehouseTable (os_, warehouseCnt, versionNum, context, mrFlags_),
+districtTable (os_, districtCnt, versionNum, context, mrFlags_),
+orderTable (os_, orderCnt, versionNum, context, mrFlags_),
+orderLineTable(os_, orderLineCnt, versionNum, context, mrFlags_),
+newOrderTable(os_, newOrderCnt, versionNum, context, mrFlags_),
+historyTable(os_, historyCnt, versionNum, context, mrFlags_){
 
 	populate();
 	buildIndices();
@@ -94,12 +95,12 @@ void TPCC::TPCCDB::populate() {
 			//			delete[] permutation;
 		}
 	}
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] database populated successfully");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] database populated successfully");
 }
 
 void TPCC::TPCCDB::buildIndices() {
 	customerTable.buildIndexOnLastName();
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Indices build successfully");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Indices build successfully");
 }
 
 void TPCC::TPCCDB::getMemoryKeys(TPCC::ServerMemoryKeys *k){
@@ -122,7 +123,7 @@ void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC
 		uint8_t dID = req.parameters.lastNameIndex.dID;
 		std::string lastName = std::string(req.parameters.lastNameIndex.customerLastName);
 
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
 				<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
 
 		assert(req.operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
@@ -143,7 +144,7 @@ void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC
 		uint16_t warehouseOffset = req.parameters.largestOrderIndex.warehouseOffset;
 		uint8_t dID = req.parameters.largestOrderIndex.dID;
 		uint32_t cID = req.parameters.largestOrderIndex.cID;;
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
 				<< ", Type: Largest_Order_For_Customer. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID);
 		try{
 			res.result.largestOrderIndex.oID = orderTable.getBiggestOrderIDForCustomer(warehouseOffset, dID, cID);
@@ -152,7 +153,7 @@ void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC
 			res.isSuccessful = true;
 		}
 		catch (const std::exception& e) {
-			DEBUG_COUT(CLASS_NAME, __func__, "[Info] The customer (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] The customer (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
 			res.isSuccessful = false;
 		}
 	}
@@ -171,7 +172,7 @@ void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC
 		uint8_t numOfOrderlines = req.parameters.registerOrderIndex.numOfOrderlines;
 
 
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
 				<< ", Type: Register_Order. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID
 				<< ", oID = " << oID << ", order offset: " << orderRegionOffset << ", neworder offset: " << newOrderRegionOffset
 				<< ", orderline offset: " <<  orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
@@ -186,7 +187,7 @@ void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC
 }
 
 TPCC::TPCCDB::~TPCCDB(){
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 }
 
 #endif /* SRC_BENCHMARKS_TPC_C_TPCCDB_CPP_ */

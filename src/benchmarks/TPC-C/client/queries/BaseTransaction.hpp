@@ -22,9 +22,9 @@ namespace TPCC {
 
 class BaseTransaction {
 protected:
+	std::ostream &os_;
 	std::string transactionName_;
-	DBExecutor executor_;
-
+	TPCC::DBExecutor &executor_;
 	primitive::client_id_t clientID_;
 	size_t	clientCnt_;
 	std::vector<ServerContext*> dsCtx_;
@@ -45,7 +45,7 @@ protected:
 
 
 public:
-	BaseTransaction(std::string transactionName, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
 	std::string getTransactionName() const;
 	virtual TransactionResult doOne() = 0;
 	virtual ~BaseTransaction();

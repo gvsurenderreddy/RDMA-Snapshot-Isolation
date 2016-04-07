@@ -5,18 +5,8 @@ CPPFLAGS	= -std=gnu++11 -g -Wall -Wconversion -Wextra -Wno-ignored-qualifiers -W
 LIBS		= -libverbs -lpthread
 
 
-# all the agents (including subfolders) should go here
-#AGENTS_MODULES		:= rdma-SI rdma-SI/client rdma-SI/server rdma-SI/timestamp-oracle
-AGENTS_MODULES		:= TSM-SI TSM-SI/client TSM-SI/server TSM-SI/timestamp-oracle
-
-
-# agents for benchmarking
-BENCHMARK_MODULES	:= micro-benchmarks micro-benchmarks/simple-verbs
-
-TPC			:= benchmarks/TPC-C
-
 # the rest of the modules should go here.
-UNIT_TESTS	:= unit-tests unit-tests/tpcw-tests 
+TPC			:= benchmarks/TPC-C
 CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status
 SERVER_MODULES	:= $(TPC)/server 
 TEST_MODULES	:= unit-tests unit-tests/index
@@ -29,6 +19,7 @@ MODULES		:= $(EXPERIMENT_MODULES)
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))
 EXE_DIR		:= exe
+LOG_DIR		:= logs
 
 SRC			:= $(foreach sdir,$(SRC_DIR),$(wildcard $(sdir)/*.cpp))
 OBJ			:= $(patsubst src/%.cpp,build/%.o,$(SRC))
@@ -58,17 +49,20 @@ $(EXE_DIR)/test.exe: $(OBJ)
 
 # -------------------------------------------------
 # Creating needed folders if don't exist
-checkdirs: $(BUILD_DIR) $(EXE_DIR)
+checkdirs: $(BUILD_DIR) $(EXE_DIR) $(LOG_DIR)
 
 $(BUILD_DIR):
 	@mkdir -p $@
 
 $(EXE_DIR):
 	@mkdir -p $@
+
+$(LOG_DIR):
+	@mkdir -p $@
+
 # -------------------------------------------------
 # Cleaning the object files
 clean:
-	#rm -f $(OBJ)
 	rm -rf $(BUILD_DIR)
 	
 

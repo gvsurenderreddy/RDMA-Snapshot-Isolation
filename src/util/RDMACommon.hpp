@@ -146,7 +146,7 @@ public:
 	* @return	0 or 1			In case of success 0, and in case of failure -1
 	******************************************************************************/
 	static int post_RDMA_CMP_SWAP(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
-	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value);
+	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value, bool signaled);
 		
 		
 	/******************************************************************************
@@ -161,7 +161,7 @@ public:
 	* @return	0 or 1			In case of success 0, and in case of failure -1
 	******************************************************************************/
 	static int post_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer, 
-	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint64_t addition, uint32_t length);
+	struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint64_t addition, uint32_t length, bool signaled);
 	
 	
 	static int create_queuepair(struct ibv_context *context, struct ibv_pd *pd, struct ibv_cq *send_cq, struct ibv_cq *recv_cq, struct ibv_qp **qp);

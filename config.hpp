@@ -16,13 +16,20 @@
 
 
 namespace config {
-#define DEBUG_ENABLED (false)
+#define DEBUG_ENABLED (true)
+#define DEBUG_OUTPUT config::Output::FILE
+
+enum Output{
+	FILE,
+	SCREEN
+};
+
 
 /* Server settings */
-static const int						SERVER_CNT	= 2;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.1.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681};
-static const std::vector<uint8_t>		IB_PORT		= {1, 1};
+static const int						SERVER_CNT	= 1;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680};
+static const std::vector<uint8_t>		IB_PORT		= {1};
 
 /* Oracle settings */
 static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
@@ -41,11 +48,13 @@ static const std::string	TRX_MANAGER_ADDR		= "192.168.0.1";	// only relevant for
 static const uint16_t		TRX_MANAGER_TCP_PORT	= 45677;			// only relevant for Trad-SI
 static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 
+static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
+
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 100000;
-static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {0.5, 0.25, 0.25};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status
+static const int					TRANSACTION_CNT 		= 10000;//100000;
+static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {1.0, 0.0, 0.0};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status. Numbers must add up to 1
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER	= 1;
@@ -82,5 +91,7 @@ static const uint16_t	MAX_ITEM_VERSIONS	= 3;		// Maximum number of versions per 
 //static const int	MAX_CCXACTS_VERSIONS	= 1;		// Maximum number of versions per data item
 }	// namespace tpcw_settings
 
+
+static const std::string LOG_FOLDER			= "logs";	// Don't change this
 }
 #endif /* CONFIG_H_ */

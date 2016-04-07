@@ -14,6 +14,7 @@
 
 class OracleContext {
 private:
+	std::ostream &os_;
 	int 		sockfd_;
 	uint16_t	tcpPort_;
 	uint8_t 	ibPort_;
@@ -23,7 +24,7 @@ private:
 	RDMARegion<OracleMemoryKeys> *peerMemoryKeys_;
 
 public:
-	OracleContext(const int sockfd, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context);
+	OracleContext(std::ostream &os, const int sockfd, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context);
 	~OracleContext();
 	uint16_t getTcpPort() const;
 	int getSockFd() const;

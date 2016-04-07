@@ -40,6 +40,9 @@ struct NewOrderCart{
 //		- Write Set:
 //			- Modify set: {1 district, 5-15 stocks}
 //			- New: {1 order, 1 neworder, 5-15 orderlines}
+//		Network Messages Size:
+//			- read: (5150 + 4 * #clients)B
+//			- write: 6750B
 // ************************************************
 class NewOrderTransaction : public BaseTransaction {
 private:
@@ -47,7 +50,7 @@ private:
 	NewOrderCart buildCart();
 
 public:
-	NewOrderTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
 	virtual ~NewOrderTransaction();
 	TPCC::TransactionResult doOne();
 	static int oops;

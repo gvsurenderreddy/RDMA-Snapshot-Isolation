@@ -150,7 +150,7 @@ int utils::establish_tcp_connection(std::string remote_ip, uint16_t remote_port,
 		std::cerr << "failed to establish TCP connection to server " <<  remote_ip << " port " << remote_port << std::endl;
 		return -1;
 	}
-	DEBUG_COUT(CLASS_NAME, __func__, "TCP connection established on sock " << *sockfd);
+	DEBUG_COUT(CLASS_NAME, __func__, "[Conn] TCP connection established on sock " << *sockfd);
 	return 0;
 }
 

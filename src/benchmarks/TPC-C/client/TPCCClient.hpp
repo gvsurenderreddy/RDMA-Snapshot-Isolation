@@ -36,6 +36,7 @@ private:
 	OracleContext *oracleContext_;
 	SessionState *sessionState_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
+	std::ostream *os_;
 
 public:
 	TPCCClient(unsigned instance_num, uint8_t ibPort);

@@ -22,6 +22,7 @@
 
 class Oracle{
 private:
+	std::ostream	*os_;
 	const size_t	clients_cnt_;	// coming from the command line.
 	int				server_sockfd_;	// Server's socket file descriptor
 	uint16_t		tcp_port_;

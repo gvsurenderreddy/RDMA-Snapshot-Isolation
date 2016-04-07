@@ -13,8 +13,9 @@
 
 #define CLASS_NAME	"OracleContext"
 
-OracleContext::OracleContext(const int sockfd, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context)
-: sockfd_(sockfd),
+OracleContext::OracleContext(std::ostream &os, const int sockfd, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context)
+: os_(os),
+  sockfd_(sockfd),
   tcpPort_(tcpPort),
   ibPort_(ibPort){
 	peerMemoryKeys_			= new RDMARegion<OracleMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
@@ -42,8 +43,7 @@ void OracleContext::activateQueuePair(RDMAContext &context){
 }
 
 OracleContext::~OracleContext(){
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called ");
-
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
 	delete peerMemoryKeys_;
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));

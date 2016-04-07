@@ -26,6 +26,8 @@ namespace TPCC {
 
 class PaymentLocalMemory {
 private:
+	std::ostream &os_;
+
 	// RDMA region for local buffers
 	RDMARegion<TPCC::CustomerVersion>	*customerHead_;
 	RDMARegion<Timestamp> 				*customerTS_;
@@ -48,7 +50,7 @@ private:
 	RDMARegion<uint64_t>	*customerLockRegion_;
 
 public:
-	PaymentLocalMemory(RDMAContext &context);
+	PaymentLocalMemory(std::ostream &os, RDMAContext &context);
 	~PaymentLocalMemory();
 	RDMARegion<TPCC::CustomerVersion>* getCustomerHead();
 	RDMARegion<Timestamp>* getCustomerTS();

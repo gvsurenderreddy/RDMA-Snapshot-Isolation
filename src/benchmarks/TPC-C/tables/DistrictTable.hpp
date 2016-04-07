@@ -24,7 +24,7 @@ class District{
 
 		uint8_t		D_ID;			// 20 unique IDs 10 are populated per warehouse
 		uint16_t 	D_W_ID; 		// 2*W unique IDs
-		uint32_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number
+		uint64_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number (64bit for atomic operations)
 		char 		D_NAME[11];		// variable text, size 10
 		char 		D_STREET_1[21];	// variable text, size 20
 		char 		D_STREET_2[21]; // variable text, size 20
@@ -78,14 +78,18 @@ public:
 };
 
 class DistrictTable{
+private:
+	std::ostream &os_;
+
 public:
 	RDMARegion<DistrictVersion> *headVersions;
 	RDMARegion<Timestamp> 		*tsList;
 	RDMARegion<DistrictVersion>	*olderVersions;
 
 
-	DistrictTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	DistrictTable(	std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<DistrictVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -105,7 +109,7 @@ public:
 
 
 	~DistrictTable(){
-		DEBUG_COUT("DistrictTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "DistrictTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;

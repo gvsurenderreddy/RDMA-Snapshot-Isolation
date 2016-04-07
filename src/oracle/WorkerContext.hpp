@@ -16,6 +16,7 @@
 
 class WorkerContext {
 public:
+	std::ostream 	&os_;
 	int 			sockfd_;
 	std::string		clientIp_;
 	int				clientPort_;
@@ -23,7 +24,7 @@ public:
 	RDMARegion<OracleMemoryKeys> *memoryKeysMessage_;
 
 
-	WorkerContext(int sockfd, RDMAContext &context);
+	WorkerContext(std::ostream &os, int sockfd, RDMAContext &context);
 	RDMARegion<OracleMemoryKeys>* getMemoryKeysMessage();
 	int getSockFd() const;
 	ibv_qp* getQP() const;

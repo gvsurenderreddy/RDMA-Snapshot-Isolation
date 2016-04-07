@@ -14,13 +14,13 @@
 namespace TPCC {
 
 
-PaymentTransaction::PaymentTransaction(primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction("Payment", clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
-	localMemory_ 	= new PaymentLocalMemory(*context_);
+PaymentTransaction::PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
+: BaseTransaction(os, "Payment", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+	localMemory_ 	= new PaymentLocalMemory(os_, *context_);
 }
 
 PaymentTransaction::~PaymentTransaction() {
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Destructor called");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Destructor called");
 	delete localMemory_;
 }
 
@@ -71,14 +71,14 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	//	Constructing the shopping cart
 	// ************************************************
 	PaymentCart cart = buildCart();
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
 
 
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
 	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 
 	// ************************************************
@@ -135,17 +135,17 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 				serverCtx->getQP(),
 				true);
 
-		DEBUG_COUT(CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
-			DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 			trxResult.result = TransactionResult::Result::COMMITTED;
 			return trxResult;
 		}
 		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
-		DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 
 	// From Customer table, retrieve the row with matching C_W_ID (customer resident warehouse), C_D_ID and C_ID
@@ -175,9 +175,9 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// printing for debugging purposes
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << warehouseV->warehouse);
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District: " << districtV->district);
-	DEBUG_COUT (CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << customerV->customer);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << warehouseV->warehouse);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District: " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << customerV->customer);
 
 
 	// ************************************************
@@ -186,34 +186,34 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	bool abortFlag = false;
 	if (! isRecordAccessible(warehouseV->writeTimestamp)){
 		abortFlag = true;
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << warehouseV->warehouse
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << warehouseV->warehouse
 				<< " (" << warehouseV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	if (! isRecordAccessible(districtV->writeTimestamp)){
 		abortFlag = true;
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
 				<< " (" << districtV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	if (! isRecordAccessible(customerV->writeTimestamp)){
 		abortFlag = true;
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << customerV->customer
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << customerV->customer
 				<< " (" << customerV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 
 	if (abortFlag == true) {
-		DEBUG_COUT (CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;
 	}
-	else DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
+	else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
 
 
 	// ************************************************
 	//	Acquire Commit timestamp
 	// ************************************************
 	primitive::timestamp_t cts = getNewCommitTimestamp();
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
 
 
 	// ************************************************
@@ -229,7 +229,8 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			warehouseLockTS,
 			*localMemory_->getWarehouseLockRegion(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
-			getServerContext(cart.wID)->getQP());
+			getServerContext(cart.wID)->getQP(),
+			false);
 
 	lockStatus = 1;
 	versionOffset = districtV->writeTimestamp.getVersionOffset();
@@ -241,7 +242,8 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			districtLockTS,
 			*localMemory_->getDistrictLockRegion(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-			getServerContext(cart.wID)->getQP());
+			getServerContext(cart.wID)->getQP(),
+			true);
 
 
 	lockStatus = 1;
@@ -254,11 +256,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			customerLockTS,
 			*localMemory_->getCustomerLockRegion(),
 			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-			getServerContext(cart.residentWarehouseID)->getQP());
+			getServerContext(cart.residentWarehouseID)->getQP(),
+			true);
 
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for warehouse lock
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for district lock
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for warehouse and district lock
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for customer lock
 
 
@@ -267,7 +269,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	*localMemory_->getDistrictLockRegion()->getRegion() = utils::bigEndianToHost(*localMemory_->getDistrictLockRegion()->getRegion());
 	*localMemory_->getCustomerLockRegion()->getRegion() = utils::bigEndianToHost(*localMemory_->getCustomerLockRegion()->getRegion());
 
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
 
 	// checks if locks are successful
 	Timestamp warehouseExistingLock(*localMemory_->getWarehouseLockRegion()->getRegion());
@@ -289,7 +291,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	if (abortFlag){
 		unsigned successfulLockCnt = 0;
 		if (! warehouseExistingLock.isEqual(warehouseExpectedLock)){
-			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock warehouse " << warehouseV->warehouse  << " was NOT successful "
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock warehouse " << warehouseV->warehouse  << " was NOT successful "
 					<< "(expected: " << warehouseExpectedLock << ", existing: " << warehouseExistingLock << ")");
 		}
 		else{
@@ -299,10 +301,10 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					getServerContext(cart.wID)->getQP(),
 					true);
 			successfulLockCnt++;
-			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on warehouse " << warehouseV->warehouse);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on warehouse " << warehouseV->warehouse);
 		}
 		if (! districtExistingLock.isEqual(districtExpectedLock)){
-			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock district " << districtV->district << " was NOT successful "
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock district " << districtV->district << " was NOT successful "
 					<< "(expected: " << districtExpectedLock << ", existing: " << districtExistingLock << ")");
 		}
 		else{
@@ -312,11 +314,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					getServerContext(cart.wID)->getQP(),
 					true);
 			successfulLockCnt++;
-			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on district " << districtV->district);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on district " << districtV->district);
 		}
 
 		if (! customerExistingLock.isEqual(customerExpectedLock)){
-			DEBUG_COUT (CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock customer" << customerV->customer << " was NOT successful "
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock customer" << customerV->customer << " was NOT successful "
 					<< "(expected: " << customerExpectedLock << ", existing: " << customerExistingLock << ")");
 		}
 		else{
@@ -326,22 +328,22 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					getServerContext(cart.residentWarehouseID)->getQP(),
 					true);
 			successfulLockCnt++;
-			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on customer " << customerV->customer);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on customer " << customerV->customer);
 		}
 
 		for (unsigned i = 0; i < successfulLockCnt; i++){
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-			DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
 		}
 
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;
 
 	}
 	else{
-		DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
 	}
 
 
@@ -355,7 +357,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableTimestampList,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for warehouse " << warehouseV->warehouse);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for warehouse " << warehouseV->warehouse);
 
 	executor_.updateWarehouseOlderVersions(
 			//*localMemory_->getWarehouseOlderVersions(),
@@ -363,7 +365,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableOlderVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for warehouse " << warehouseV->warehouse);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for warehouse " << warehouseV->warehouse);
 
 
 	executor_.updateDistrictPointers(
@@ -372,7 +374,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for district " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for district " << districtV->district);
 
 
 	executor_.updateDistrictOlderVersions(
@@ -381,7 +383,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableOlderVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for district " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for district " << districtV->district);
 
 
 	executor_.updateCustomerPointers(
@@ -390,7 +392,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
 			getServerContext(cart.residentWarehouseID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for customer" << customerV->customer);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for customer" << customerV->customer);
 
 
 	executor_.updateCustomerOlderVersions(
@@ -399,10 +401,10 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableOlderVersions,
 			getServerContext(cart.residentWarehouseID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for customer" << customerV->customer);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for customer" << customerV->customer);
 
 
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older versions");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older versions");
 
 
 
@@ -420,7 +422,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated warehouse with wID: " << cart.wID );
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated warehouse with wID: " << cart.wID );
 
 
 	// update district
@@ -432,7 +434,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
 
 
 	// update customer
@@ -464,7 +466,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
 			getServerContext(cart.residentWarehouseID)->getQP(),
 			false);
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated customer " << customerV->customer);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated customer " << customerV->customer);
 
 
 	// insert new history
@@ -489,7 +491,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getQP(),
 			true);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	DEBUG_COUT (CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)nextHistoryID_);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)nextHistoryID_);
 	nextHistoryID_++;
 
 	// ************************************************
@@ -501,7 +503,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	DEBUG_COUT (CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
 	return trxResult;
 

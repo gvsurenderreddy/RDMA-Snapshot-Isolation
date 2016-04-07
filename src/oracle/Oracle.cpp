@@ -25,6 +25,8 @@
 #include <vector>
 #include <infiniband/verbs.h>	// for ibv_qp
 #include "Oracle.hpp"
+#include <fstream>      // std::ofstream
+
 
 
 #define CLASS_NAME	"Oracle"
@@ -35,10 +37,16 @@ Oracle::Oracle(size_t clients_cnt)
   tcp_port_(config::TIMESTAMP_SERVER_PORT),
   ib_port_(config::TIMESTAMP_SERVER_IB_PORT){
 
+	if (config::Output::FILE == DEBUG_OUTPUT) {
+		std::string filename = std::string(config::LOG_FOLDER) + "/oracle.log";
+		os_ = new std::ofstream (filename, std::ofstream::out);
+	}
+	else os_ = &std::cout;
+
 	std::vector<WorkerContext*> workerCtxs;
 
 
-	context_ = new RDMAContext(ib_port_);
+	context_ = new RDMAContext(*os_, ib_port_);
 	lastCommittedVector_ = new RDMARegion<primitive::timestamp_t>(clients_cnt_, *context_, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
 	for (size_t i = 0; i < clients_cnt_; i++)
 		lastCommittedVector_->getRegion()[i] = (primitive::timestamp_t)0;
@@ -72,11 +80,11 @@ Oracle::Oracle(size_t clients_cnt)
 			PRINT_CERR(CLASS_NAME, __func__, "ERROR on accept() client #" << c );
 			exit(-1);
 		}
-		workerCtxs.push_back(new WorkerContext(sockfd, *context_));
+		workerCtxs.push_back(new WorkerContext(*os_, sockfd, *context_));
 
 		// connect the QPs
 		workerCtxs[c]->activateQueuePair(*context_);
-		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Established QP to client " << c);
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Established QP to client " << c);
 
 		workerCtxs[c]->clientIp_ = std::string(inet_ntoa (returned_addr.sin_addr));
 		workerCtxs[c]->clientPort_ = (int) ntohs(returned_addr.sin_port);
@@ -93,7 +101,7 @@ Oracle::Oracle(size_t clients_cnt)
 		// send memory locations using SEND
 		TEST_NZ (RDMACommon::post_SEND (workerCtxs[c]->getQP(), workerCtxs[c]->getMemoryKeysMessage()->getRDMAHandler(), (uintptr_t)workerCtxs[c]->getMemoryKeysMessage()->getRegion(), sizeof(struct OracleMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-		DEBUG_COUT(CLASS_NAME, __func__, "[Sent] buffer info sent to client " << *workerCtxs[c]);
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Sent] buffer info sent to client " << *workerCtxs[c]);
 	}
 
 	// Destroy clients' resources
@@ -106,7 +114,7 @@ Oracle::Oracle(size_t clients_cnt)
 }
 
 Oracle::~Oracle(){
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called");
+	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete lastCommittedVector_;
 	delete context_;
 	close(server_sockfd_);

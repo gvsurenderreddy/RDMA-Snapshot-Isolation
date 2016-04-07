@@ -13,7 +13,9 @@
 #define CLASS_NAME	"PaymentLocMem"
 
 namespace TPCC{
-PaymentLocalMemory::PaymentLocalMemory(RDMAContext &context){
+PaymentLocalMemory::PaymentLocalMemory(std::ostream &os, RDMAContext &context):
+	os_(os){
+
 	customerHead_			= new RDMARegion<TPCC::CustomerVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	customerTS_				= new RDMARegion<Timestamp>(config::tpcc_settings::VERSION_NUM, context, IBV_ACCESS_LOCAL_WRITE);
 	customerOlderVersions_ 	= new RDMARegion<TPCC::CustomerVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);
@@ -90,7 +92,7 @@ RDMARegion<uint64_t>* PaymentLocalMemory::getCustomerLockRegion(){
 }
 
 PaymentLocalMemory::~PaymentLocalMemory(){
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called ");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
 
 	delete customerHead_;
 	delete customerTS_;

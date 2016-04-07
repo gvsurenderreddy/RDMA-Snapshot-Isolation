@@ -23,6 +23,7 @@
 namespace TPCC{
 class NewOrderLocalMemory {
 private:
+	std::ostream &os_;
 	// RDMA region for local buffers
 	RDMARegion<TPCC::CustomerVersion>	*customerHead_;
 	RDMARegion<Timestamp> 				*customerTS_;
@@ -60,7 +61,7 @@ private:
 	RDMARegion<uint64_t>	*stocksLocksRegion_;
 
 public:
-	NewOrderLocalMemory(RDMAContext &context);
+	NewOrderLocalMemory(std::ostream &os, RDMAContext &context);
 	~NewOrderLocalMemory();
 	RDMARegion<TPCC::CustomerVersion>* getCustomerHead();
 	RDMARegion<Timestamp>* getCustomerTS();

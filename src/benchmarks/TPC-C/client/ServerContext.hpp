@@ -19,6 +19,7 @@
 namespace TPCC{
 class ServerContext {
 private:
+	std::ostream &os_;
 	int 		sockfd_;
 	std::string	serverAddress_;
 	uint16_t	tcpPort_;
@@ -35,7 +36,7 @@ private:
 
 
 public:
-	ServerContext(const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context);
+	ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context);
 	~ServerContext();
 	std::string getServerAddress() const;
 	uint16_t getTcpPort() const;

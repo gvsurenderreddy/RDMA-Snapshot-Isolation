@@ -56,13 +56,17 @@ public:
 };
 
 class HistoryTable{
+private:
+	std::ostream &os_;
+
 public:
 	RDMARegion<HistoryVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<HistoryVersion>	*olderVersions;
 
-	HistoryTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	HistoryTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<HistoryVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -76,7 +80,7 @@ public:
 	}
 
 	~HistoryTable(){
-		DEBUG_COUT("HistoryTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "HistoryTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;

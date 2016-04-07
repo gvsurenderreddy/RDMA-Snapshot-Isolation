@@ -13,8 +13,9 @@
 
 #define CLASS_NAME "ClientContext"
 
-TPCC::ClientContext::ClientContext(int sockfd, RDMAContext &context)
-: sockfd_(sockfd){
+TPCC::ClientContext::ClientContext(std::ostream &os, int sockfd, RDMAContext &context)
+: os_(os),
+  sockfd_(sockfd){
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 	indexRequestMessage_ 	= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	indexResponseMessage_ 	= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
@@ -41,7 +42,7 @@ RDMARegion<TPCC::IndexResponseMessage>* TPCC::ClientContext::getIndexResponseMes
 }
 
 TPCC::ClientContext::~ClientContext() {
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called ");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
 
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
 	delete indexRequestMessage_;

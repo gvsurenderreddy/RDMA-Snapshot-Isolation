@@ -108,6 +108,7 @@ public:
 
 class CustomerTable{
 private:
+	std::ostream &os_;
 	MultiValueHashIndex<std::string, uint32_t> customerLastNameToID_Index_;
 
 public:
@@ -116,8 +117,9 @@ public:
 	RDMARegion<CustomerVersion>	*olderVersions;
 
 
-	CustomerTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	CustomerTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<CustomerVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -125,7 +127,7 @@ public:
 	}
 
 	~CustomerTable(){
-		DEBUG_COUT("CustomerTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "CustomerTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;

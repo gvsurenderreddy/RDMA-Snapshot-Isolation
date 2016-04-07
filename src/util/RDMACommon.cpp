@@ -96,7 +96,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 }
 
 int RDMACommon::post_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uint64_t local_buffer, 
-struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length)
+struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length, bool signaled)
 {
 	struct ibv_sge sge;
 	struct ibv_send_wr wr, *bad_wr = NULL;
@@ -111,7 +111,10 @@ struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length
 	wr.sg_list 					= &sge;
 	wr.num_sge 					= 1;
 	wr.opcode 					= IBV_WR_ATOMIC_FETCH_AND_ADD;
-	wr.send_flags 				= IBV_SEND_SIGNALED;
+	if (signaled)
+		wr.send_flags 		= IBV_SEND_SIGNALED;
+	else
+		wr.send_flags 		= 0;
 	wr.wr.atomic.remote_addr	= peer_buffer;
 	wr.wr.atomic.rkey        	= peer_mr->rkey;
 	wr.wr.atomic.compare_add	= addition; /* value to be added to the remote address content */
@@ -124,7 +127,7 @@ struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length
 }
 
 int RDMACommon::post_RDMA_CMP_SWAP(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
-struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value)
+struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value, bool signaled)
 {
 	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
@@ -139,7 +142,10 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expecte
 	wr.opcode 					= IBV_WR_ATOMIC_CMP_AND_SWP;
 	wr.sg_list 					= &sge;
 	wr.num_sge 					= 1;
-	wr.send_flags 				= IBV_SEND_SIGNALED;
+	if (signaled)
+		wr.send_flags 		= IBV_SEND_SIGNALED;
+	else
+		wr.send_flags 		= 0;
 	wr.wr.atomic.remote_addr	= peer_buffer;
 	wr.wr.atomic.rkey        	= peer_mr->rkey;
 	wr.wr.atomic.compare_add	= expected_value; /* expected value in remote address */

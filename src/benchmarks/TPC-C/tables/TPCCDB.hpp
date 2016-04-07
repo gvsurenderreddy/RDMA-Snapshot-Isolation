@@ -28,6 +28,7 @@ namespace TPCC{
 
 class TPCCDB {
 private:
+	std::ostream &os_;
 	size_t itemCnt_;
 	size_t customerCnt_;
 	size_t warehouseCnt_;
@@ -50,7 +51,7 @@ public:
 	TPCC::NewOrderTable		newOrderTable;
 	TPCC::HistoryTable		historyTable;
 
-	TPCCDB(std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
+	TPCCDB(std::ostream &os, std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
 	void getMemoryKeys(ServerMemoryKeys *k);
 	void handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying

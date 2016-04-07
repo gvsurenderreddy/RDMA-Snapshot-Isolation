@@ -13,7 +13,9 @@
 #define CLASS_NAME	"OrdStatLocMem"
 
 namespace TPCC {
-OrderStatusLocalMemory::OrderStatusLocalMemory(RDMAContext &context){
+OrderStatusLocalMemory::OrderStatusLocalMemory(std::ostream &os, RDMAContext &context)
+: os_(os){
+
 	orderHead_				= new RDMARegion<TPCC::OrderVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	orderTS_				= new RDMARegion<Timestamp>(config::tpcc_settings::VERSION_NUM, context, IBV_ACCESS_LOCAL_WRITE);
 	orderOlderVersions_ 	= new RDMARegion<TPCC::OrderVersion>(1, context, IBV_ACCESS_LOCAL_WRITE);
@@ -24,6 +26,8 @@ OrderStatusLocalMemory::OrderStatusLocalMemory(RDMAContext &context){
 }
 
 OrderStatusLocalMemory::~OrderStatusLocalMemory(){
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
+
 	delete orderHead_;
 	delete orderTS_;
 	delete orderOlderVersions_;

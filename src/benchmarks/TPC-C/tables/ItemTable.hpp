@@ -69,13 +69,17 @@ public:
 
 
 class ItemTable{
+private:
+	std::ostream &os_;
+
 public:
 	RDMARegion<ItemVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<ItemVersion>	*olderVersions;
 
-	ItemTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	ItemTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<ItemVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -116,7 +120,7 @@ public:
 	}
 
 	~ItemTable(){
-		DEBUG_COUT("ItemTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "ItemTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;

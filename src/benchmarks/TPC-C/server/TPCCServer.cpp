@@ -14,6 +14,7 @@
 #include <netdb.h>	// for socket-related functions and variables
 //#include <sys/types.h>	// for listen
 #include <sys/socket.h>
+#include <fstream>      // std::ofstream
 
 
 using namespace config::tpcc_settings;
@@ -28,13 +29,19 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
   tcp_port_(config::TCP_PORT[serverNum]),
   ib_port_(config::IB_PORT[serverNum]){
 
+	if (config::Output::FILE == DEBUG_OUTPUT) {
+		std::string filename = std::string(config::LOG_FOLDER) + "/server_" + std::to_string(serverNum_) + ".log";
+		os_ = new std::ofstream (filename, std::ofstream::out);
+	}
+	else os_ = &std::cout;
+
 
 	TPCC::RealRandomGenerator random;
 	TPCC::NURandC cLoad = TPCC::NURandC::makeRandom(random);
 	random.setC(cLoad);
 
 
-	context_ = new RDMAContext(ib_port_);
+	context_ = new RDMAContext(*os_, ib_port_);
 
 	size_t warehouseTableSize = WAREHOUSE_PER_SERVER;
 	size_t districtTableSize = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
@@ -51,7 +58,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
 		warehouseIDs.push_back((uint16_t)(serverNum_ * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
 
-	db = new TPCC::TPCCDB(warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
+	db = new TPCC::TPCCDB(*os_, warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 
 	// Put the memory keys into the message that is to be sent to clients
 	memoryKeysMessage_ = new RDMARegion<ServerMemoryKeys>(1, *context_, IBV_ACCESS_LOCAL_WRITE);
@@ -91,11 +98,11 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 			exit(-1);
 		}
 		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client #" << c << " on socket " << sockfd);
-		clientCtxs.push_back(new ClientContext(sockfd, *context_));
+		clientCtxs.push_back(new ClientContext(*os_, sockfd, *context_));
 
 		// connect the QPs
 		clientCtxs[c]->activateQueuePair(*context_);
-		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Established QP to client " << c);
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Established QP to client " << c);
 
 		uint32_t qp_num = clientCtxs[c]->getQP()->qp_num;
 		qpNum_to_clientIndex_map[qp_num] = (primitive::client_id_t)c;
@@ -112,7 +119,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		// send memory locations using SEND
 		TEST_NZ (RDMACommon::post_SEND (clientCtxs[c]->getQP(), memoryKeysMessage_->getRDMAHandler(), (uintptr_t)memoryKeysMessage_->getRegion(), sizeof(struct ServerMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-		DEBUG_COUT(CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
 	}
 
 	handleIndexRequests();
@@ -123,7 +130,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 
 	for (size_t c = 0; c < clientsCnt_; c++) {
 		TEST_NZ (utils::sock_sync (clientCtxs[c]->getSockFd()));	// just send a dummy char back and forth
-		DEBUG_COUT(CLASS_NAME, __func__, "[Conn] Client " << c << " notified it's finished");
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Client " << c << " notified it's finished");
 		delete clientCtxs[c];
 	}
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
@@ -143,7 +150,7 @@ void TPCC::TPCCServer::handleIndexRequests() {
 		(void) clientID;	// to avoid unused variable warning
 
 		if (req->operationType == TPCC::IndexRequestMessage::TERMINATE){
-			DEBUG_COUT(CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID  << " :: TERMINATE");
+			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID  << " :: TERMINATE");
 			liveClientCnt--;
 		}
 		else{
@@ -163,14 +170,14 @@ void TPCC::TPCCServer::handleIndexRequests() {
 					sizeof(IndexResponseMessage),
 					true));
 
-			DEBUG_COUT(CLASS_NAME, __func__, "[Send] Index response to client " << (int)clientID);
+			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Send] Index response to client " << (int)clientID);
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 		}
 	}
 }
 
 TPCC::TPCCServer::~TPCCServer() {
-	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Deconstructor called");
+	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete memoryKeysMessage_;
 	delete db;
 	delete context_;

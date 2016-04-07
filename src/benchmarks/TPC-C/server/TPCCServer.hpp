@@ -40,6 +40,7 @@ private:
 	std::vector<ClientContext*> clientCtxs;
 	RDMARegion<ServerMemoryKeys> *memoryKeysMessage_;
 	std::unordered_map<uint32_t, primitive::client_id_t> qpNum_to_clientIndex_map;	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
+	std::ostream *os_;
 };
 }
 

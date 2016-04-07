@@ -73,13 +73,16 @@ public:
 
 
 class WarehouseTable{
+private:
+	std::ostream &os_;
 public:
 	RDMARegion<WarehouseVersion>	*headVersions;
 	RDMARegion<Timestamp> 			*tsList;
 	RDMARegion<WarehouseVersion>	*olderVersions;
 
-	WarehouseTable(size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: size_(size),
+	WarehouseTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
 	  maxVersionsCnt_(maxVersionsCnt){
 		headVersions 	= new RDMARegion<WarehouseVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -98,7 +101,7 @@ public:
 	}
 
 	~WarehouseTable(){
-		DEBUG_COUT("WarehouseTable", __func__, "[Info] Deconstructor called");
+		DEBUG_WRITE(os_, "WarehouseTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
 		delete tsList;
 		delete olderVersions;
