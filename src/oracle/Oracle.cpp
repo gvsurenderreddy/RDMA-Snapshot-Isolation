@@ -6,7 +6,7 @@
  */
 
 #include "../util/utils.hpp"
-#include "../util/RDMACommon.hpp"
+#include "../rdma-region/RDMACommon.hpp"
 #include "WorkerContext.hpp"
 #include <stdio.h>
 #include <cstring>	// for memcpy and memset

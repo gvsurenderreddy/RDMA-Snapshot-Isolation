@@ -6,7 +6,7 @@
  */
 
 #include "RDMACommon.hpp"
-#include "utils.hpp"
+#include "../util/utils.hpp"
 #include <iostream>
 #include <cstring>
 #include <arpa/inet.h>

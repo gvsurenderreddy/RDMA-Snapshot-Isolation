@@ -156,7 +156,7 @@ void TPCC::TPCCServer::handleIndexRequests() {
 		else{
 			db->handleIndexRequest(*req, *res);
 
-			// to avoid race, post the next indexRequest message before sending the response
+			// to avoid race condition, post the next indexRequest message before sending the response
 			TEST_NZ (RDMACommon::post_RECEIVE (
 					clientCtxs[clientIndex ]->getQP(),
 					clientCtxs[clientIndex ]->getIndexRequestMessageRegion()->getRDMAHandler(),

@@ -6,8 +6,8 @@
  */
 
 #include "RDMAContext.hpp"
+#include "RDMACommon.hpp"
 #include "../util/utils.hpp"
-#include "../util/RDMACommon.hpp"
 #include <unistd.h>		// for close
 
 #include <iostream>

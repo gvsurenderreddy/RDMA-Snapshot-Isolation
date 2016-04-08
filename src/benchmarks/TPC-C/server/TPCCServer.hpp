@@ -13,7 +13,7 @@
 #include "ServerMemoryKeys.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
-#include "../../../util/RDMACommon.hpp"
+#include "../../../rdma-region/RDMACommon.hpp"
 
 #include <unistd.h>	// for close()
 #include <infiniband/verbs.h>	// for ibv_qp

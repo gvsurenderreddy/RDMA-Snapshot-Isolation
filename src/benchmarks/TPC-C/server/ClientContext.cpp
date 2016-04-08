@@ -6,7 +6,7 @@
  */
 
 #include "ClientContext.hpp"
-#include "../../../util/RDMACommon.hpp"
+#include "../../../rdma-region/RDMACommon.hpp"
 #include "../../../util/utils.hpp"	// for TEST_NZ()
 #include <unistd.h>		// for close
 #include <iostream>

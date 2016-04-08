@@ -9,8 +9,8 @@
 #define SRC_RDMA_REGION_RDMAREGION_HPP_
 
 #include "MemoryHandler.hpp"
+#include "RDMACommon.hpp"
 #include "../util/utils.hpp"
-#include "../util/RDMACommon.hpp"
 #include "RDMAContext.hpp"
 
 

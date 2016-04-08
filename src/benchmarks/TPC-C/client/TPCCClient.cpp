@@ -5,7 +5,7 @@
  */
 
 #include "TPCCClient.hpp"
-#include "../../../util/RDMACommon.hpp"
+#include "../../../rdma-region/RDMACommon.hpp"
 #include "../../../util/utils.hpp"
 #include "../tables/TPCCUtil.hpp"
 #include "../tables/WarehouseTable.hpp"
