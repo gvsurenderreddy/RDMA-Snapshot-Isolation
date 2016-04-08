@@ -298,7 +298,7 @@ int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num)
 		}
 	}while(ne==0);
 
-	if(ne<0) {
+	if(ne<0 || ne != 1) {
 		std::cerr << "RDMA polling from CQ failed!" << std::endl;
 		return -1;
 	}

@@ -130,7 +130,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 
 
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Starting transactions ");
-	std::cout << "client_id: " << clientID_ << "  starting" << std::endl;
+	// std::cout << "client_id: " << clientID_ << "  starting" << std::endl;
 
 
 	for (int t = 0; t < config::tpcc_settings::TRANSACTION_CNT; t++){
@@ -150,8 +150,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "--------------- [Info] Transaction " << t << " (" << trx->getTransactionName() << ") --------------");
 
-		std::cout << "client_id: " << clientID_ << "  transaction #" << t << std::endl;
-
+		// std::cout << "client_id: " << clientID_ << "  transaction #" << t << std::endl;
 
 		clock_gettime(CLOCK_REALTIME, &trxBeginTime);
 		TransactionResult trxResult = trx->doOne();
@@ -220,5 +219,7 @@ TPCC::TPCCClient::~TPCCClient(){
 	delete context_;
 	delete sessionState_;
 
-	delete os_;
+	// if os_ == &std::cout, deleting os_ will result in core dumped
+	if (os_ != &std::cout)
+		delete os_;
 }

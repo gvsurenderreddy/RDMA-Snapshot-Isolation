@@ -77,7 +77,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
-	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
+	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 
@@ -118,7 +118,10 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getQP(),
 			true);
 	TPCC::DistrictVersion *districtV = localMemory_->getDistrictHead()->getRegion();
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveDistrictPointerList()
+
 
 
 	if (cart.customerSelectionMode == PaymentCart::LAST_NAME) {
@@ -137,6 +140,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
@@ -501,7 +505,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	trxResult.reason = TransactionResult::Reason::SUCCESS;
 	trxResult.cts = cts;
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
-	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
+	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 

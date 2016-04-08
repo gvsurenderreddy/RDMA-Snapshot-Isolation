@@ -18,56 +18,56 @@
 #include <vector>
 #include <thread>
 #include <chrono>         // std::chrono::seconds
+#include <string>
 
 #define CLASS_NAME "executor"
 
 void checkConfigFile();
-
+void print_usage(std::string executable_filename);
+void print_error_client(std::string executable_filename);
+void print_error_server(std::string executable_filename);
+void print_error_oracle(std::string executable_filename);
 
 int main (int argc, char *argv[]) {
-	if (argc < 2) {
-		std::cerr << "At least two arguments are needed" << std::endl;
+	if (argc < 2 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+		print_usage(std::string(argv[0]));
 		return 1;
 	}
 
 	checkConfigFile();
 
 	if (strcmp(argv[1], "client")  == 0) {
-		if (argc != 6 || strcmp(argv[2], "-p") != 0 || strcmp(argv[4], "-i") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " " << argv[1] << " -p #PORT_NUM -i #INSTANCE_NUM" << std::endl;
-			std::cerr << "starts a client" << std::endl;
+		if (argc != 8 || strcmp(argv[2], "-b") != 0 || strcmp(argv[3], "TPCC") != 0 || strcmp(argv[4], "-p") != 0 || strcmp(argv[6], "-i") != 0) {
+			print_error_client(std::string(argv[0]));
 			return 1;
 		}
 
 
-		uint8_t ibPort = (uint8_t)atoi(argv[3]);
-		unsigned instanceNum = atoi(argv[5]);
+		uint8_t ibPort = (uint8_t)atoi(argv[5]);
+		unsigned instanceNum = atoi(argv[7]);
 		TPCC::TPCCClient client(instanceNum, ibPort);
 	}
 	else if(strcmp(argv[1], "server") == 0) {
-		if (argc != 5 || strcmp(argv[3], "-n") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " " << argv[1] << " <s = server_num> -n NUM_OF_CLIENTS" << std::endl;
-			std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s]" << std::endl;
-			std::cerr << "(valid range of s: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+		if (argc != 7 || strcmp(argv[3], "-b") != 0 || strcmp(argv[4], "TPCC") != 0 || strcmp(argv[5], "-n") != 0) {
+			print_error_server(std::string(argv[0]));
 			return 1;
 		}
 		unsigned instance_num = 1;
-		uint32_t clients_cnt = atoi(argv[4]);
 		uint32_t serverNum = atoi(argv[2]);
+		uint32_t clients_cnt = atoi(argv[6]);
 
 		TPCC::TPCCServer server(serverNum, instance_num, clients_cnt);
 	}
 	else if(strcmp(argv[1], "oracle") == 0) {
 		if (argc != 4 || strcmp(argv[2], "-n") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " " << argv[1] << " -n NUM_OF_CLIENTS" << std::endl;
-			std::cerr << "connects to the oracle specified in the config file" << std::endl;
+			print_error_oracle(std::string(argv[0]));
 			return 1;
 		}
 		uint32_t clients_cnt = atoi(argv[3]);
 		Oracle ts(clients_cnt);
+	}
+	else{
+		print_usage(std::string(argv[0]));
 	}
 
 	/*
@@ -167,4 +167,32 @@ void checkConfigFile() {
 		PRINT_CERR(CLASS_NAME, __func__, "Transactions' ratios in the config file do not add up to 1");
 		exit(-1);
 	}
+}
+
+void print_usage(std::string executable_filename) {
+	std::cerr << "3 different usages of the executor:" << std::endl;
+	std::cerr << std::endl;
+	print_error_client(executable_filename);
+	std::cerr << std::endl;
+	print_error_server(executable_filename);
+	std::cerr << std::endl;
+	print_error_oracle(executable_filename);
+	std::cerr << std::endl;
+}
+
+void print_error_client(std::string executable_filename) {
+	std::cerr << "Usage:" << std::endl;
+	std::cerr << executable_filename << " client -b #BENCHMARK_NAME -p #PORT_NUM -i #INSTANCE_NUM" << std::endl;
+	std::cerr << "starts a client and runs the BENCHMARK (e.g. TPCC)" << std::endl;
+}
+void print_error_server(std::string executable_filename){
+	std::cerr << "Usage:" << std::endl;
+	std::cerr << executable_filename << " #SERVER_NUM -b #BENCHMARK_NAME -n #NUM_OF_CLIENTS" << std::endl;
+	std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s] to run the BENCHMARK (e.g. TPCC) " << std::endl;
+	std::cerr << "(valid range of SERVER_NUM: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+}
+void print_error_oracle(std::string executable_filename) {
+	std::cerr << "Usage:" << std::endl;
+	std::cerr << executable_filename << " oracle -n #NUM_OF_CLIENTS" << std::endl;
+	std::cerr << "connects to the oracle, specified in the config file" << std::endl;
 }

@@ -40,11 +40,11 @@ endef
 .PHONY: all checkdirs clean
 
 # -------------------------------------------------
-all: checkdirs $(EXE_DIR)/test.exe
+all: checkdirs $(EXE_DIR)/executor.exe
 
 # -------------------------------------------------
 # linking all object files to create the executable
-$(EXE_DIR)/test.exe: $(OBJ)
+$(EXE_DIR)/executor.exe: $(OBJ)
 	$(LD) $^ $(LIBS) -o $@
 
 # -------------------------------------------------

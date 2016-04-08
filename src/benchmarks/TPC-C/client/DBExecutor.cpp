@@ -124,7 +124,7 @@ void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, ui
 }
 
 
-void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp) {
+void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled) {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
 
@@ -141,10 +141,10 @@ void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegio
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
-			false));
+			signaled));
 }
 
-void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primitive::timestamp_t> &localRegion,  MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp){
+void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primitive::timestamp_t> &localRegion,  MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address of the timestamp
 	size_t tableOffset = (size_t)(clientID * sizeof(primitive::timestamp_t));		// offset of client's cts in timestampVector
 	primitive::timestamp_t *writeAddress = (primitive::timestamp_t*)(tableOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
@@ -164,7 +164,7 @@ void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primit
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
-			true));
+			signaled));
 }
 
 void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled){

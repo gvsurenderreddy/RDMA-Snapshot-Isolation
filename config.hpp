@@ -16,13 +16,11 @@
 
 
 namespace config {
-#define DEBUG_ENABLED (true)
-#define DEBUG_OUTPUT config::Output::FILE
-
-enum Output{
-	FILE,
-	SCREEN
-};
+/* Logging			*/
+#define DEBUG_ENABLED (false)
+#define DEBUG_OUTPUT config::Output::SCREEN
+enum Output{FILE, SCREEN};							// Don't change this
+static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
 /* Server settings */
@@ -53,7 +51,7 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 10000;//100000;
+static const int					TRANSACTION_CNT 		= 10;				// This is __per client__. For the experiments, we will use 100000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {1.0, 0.0, 0.0};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status. Numbers must add up to 1
 
 /*	Database settings	*/
@@ -67,7 +65,7 @@ static const int ORDER_PER_CLIENT		= TRANSACTION_CNT;
 static const int HISTORY_PER_CLIENT		= TRANSACTION_CNT;
 static const double REMOTE_WAREHOUSE_PROB	= 0.01; // probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
 
-static const int VERSION_NUM = 2;
+static const int VERSION_NUM = 2;		// Numbre of old versions to be kept around for each record. This number is excluding the head version, so the total number of versions will be VERSION_NUM + 1
 }	// namespace tpcc_settings
 
 
@@ -92,6 +90,5 @@ static const uint16_t	MAX_ITEM_VERSIONS	= 3;		// Maximum number of versions per 
 }	// namespace tpcw_settings
 
 
-static const std::string LOG_FOLDER			= "logs";	// Don't change this
 }
 #endif /* CONFIG_H_ */

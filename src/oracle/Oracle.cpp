@@ -118,4 +118,8 @@ Oracle::~Oracle(){
 	delete lastCommittedVector_;
 	delete context_;
 	close(server_sockfd_);
+
+	// if os_ == &std::cout, deleting os_ will result in core dumped
+	if (os_ != &std::cout)
+		delete os_;
 }

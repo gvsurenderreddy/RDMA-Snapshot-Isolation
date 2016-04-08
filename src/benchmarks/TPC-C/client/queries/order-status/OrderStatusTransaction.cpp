@@ -62,7 +62,8 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
-	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP());
+	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 
@@ -84,7 +85,9 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 				true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.lookupCustomerByLastName()
+
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);

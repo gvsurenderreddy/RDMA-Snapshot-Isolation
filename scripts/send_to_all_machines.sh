@@ -24,7 +24,7 @@ echo "sending file(s) to /data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest"
 
 #rsync -ruvh  $file erfanz@bsn00.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
 rsync -ruvh  $file erfanz@bsn01.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-rsync -ruvh  $file erfanz@bsn02.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -ruvh  $file erfanz@bsn02.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
 #rsync -ruvh  $file erfanz@bsn03.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
 #rsync -ruvh  $file erfanz@bsn04.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
 #rsync -ruvh  $file erfanz@bsn05.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest

@@ -181,4 +181,8 @@ TPCC::TPCCServer::~TPCCServer() {
 	delete memoryKeysMessage_;
 	delete db;
 	delete context_;
+
+	// if os_ == &std::cout, deleting os_ will result in core dumped
+	if (os_ != &std::cout)
+		delete os_;
 }
