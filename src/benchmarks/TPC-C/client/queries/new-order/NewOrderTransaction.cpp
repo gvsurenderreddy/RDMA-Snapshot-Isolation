@@ -74,12 +74,18 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	time_t timer;
 	std::time(&timer);
 	TransactionResult trxResult;
+	TPCC::WarehouseVersion *warehouseV;
+	TPCC::DistrictVersion *districtV;
+	TPCC::CustomerVersion *customerV;
+	std::vector<TPCC::ItemVersion*> items;
+	std::vector<TPCC::StockVersion*> stocks;
+
 
 	// ************************************************
 	//	Constructing the shopping cart
 	// ************************************************
 	NewOrderCart cart = buildCart();
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 
 
 	// ************************************************
@@ -98,7 +104,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	TPCC::WarehouseVersion *warehouseV = localMemory_->getWarehouseHead()->getRegion();
+	warehouseV = localMemory_->getWarehouseHead()->getRegion();
 
 
 	// From District table, retrieve the row with matching D_W_ID and D_ID.
@@ -109,7 +115,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	TPCC::DistrictVersion *districtV = localMemory_->getDistrictHead()->getRegion();
+	districtV = localMemory_->getDistrictHead()->getRegion();
 
 
 	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
@@ -121,10 +127,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	TPCC::CustomerVersion *customerV = localMemory_->getCustomerHead()->getRegion();
+	customerV = localMemory_->getCustomerHead()->getRegion();
 
-	std::vector<TPCC::ItemVersion*> items;
-	std::vector<TPCC::StockVersion*> stocks;
 
 	// Retrieve item and stock
 	bool signaled = false;
@@ -142,6 +146,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.wID)->getQP(),
 				signaled);
 		items.push_back(&localMemory_->getItemHead()->getRegion()[olNumber]);
+
 
 		executor_.retrieveStock(
 				olNumber,
@@ -161,25 +166,26 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				*localMemory_->getStockTS(),
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getRemoteMemoryKeys()->getRegion()->stockTableTimestampList,
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getQP(),
-				signaled);
+				true);
 	}
 
 	// wait for all outstanding RDMA requests to finish
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveItem()
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveStockPointerList()
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each executor_.retrieveStockPointerList()
 
 	// printing for debugging purposes
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse: " << warehouseV->warehouse);
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District: " << districtV->district);
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << customerV->customer);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse: " << warehouseV->warehouse);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District: " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << customerV->customer);
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Item: " << items[olNumber]->item);
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved stock: " << *stocks[olNumber] << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Item: " << items[olNumber]->item);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved stock: " << *stocks[olNumber] << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
 		size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved the pointer list for Stock " << stocks[olNumber]->stock
-		//		<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID );
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved the pointer list for Stock " << stocks[olNumber]->stock
+				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID );
 
 		(void) offset; // to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 	}
@@ -191,31 +197,31 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	bool realAbort = false;
 	if (! isRecordAccessible(warehouseV->writeTimestamp)){
 		abortFlag = true;
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << warehouseV->warehouse
-		//		<< " (" << warehouseV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << warehouseV->warehouse
+				<< " (" << warehouseV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	if (! isRecordAccessible(districtV->writeTimestamp)){
 		abortFlag = true;
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
-		//		<< " (" << districtV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
+				<< " (" << districtV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	if (! isRecordAccessible(customerV->writeTimestamp)){
 		abortFlag = true;
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << (int)customerV->customer.C_ID
-		//		<< " (" << customerV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << (int)customerV->customer.C_ID
+				<< " (" << customerV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 	}
 	else{
 		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
 			if (! isRecordAccessible(items[olNumber]->writeTimestamp)){
 				abortFlag = true;
-		//		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << (int)items[olNumber]->item.I_ID
-		//				<< " (" << items[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << (int)items[olNumber]->item.I_ID
+						<< " (" << items[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 			}
 			else if (! isRecordAccessible(stocks[olNumber]->writeTimestamp)){
 				realAbort = true;
 				abortFlag = true;
-		//		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": stock " << (int)stocks[olNumber]->stock.S_I_ID
-		//				<< " (" << stocks[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": stock " << (int)stocks[olNumber]->stock.S_I_ID
+						<< " (" << stocks[olNumber]->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
 			}
 		}
 	}
@@ -225,19 +231,19 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	}
 
 	if (abortFlag == true) {
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;
 	}
-	//else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
+	else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
 
 
 	// ************************************************
 	//	Acquire Commit timestamp
 	// ************************************************
 	primitive::timestamp_t cts = getNewCommitTimestamp();
-	// DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
 
 
 	// ************************************************
@@ -300,15 +306,15 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
 		localMemory_->getStocksLocksRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getStocksLocksRegion()->getRegion()[olNumber]);
 
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
 
 	// checks if locks are successful
 	abortFlag = false;
 	if (! config::APPLY_COMMUTATIVE_UPDATES){
 		if (!districtExistingLock.isEqual(districtExpectedLock)) {
 			abortFlag = true;
-	//		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock district " << districtV->district << " was NOT successful "
-	//				<< "(expected: " << districtExpectedLock << ", existing: " << districtExistingLock << ")");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock district " << districtV->district << " was NOT successful "
+					<< "(expected: " << districtExpectedLock << ", existing: " << districtExistingLock << ")");
 		}
 	}
 
@@ -320,13 +326,13 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		if (! existingLock.isEqual(expectedLock)){
 			unsuccesfulOrderLines.push_back(olNumber);
 			abortFlag = true;
-	//		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was NOT successful "
-	//				<< "(expected: " << expectedLock << ", existing: " << existingLock << ")");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was NOT successful "
+					<< "(expected: " << expectedLock << ", existing: " << existingLock << ")");
 		}
 		else {
 			succesfulOrderLines.push_back(olNumber);
-	//		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful "
-	//				<< "(expected = existing = " << existingLock << ")");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful "
+					<< "(expected = existing = " << existingLock << ")");
 		}
 	}
 
@@ -358,10 +364,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		for (unsigned i = 0; i < successfulLocksCnt; i++){
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-		//	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
 
 		}
-	//	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;
@@ -377,7 +383,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
 				getServerContext(cart.wID)->getQP(),
 				false);
-	//	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for district " << districtV->district);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for district " << districtV->district);
 
 		executor_.updateDistrictOlderVersions(
 				//*localMemory_->getDistrictOlderVersions(),
@@ -385,7 +391,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableOlderVersions,
 				getServerContext(cart.wID)->getQP(),
 				false);
-	//	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for district " << districtV->district);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for district " << districtV->district);
 	}
 
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
@@ -404,7 +410,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getQP(),
 				false);
 	}
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older version");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older version");
 
 
 
@@ -435,7 +441,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				true);
 	}
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
 
 	// insert a new row into New-Order and Order table.
 	// O_CARRIER_ID is set to a null value. If the order includes only home order-lines, then O_ALL_LOCAL is set to 1, otherwise O_ALL_LOCAL is set to 0.
@@ -461,7 +467,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getQP(),
 			false);
 
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order with oID: " << nextOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order with oID: " << nextOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
 
 
 	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
@@ -479,7 +485,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder with noID: " << nextNewOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder with noID: " << nextNewOrderID_ << ", wID: " << cart.wID << ", dID: " << cart.dID);
 
 	// For each O_OL_CNT item on the order:
 	// |-- In Item table, I_PRICE, I_NAME and I_DATA are retrieved
@@ -524,8 +530,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				*localMemory_->getStockHead(),
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions,
 				getServerContext(cart.items.at(olNumber).OL_SUPPLY_W_ID)->getQP(),
-				signaled);
-		//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated stock " << stocks[olNumber]->stock << " (" << stockUnlockTS << ")"  << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
+				true);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated stock " << stocks[olNumber]->stock << " (" << stockUnlockTS << ")"  << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
 
 
 		TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
@@ -552,14 +558,16 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.wID)->getQP(),
 				signaled);
 
-	//	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine with oID: " << oID << ", wID: " << cart.wID << ", dID: " << cart.dID );
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine with oID: " << oID << ", wID: " << cart.wID << ", dID: " << cart.dID );
 		nextOrderLineID_++;
 	}
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// executor_.updateStock()
+	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each executor_.updateStock()
+
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// executor_.insertIntoOrderLine()
 
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
 	// update the index
 	TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
@@ -597,7 +605,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	//DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
 	nextOrderID_++;
 	nextNewOrderID_++;
