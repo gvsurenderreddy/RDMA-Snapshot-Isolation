@@ -1,3 +1,8 @@
+An RDMA-based implementation of in-memory TPCC and TPCW. The goal of this project is to leverage the RDMA programming model in building distributed database systems. For more information, refer to our paper:
+http://www.vldb.org/pvldb/vol9/p528-binnig.pdf
+
+Should you have any questions, please contact me at *erfanz \:at\: cs \:dot\: brown \:dot\: edu* (without the colons and spaces).
+
 # Notes on compiling and running the source code
 
 ## Compiling
@@ -26,5 +31,3 @@ More details about the arguments:
 Note that the config file (located at *ROOT/config.hpp*) has to conform to the execution and the deployment parameters.
 More specifically, the number of memory servers (```SERVER_CNT```) and their IP addresses (```SERVER_ADDR```, ```TCP_PORT``` and ```IB_PORT```),
 in addition to the IP address of the timestamp oracle (```TIMESTAMP_SERVER_ADDR```, ```TIMESTAMP_SERVER_PORT``` and ```TIMESTAMP_SERVER_IB_PORT```) must match what is used in the deployment.
-
-Should you have any questions, please contact me at erfanz \_at\_ cs \_dot\_ brown \_dot\_ edu.
