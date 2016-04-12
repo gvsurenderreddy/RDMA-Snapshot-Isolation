@@ -19,8 +19,10 @@
 #include "../../rdma-region/RDMAContext.hpp"
 #include "server/ServerMemoryKeys.hpp"
 #include "random/randomgenerator.hpp"
-#include "IndexRequestMessage.hpp"
-#include "IndexResponseMessage.hpp"
+#include "../index-messages/IndexRequestMessage.hpp"
+#include "../index-messages/IndexResponseMessage.hpp"
+#include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
+#include "../index-messages/CustomerNameIndexRespMsg.hpp"
 #include <ctime>
 #include <vector>
 
@@ -53,6 +55,10 @@ public:
 
 	TPCCDB(std::ostream &os, std::vector<uint16_t> &warehouseIDs, size_t warehouseCnt, size_t districtCnt, size_t customerCnt, size_t orderCnt, size_t orderLineCnt, size_t newOrderCnt, size_t stockCnt, size_t itemCnt, size_t hisotryCnt, size_t versionNum, TPCC::RealRandomGenerator& random, RDMAContext &context);
 	void getMemoryKeys(ServerMemoryKeys *k);
+
+	void handleLargestOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::LargestOrderForCustomerIndexRespMsg &res);
+	void handleRegisterOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
+	void handleCustomerNameIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::CustomerNameIndexRespMsg &res);
 	void handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying

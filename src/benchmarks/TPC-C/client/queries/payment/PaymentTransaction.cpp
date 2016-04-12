@@ -134,7 +134,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 				cart.dID,
 				cart.cLastName,
 				*serverCtx->getIndexRequestMessage(),
-				*serverCtx->getIndexResponseMessage(),
+				*serverCtx->getCustomerNameIndexResponseMessage(),
 				serverCtx->getQP(),
 				true);
 
@@ -143,12 +143,12 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
-		if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
+		if (serverCtx->getCustomerNameIndexResponseMessage()->getRegion()->isSuccessful == false){
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 			trxResult.result = TransactionResult::Result::COMMITTED;
 			return trxResult;
 		}
-		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
+		cart.cID = serverCtx->getCustomerNameIndexResponseMessage()->getRegion()->cID;
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 

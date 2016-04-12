@@ -8,8 +8,10 @@
 #ifndef SRC_BENCHMARKS_TPC_C_SERVER_CLIENTCONTEXT_HPP_
 #define SRC_BENCHMARKS_TPC_C_SERVER_CLIENTCONTEXT_HPP_
 
-#include "../tables/IndexRequestMessage.hpp"
-#include "../tables/IndexResponseMessage.hpp"
+#include "../index-messages/IndexRequestMessage.hpp"
+#include "../index-messages/IndexResponseMessage.hpp"
+#include "../index-messages/CustomerNameIndexRespMsg.hpp"
+#include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 
@@ -22,13 +24,18 @@ public:
 
 	RDMARegion<TPCC::IndexRequestMessage>	*indexRequestMessage_;
 	RDMARegion<TPCC::IndexResponseMessage>	*indexResponseMessage_;
+	RDMARegion<TPCC::CustomerNameIndexRespMsg>	*customerNameIndexResponseMessage_;
+	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>	*largestOrderIndexResponseMessage_;
+
 
 	ClientContext(std::ostream &os, int sockfd, RDMAContext &context);
 	int getSockFd() const;
 	ibv_qp* getQP() const;
 	void activateQueuePair(RDMAContext &context);
-	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessageRegion() const;
-	RDMARegion<TPCC::IndexResponseMessage>* getIndexResponseMessageRegion() const;
+	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessage() const;
+	RDMARegion<TPCC::IndexResponseMessage>* getIndexResponseMessage() const;
+	RDMARegion<TPCC::CustomerNameIndexRespMsg>* getCustomerNameIndexResponseMessage() const;
+	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage() const;
 	~ClientContext();
 };
 }	// namespace TPCC

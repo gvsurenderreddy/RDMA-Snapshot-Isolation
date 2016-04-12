@@ -17,8 +17,10 @@ TPCC::ClientContext::ClientContext(std::ostream &os, int sockfd, RDMAContext &co
 : os_(os),
   sockfd_(sockfd){
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
-	indexRequestMessage_ 	= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
-	indexResponseMessage_ 	= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexRequestMessage_ 				= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexResponseMessage_ 				= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	customerNameIndexResponseMessage_ 	= new RDMARegion<TPCC::CustomerNameIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	largestOrderIndexResponseMessage_ 	= new RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 }
 
 int TPCC::ClientContext::getSockFd() const{
@@ -33,12 +35,20 @@ void TPCC::ClientContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }
 
-RDMARegion<TPCC::IndexRequestMessage>* TPCC::ClientContext::getIndexRequestMessageRegion() const{
+RDMARegion<TPCC::IndexRequestMessage>* TPCC::ClientContext::getIndexRequestMessage() const{
 	return indexRequestMessage_;
 }
 
-RDMARegion<TPCC::IndexResponseMessage>* TPCC::ClientContext::getIndexResponseMessageRegion() const{
+RDMARegion<TPCC::IndexResponseMessage>* TPCC::ClientContext::getIndexResponseMessage() const{
 	return indexResponseMessage_;
+}
+
+RDMARegion<TPCC::CustomerNameIndexRespMsg>* TPCC::ClientContext::getCustomerNameIndexResponseMessage() const{
+	return customerNameIndexResponseMessage_;
+}
+
+RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* TPCC::ClientContext::getLargestOrderForCustomerIndexResponseMessage() const{
+	return largestOrderIndexResponseMessage_;
 }
 
 TPCC::ClientContext::~ClientContext() {
@@ -47,5 +57,7 @@ TPCC::ClientContext::~ClientContext() {
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
 	delete indexRequestMessage_;
 	delete indexResponseMessage_;
+	delete customerNameIndexResponseMessage_;
+	delete largestOrderIndexResponseMessage_;
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

@@ -37,7 +37,9 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 
 	context_ 		= new RDMAContext(std::cout, ibPort_);
 	uint16_t homeWarehouseID = (uint16_t)(instanceNum * config::tpcc_settings::WAREHOUSE_PER_SERVER + random_.number(0, config::tpcc_settings::WAREHOUSE_PER_SERVER - 1));
-	sessionState_ 	= new SessionState(homeWarehouseID, (primitive::timestamp_t) 1ULL);
+	uint8_t homeDistrictID = (uint8_t)random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+
+	sessionState_ 	= new SessionState(homeWarehouseID, homeDistrictID, (primitive::timestamp_t) 1ULL);
 
 	// ************************************************
 	//	Connect to Oracle

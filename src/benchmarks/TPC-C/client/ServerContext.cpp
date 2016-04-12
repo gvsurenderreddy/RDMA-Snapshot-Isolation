@@ -22,9 +22,12 @@ TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std
   tcpPort_(tcpPort),
   ibPort_(ibPort),
   instanceNum_(instanceNum){
-	peerMemoryKeys_			= new RDMARegion<ServerMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
-	indexRequestMessage_ 	= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
-	indexResponseMessage_ 	= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	peerMemoryKeys_							= new RDMARegion<ServerMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexRequestMessage_ 					= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	indexResponseMessage_ 					= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	customerNameIndexRespMsg_ 				= new RDMARegion<TPCC::CustomerNameIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	largestOrderForCustomerIndexRespMsg_ 	= new RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
+
 
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 
@@ -54,8 +57,16 @@ RDMARegion<TPCC::IndexRequestMessage>* TPCC::ServerContext::getIndexRequestMessa
 	return indexRequestMessage_;
 }
 
-RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getIndexResponseMessage(){
+RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getRegisterOrderIndexResponseMessage(){
 	return indexResponseMessage_;
+}
+
+RDMARegion<TPCC::CustomerNameIndexRespMsg>* TPCC::ServerContext::getCustomerNameIndexResponseMessage(){
+	return customerNameIndexRespMsg_;
+}
+
+RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* TPCC::ServerContext::getLargestOrderForCustomerIndexResponseMessage(){
+	return largestOrderForCustomerIndexRespMsg_;
 }
 
 void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
@@ -69,6 +80,8 @@ TPCC::ServerContext::~ServerContext(){
 	delete peerMemoryKeys_;
 	delete indexRequestMessage_;
 	delete indexResponseMessage_;
+	delete customerNameIndexRespMsg_;
+	delete largestOrderForCustomerIndexRespMsg_;
 
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

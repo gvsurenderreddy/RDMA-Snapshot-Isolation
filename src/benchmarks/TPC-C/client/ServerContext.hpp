@@ -10,8 +10,10 @@
 
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../server/ServerMemoryKeys.hpp"
-#include "../../../tables/IndexRequestMessage.hpp"
-#include "../../../tables/IndexResponseMessage.hpp"
+#include "../index-messages/IndexRequestMessage.hpp"
+#include "../index-messages/IndexResponseMessage.hpp"
+#include "../index-messages/CustomerNameIndexRespMsg.hpp"
+#include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include <string>	// for std::string
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <cstdint>	// uintX_t
@@ -31,8 +33,12 @@ private:
 	RDMARegion<ServerMemoryKeys> *peerMemoryKeys_;
 
 	// RDMA region for index request and response
-	RDMARegion<TPCC::IndexRequestMessage>	*indexRequestMessage_;
-	RDMARegion<TPCC::IndexResponseMessage>	*indexResponseMessage_;
+	RDMARegion<TPCC::IndexRequestMessage>		*indexRequestMessage_;
+	RDMARegion<TPCC::IndexResponseMessage>		*indexResponseMessage_;
+	RDMARegion<TPCC::CustomerNameIndexRespMsg>	*customerNameIndexRespMsg_;
+	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>	*largestOrderForCustomerIndexRespMsg_;
+
+
 
 
 public:
@@ -44,8 +50,9 @@ public:
 	ibv_qp* getQP() const;
 	RDMARegion<ServerMemoryKeys>* getRemoteMemoryKeys();
 	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessage();
-	RDMARegion<TPCC::IndexResponseMessage>* getIndexResponseMessage();
-
+	RDMARegion<TPCC::IndexResponseMessage>* getRegisterOrderIndexResponseMessage();
+	RDMARegion<TPCC::CustomerNameIndexRespMsg>* getCustomerNameIndexResponseMessage();
+	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage();
 	void activateQueuePair(RDMAContext &context);
 
 	ServerContext& operator=(const ServerContext&) = delete;	// Disallow copying

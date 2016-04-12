@@ -21,8 +21,11 @@
 #include "../../../rdma-region/MemoryHandler.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../basic-types/timestamp.hpp"
-#include "../tables/IndexRequestMessage.hpp"
-#include "../tables/IndexResponseMessage.hpp"
+#include "../index-messages/IndexRequestMessage.hpp"
+#include "../index-messages/IndexResponseMessage.hpp"
+#include "../index-messages/CustomerNameIndexRespMsg.hpp"
+#include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
+
 
 namespace TPCC {
 
@@ -39,8 +42,10 @@ public:
 	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
 	DBExecutor(const DBExecutor&) = delete;				// Disallow copying
 
-	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
+	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
 	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
+	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
+
 	void registerOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
 
 

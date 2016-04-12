@@ -17,7 +17,7 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (false)
+#define DEBUG_ENABLED (true)
 #define DEBUG_OUTPUT config::Output::SCREEN
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
@@ -51,21 +51,20 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 100000;				// This is __per client__. For the experiments, we will use 100000
+static const int					TRANSACTION_CNT 		= 10;				// This is __per client__. For the experiments, we will use 100000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {1.0, 0.0, 0.0};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status. Numbers must add up to 1
 
 /*	Database settings	*/
-static const int WAREHOUSE_PER_SERVER	= 1;
-static const int WAREHOUSE_CNT			= WAREHOUSE_PER_SERVER * SERVER_CNT;
-static const int ITEMS_CNT				= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
-static const int DISTRICT_PER_WAREHOUSE	= 10; 			// TPCC default is 10;
-static const int CUSTOMER_PER_DISTRICT	= 3000; 		// TPCC default is 3000;
-static const int STOCK_PER_WAREHOUSE	= ITEMS_CNT;
-static const int ORDER_PER_CLIENT		= TRANSACTION_CNT;
-static const int HISTORY_PER_CLIENT		= TRANSACTION_CNT;
-static const double REMOTE_WAREHOUSE_PROB	= 0.01; // probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
-
-static const int VERSION_NUM = 2;		// Numbre of old versions to be kept around for each record. This number is excluding the head version, so the total number of versions will be VERSION_NUM + 1
+static const int WAREHOUSE_PER_SERVER		= 1;
+static const int WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
+static const int ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
+static const int DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
+static const int CUSTOMER_PER_DISTRICT		= 3000; 		// TPCC default is 3000;
+static const int STOCK_PER_WAREHOUSE		= ITEMS_CNT;
+static const int ORDER_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// The buffer size allocated to each client for storing orders/new orders/orderlines
+static const int HISTORY_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// the buffer size allocated to each client for storing history
+static const double REMOTE_WAREHOUSE_PROB	= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
+static const int VERSION_NUM 				= 2;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
 }	// namespace tpcc_settings
 
 

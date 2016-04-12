@@ -80,7 +80,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 				cart.dID,
 				cart.cLastName,
 				*serverCtx->getIndexRequestMessage(),
-				*serverCtx->getIndexResponseMessage(),
+				*serverCtx->getCustomerNameIndexResponseMessage(),
 				serverCtx->getQP(),
 				true);
 
@@ -88,10 +88,11 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.lookupCustomerByLastName()
 
-
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
-		assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
-		cart.cID = serverCtx->getIndexResponseMessage()->getRegion()->result.lastNameIndex.cID;
+
+		TPCC::CustomerNameIndexRespMsg *customerLastNameRes = serverCtx->getCustomerNameIndexResponseMessage()->getRegion();
+		assert(customerLastNameRes->isSuccessful == true);
+		cart.cID = customerLastNameRes->cID;
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 
@@ -102,7 +103,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			cart.dID,
 			cart.cID,
 			*serverCtx->getIndexRequestMessage(),
-			*serverCtx->getIndexResponseMessage(),
+			*serverCtx->getLargestOrderForCustomerIndexResponseMessage(),
 			serverCtx->getQP(),
 			true);
 
@@ -111,37 +112,30 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 
-	if (serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == false){
+	TPCC::LargestOrderForCustomerIndexRespMsg *largestOrderRes = serverCtx->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
+	if (largestOrderRes->isSuccessful == false){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 		trxResult.result = TransactionResult::Result::COMMITTED;
 		return trxResult;
 	}
 
-	uint32_t oID = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.oID;
-	primitive::client_id_t clientWhoOrdered = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.clientWhoOrdered;
-	size_t orderRegionOffset = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.orderRegionOffset;
-	size_t orderLineRegionOffset = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.orderLineRegionOffset;
-	uint8_t numOfOrderlines = serverCtx->getIndexResponseMessage()->getRegion()->result.largestOrderIndex.numOfOrderlines;
-	(void)oID;	// to get rid of the "unused variable" warning
-	(void)orderRegionOffset;	// to get rid of the "unused variable" warning
-
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index Response Message received. oID = " << (int)oID << ", client_who_ordered: " << (int)clientWhoOrdered
-			<< ", order_region_offset: " << (int)orderRegionOffset << ", orderLine_region_offset: " << (int)orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index Response Message received. oID = " << (int)largestOrderRes->oID << ", client_who_ordered: " << (int)largestOrderRes->clientWhoOrdered
+			<< ", order_region_offset: " << (int)largestOrderRes->orderRegionOffset << ", orderLine_region_offset: " << (int)largestOrderRes->orderLineRegionOffset << ", #orderlines: " << (int)largestOrderRes->numOfOrderlines);
 
 
 	// retrieve the orderlines
 	executor_.retrieveOrderLines(
-			clientWhoOrdered,
+			largestOrderRes->clientWhoOrdered,
 			cart.wID,
-			orderLineRegionOffset,
-			numOfOrderlines,
+			largestOrderRes->orderRegionOffset,
+			largestOrderRes->numOfOrderlines,
 			*localMemory_->getOrderLineHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->orderLineTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)numOfOrderlines << " lineitems for order with oID = " << (int)oID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)largestOrderRes->numOfOrderlines << " lineitems for order with oID = " << (int)largestOrderRes->oID);
 
 
 	trxResult.result = TransactionResult::Result::COMMITTED;

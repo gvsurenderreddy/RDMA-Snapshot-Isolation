@@ -115,75 +115,72 @@ void TPCC::TPCCDB::getMemoryKeys(TPCC::ServerMemoryKeys *k){
 	warehouseTable.getMemoryHandler(k->warehouseTableHeadVersions, k->warehouseTableTimestampList, k->warehouseTableOlderVersions);
 }
 
-void TPCC::TPCCDB::handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res){
-	if (req.indexType == TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX){
-		res.indexType = TPCC::IndexResponseMessage::IndexType::CUSTOMER_LAST_NAME_INDEX;
+void TPCC::TPCCDB::handleLargestOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::LargestOrderForCustomerIndexRespMsg &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX;
 
-		uint16_t wID = req.parameters.lastNameIndex.warehouseOffset;
-		uint8_t dID = req.parameters.lastNameIndex.dID;
-		std::string lastName = std::string(req.parameters.lastNameIndex.customerLastName);
-
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
-				<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
-
-		assert(req.operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
-		try{
-			res.result.lastNameIndex.cID = customerTable.getMiddleIDByLastName(wID, dID, lastName);
-			res.isSuccessful = true;
-		}
-		catch (const std::exception& e) {
-			PRINT_CERR(CLASS_NAME, __func__, "Looking for a non-existing customer");
-			res.result.lastNameIndex.cID = -1;
-			res.isSuccessful = false;
-		}
-	}
-	else if (req.indexType == TPCC::IndexRequestMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX){
-		res.indexType = TPCC::IndexResponseMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX;
-
-		// first find the biggest orderID
-		uint16_t warehouseOffset = req.parameters.largestOrderIndex.warehouseOffset;
-		uint8_t dID = req.parameters.largestOrderIndex.dID;
-		uint32_t cID = req.parameters.largestOrderIndex.cID;;
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
-				<< ", Type: Largest_Order_For_Customer. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID);
-		try{
-			res.result.largestOrderIndex.oID = orderTable.getBiggestOrderIDForCustomer(warehouseOffset, dID, cID);
-			orderTable.getOrderMemoryAddress(warehouseOffset, dID, res.result.largestOrderIndex.oID, &res.result.largestOrderIndex.clientWhoOrdered, &res.result.largestOrderIndex.orderRegionOffset);
-			orderLineTable.getOrderLineMemoryAddress(warehouseOffset, dID, res.result.largestOrderIndex.oID, &res.result.largestOrderIndex.clientWhoOrdered, &res.result.largestOrderIndex.orderLineRegionOffset, &res.result.largestOrderIndex.numOfOrderlines);
-			res.isSuccessful = true;
-		}
-		catch (const std::exception& e) {
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] The customer (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
-			res.isSuccessful = false;
-		}
-	}
-	else if (req.indexType == TPCC::IndexRequestMessage::IndexType::REGISTER_ORDER){
-		res.indexType = TPCC::IndexResponseMessage::IndexType::REGISTER_ORDER;
-
-		// first find the biggest orderID
-		uint16_t warehouseOffset = req.parameters.registerOrderIndex.warehouseOffset;
-		uint8_t dID = req.parameters.registerOrderIndex.dID;
-		uint32_t cID = req.parameters.registerOrderIndex.cID;
-		uint32_t oID = req.parameters.registerOrderIndex.oID;
-		primitive::client_id_t clientWhoOrdered = req.clientID;
-		size_t orderRegionOffset = req.parameters.registerOrderIndex.orderRegionOffset;
-		size_t newOrderRegionOffset = req.parameters.registerOrderIndex.newOrderRegionOffset;
-		size_t orderLineRegionOffset = req.parameters.registerOrderIndex.orderLineRegionOffset;
-		uint8_t numOfOrderlines = req.parameters.registerOrderIndex.numOfOrderlines;
-
-
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
-				<< ", Type: Register_Order. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID
-				<< ", oID = " << oID << ", order offset: " << orderRegionOffset << ", neworder offset: " << newOrderRegionOffset
-				<< ", orderline offset: " <<  orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
-
-		orderTable.registerOrderInIndex(warehouseOffset, dID, cID, oID, clientWhoOrdered, orderRegionOffset);
-		newOrderTable.registerNewOrderInIndex(warehouseOffset, dID, oID, clientWhoOrdered, newOrderRegionOffset);
-		orderLineTable.registerOrderLineInIndex(warehouseOffset, dID, oID, numOfOrderlines, clientWhoOrdered, orderLineRegionOffset);
+	// first find the biggest orderID
+	uint16_t warehouseOffset = req.parameters.largestOrderIndex.warehouseOffset;
+	uint8_t dID = req.parameters.largestOrderIndex.dID;
+	uint32_t cID = req.parameters.largestOrderIndex.cID;;
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: Largest_Order_For_Customer. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID);
+	try{
+		res.oID = orderTable.getBiggestOrderIDForCustomer(warehouseOffset, dID, cID);
+		orderTable.getOrderMemoryAddress(warehouseOffset, dID, res.oID, &res.clientWhoOrdered, &res.orderRegionOffset);
+		orderLineTable.getOrderLineMemoryAddress(warehouseOffset, dID, res.oID, &res.clientWhoOrdered, &res.orderLineRegionOffset, &res.numOfOrderlines);
 		res.isSuccessful = true;
 	}
-	else
-		assert(1==2);
+	catch (const std::exception& e) {
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] The customer (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
+		res.isSuccessful = false;
+	}
+}
+
+void TPCC::TPCCDB::handleCustomerNameIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::CustomerNameIndexRespMsg &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::CUSTOMER_LAST_NAME_INDEX;
+
+	uint16_t wID = req.parameters.lastNameIndex.warehouseOffset;
+	uint8_t dID = req.parameters.lastNameIndex.dID;
+	std::string lastName = std::string(req.parameters.lastNameIndex.customerLastName);
+
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
+
+	assert(req.operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
+	try{
+		res.cID = customerTable.getMiddleIDByLastName(wID, dID, lastName);
+		res.isSuccessful = true;
+	}
+	catch (const std::exception& e) {
+		PRINT_CERR(CLASS_NAME, __func__, "Looking for a non-existing customer");
+		res.cID = -1;
+		res.isSuccessful = false;
+	}
+}
+
+void TPCC::TPCCDB::handleRegisterOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::REGISTER_ORDER;
+
+	// first find the biggest orderID
+	uint16_t warehouseOffset = req.parameters.registerOrderIndex.warehouseOffset;
+	uint8_t dID = req.parameters.registerOrderIndex.dID;
+	uint32_t cID = req.parameters.registerOrderIndex.cID;
+	uint32_t oID = req.parameters.registerOrderIndex.oID;
+	primitive::client_id_t clientWhoOrdered = req.clientID;
+	size_t orderRegionOffset = req.parameters.registerOrderIndex.orderRegionOffset;
+	size_t newOrderRegionOffset = req.parameters.registerOrderIndex.newOrderRegionOffset;
+	size_t orderLineRegionOffset = req.parameters.registerOrderIndex.orderLineRegionOffset;
+	uint8_t numOfOrderlines = req.parameters.registerOrderIndex.numOfOrderlines;
+
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: Register_Order. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID
+			<< ", oID = " << oID << ", order offset: " << orderRegionOffset << ", neworder offset: " << newOrderRegionOffset
+			<< ", orderline offset: " <<  orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
+
+	orderTable.registerOrderInIndex(warehouseOffset, dID, cID, oID, clientWhoOrdered, orderRegionOffset);
+	newOrderTable.registerNewOrderInIndex(warehouseOffset, dID, oID, clientWhoOrdered, newOrderRegionOffset);
+	orderLineTable.registerOrderLineInIndex(warehouseOffset, dID, oID, numOfOrderlines, clientWhoOrdered, orderLineRegionOffset);
+	res.isSuccessful = true;
 }
 
 TPCC::TPCCDB::~TPCCDB(){

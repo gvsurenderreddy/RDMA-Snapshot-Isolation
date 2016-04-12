@@ -582,7 +582,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			nextOrderLineID_,
 			(uint8_t)cart.items.size(),
 			*serverCtx->getIndexRequestMessage(),
-			*serverCtx->getIndexResponseMessage(),
+			*serverCtx->getRegisterOrderIndexResponseMessage(),
 			serverCtx->getQP(),
 			true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_INDEX. Parameters: wID = " << (int)cart.wID
@@ -592,7 +592,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	// receive the acknowledgement of the index update request
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
-	assert(serverCtx->getIndexResponseMessage()->getRegion()->isSuccessful == true);
+	assert(serverCtx->getRegisterOrderIndexResponseMessage()->getRegion()->isSuccessful == true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_ORDER");
 
 

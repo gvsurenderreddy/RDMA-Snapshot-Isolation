@@ -39,7 +39,7 @@ bool DBExecutor::isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remo
 	else return true;
 }
 
-void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
@@ -55,7 +55,7 @@ void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint1
 			qp,
 			responseRegion.getRDMAHandler(),
 			(uintptr_t)responseRegion.getRegion(),
-			sizeof(IndexResponseMessage)));
+			sizeof(CustomerNameIndexRespMsg)));
 
 	TEST_NZ (RDMACommon::post_SEND(
 			qp,
@@ -65,7 +65,7 @@ void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint1
 			signaled));
 }
 
-void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
@@ -81,7 +81,7 @@ void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_
 			qp,
 			responseRegion.getRDMAHandler(),
 			(uintptr_t)responseRegion.getRegion(),
-			sizeof(IndexResponseMessage)));
+			sizeof(LargestOrderForCustomerIndexRespMsg)));
 
 	TEST_NZ (RDMACommon::post_SEND(
 			qp,
@@ -1076,7 +1076,7 @@ void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHea
 void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_PER_CLIENT + nextOrderID)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + nextOrderID)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
 	TPCC::OrderVersion *writeAddress =  (TPCC::OrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be written tothe remote side
@@ -1100,7 +1100,7 @@ void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextO
 void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t nextNewOrderID, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_PER_CLIENT + nextNewOrderID)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + nextNewOrderID)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
 	TPCC::NewOrderVersion *writeAddress =  (TPCC::NewOrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be written tothe remote side
@@ -1148,7 +1148,7 @@ void DBExecutor::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint1
 void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t olID, uint8_t olNumber, uint16_t wID,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + olID)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + olID)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
 	TPCC::OrderLineVersion *writeAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
@@ -1172,7 +1172,7 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t o
 void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wID, size_t clientRegionOffset, uint8_t numOfOrderlines,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
 	TPCC::OrderLineVersion *lookupAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
@@ -1198,7 +1198,7 @@ void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID
 	// The remote address to read the item info
 	uint16_t wID = localRegion.getRegion()->history.H_W_ID;
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::HISTORY_PER_CLIENT) + hID)  * sizeof(TPCC::HistoryVersion));
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::HISTORY_BUFFER_PER_CLIENT) + hID)  * sizeof(TPCC::HistoryVersion));
 	TPCC::HistoryVersion *writeAddress = (TPCC::HistoryVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side

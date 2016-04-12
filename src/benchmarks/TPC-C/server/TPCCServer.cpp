@@ -46,12 +46,12 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	size_t warehouseTableSize = WAREHOUSE_PER_SERVER;
 	size_t districtTableSize = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
 	size_t customerTableSize = CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
-	size_t orderTableSize = clientsCnt_ * ORDER_PER_CLIENT;
-	size_t orderLineTableSize = clientsCnt_ * tpcc_settings::ORDER_MAX_OL_CNT * ORDER_PER_CLIENT;
-	size_t newOrderTableSize = clientsCnt_ * ORDER_PER_CLIENT;
+	size_t orderTableSize = clientsCnt_ * ORDER_BUFFER_PER_CLIENT;
+	size_t orderLineTableSize = clientsCnt_ * tpcc_settings::ORDER_MAX_OL_CNT * ORDER_BUFFER_PER_CLIENT;
+	size_t newOrderTableSize = clientsCnt_ * ORDER_BUFFER_PER_CLIENT;
 	size_t stockTableSize = STOCK_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
 	size_t itemTableSize = ITEMS_CNT;
-	size_t historyTableSize = clientsCnt_ * TRANSACTION_CNT;
+	size_t historyTableSize = clientsCnt_ * HISTORY_BUFFER_PER_CLIENT;
 	size_t versionNum = VERSION_NUM;
 
 	std::vector<uint16_t> warehouseIDs;
@@ -112,8 +112,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		// post indexRequestMessage prior to establish the connection to the client
 		TEST_NZ (RDMACommon::post_RECEIVE (
 				clientCtxs[c]->getQP(),
-				clientCtxs[c]->getIndexRequestMessageRegion()->getRDMAHandler(),
-				(uintptr_t)clientCtxs[c]->getIndexRequestMessageRegion()->getRegion(),
+				clientCtxs[c]->getIndexRequestMessage()->getRDMAHandler(),
+				(uintptr_t)clientCtxs[c]->getIndexRequestMessage()->getRegion(),
 				sizeof(IndexRequestMessage)));
 
 		// send memory locations using SEND
@@ -143,8 +143,7 @@ void TPCC::TPCCServer::handleIndexRequests() {
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq(), qpNum));
 		size_t clientIndex =  qpNum_to_clientIndex_map[qpNum];	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
 
-		TPCC::IndexRequestMessage *req = clientCtxs[clientIndex]->getIndexRequestMessageRegion()->getRegion();
-		TPCC::IndexResponseMessage *res = clientCtxs[clientIndex]->getIndexResponseMessageRegion()->getRegion();
+		TPCC::IndexRequestMessage *req = clientCtxs[clientIndex]->getIndexRequestMessage()->getRegion();
 
 		primitive::client_id_t clientID = req->clientID;
 		(void) clientID;	// to avoid unused variable warning
@@ -154,20 +153,49 @@ void TPCC::TPCCServer::handleIndexRequests() {
 			liveClientCnt--;
 		}
 		else{
-			db->handleIndexRequest(*req, *res);
+			ibv_mr		*resRDMAHandler;
+			uintptr_t	resPointer;
+			uint32_t 	resSize;
+
+			if (req->indexType == TPCC::IndexRequestMessage::IndexType::REGISTER_ORDER){
+				TPCC::IndexResponseMessage *res = clientCtxs[clientIndex]->getIndexResponseMessage()->getRegion();
+				db->handleRegisterOrderIndexRequest(*req, *res);
+				resRDMAHandler	= clientCtxs[clientIndex]->getIndexResponseMessage()->getRDMAHandler();
+				resPointer		=  (uintptr_t)res;
+				resSize 		= sizeof(IndexResponseMessage);
+			}
+			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX){
+				TPCC::LargestOrderForCustomerIndexRespMsg *res = clientCtxs[clientIndex]->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
+				db->handleLargestOrderIndexRequest(*req, *res);
+				resRDMAHandler	= clientCtxs[clientIndex]->getLargestOrderForCustomerIndexResponseMessage()->getRDMAHandler();
+				resPointer		=  (uintptr_t)res;
+				resSize 		= sizeof(LargestOrderForCustomerIndexRespMsg);
+			}
+			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX){
+				TPCC::CustomerNameIndexRespMsg *res = clientCtxs[clientIndex]->getCustomerNameIndexResponseMessage()->getRegion();
+				db->handleCustomerNameIndexRequest(*req, *res);
+				resRDMAHandler	= clientCtxs[clientIndex]->getCustomerNameIndexResponseMessage()->getRDMAHandler();
+				resPointer		=  (uintptr_t)res;
+				resSize 		= sizeof(CustomerNameIndexRespMsg);
+			}
+
+			else {
+				PRINT_CERR(CLASS_NAME, __func__, "[ERROR] Unknown index message type");
+				exit(-1);
+			}
 
 			// to avoid race condition, post the next indexRequest message before sending the response
 			TEST_NZ (RDMACommon::post_RECEIVE (
 					clientCtxs[clientIndex ]->getQP(),
-					clientCtxs[clientIndex ]->getIndexRequestMessageRegion()->getRDMAHandler(),
-					(uintptr_t)clientCtxs[clientIndex ]->getIndexRequestMessageRegion()->getRegion(),
+					clientCtxs[clientIndex ]->getIndexRequestMessage()->getRDMAHandler(),
+					(uintptr_t)clientCtxs[clientIndex ]->getIndexRequestMessage()->getRegion(),
 					sizeof(IndexRequestMessage)));
 
 			TEST_NZ (RDMACommon::post_SEND(
 					clientCtxs[clientIndex ]->getQP(),
-					clientCtxs[clientIndex ]->getIndexResponseMessageRegion()->getRDMAHandler(),
-					(uintptr_t)clientCtxs[clientIndex ]->getIndexResponseMessageRegion()->getRegion(),
-					sizeof(IndexResponseMessage),
+					resRDMAHandler,
+					resPointer,
+					resSize,
 					true));
 
 			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Send] Index response to client " << (int)clientID);

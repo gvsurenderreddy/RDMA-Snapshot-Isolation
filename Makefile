@@ -10,8 +10,8 @@ TPC			:= benchmarks/TPC-C
 CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status
 SERVER_MODULES	:= $(TPC)/server 
 TEST_MODULES	:= unit-tests unit-tests/index
-INDEX_MODULES	:= index/hash 
-EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES)
+INDEX_MODULES	:= index/hash $(TPC)/index-messages
+EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
 UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 
 
 MODULES		:= $(EXPERIMENT_MODULES)
