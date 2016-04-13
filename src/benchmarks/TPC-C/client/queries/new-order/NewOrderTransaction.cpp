@@ -550,7 +550,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 		executor_.insertIntoOrderLine(
 				clientID_,
-				nextOrderLineID_,
+				(uint64_t)(nextOrderLineID_ + olNumber),
 				olNumber,
 				cart.wID,
 				*localMemory_->getOrderLineHead(),
@@ -559,7 +559,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				signaled);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine with oID: " << oID << ", wID: " << cart.wID << ", dID: " << cart.dID );
-		nextOrderLineID_++;
 	}
 
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
@@ -609,6 +608,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	nextOrderID_++;
 	nextNewOrderID_++;
+	nextOrderLineID_ = (uint64_t)(nextOrderLineID_ + cart.items.size());
+
 
 	return trxResult;
 }
