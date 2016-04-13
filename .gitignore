@@ -1,0 +1,2 @@
+external_libs/*
+!external_libs/Extract_here_to_get_rid_of_eclipse_errors.zip
