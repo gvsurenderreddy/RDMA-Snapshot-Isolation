@@ -1,2 +1,3 @@
+# do not push the external_libraries which are needed only for the sake of eclipse. However, push the libraries in zip file in case somebody else wants to get rid of eclipse error messages as well
 external_libs/*
 !external_libs/Extract_here_to_get_rid_of_eclipse_errors.zip
