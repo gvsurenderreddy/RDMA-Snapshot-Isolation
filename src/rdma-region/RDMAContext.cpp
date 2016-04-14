@@ -17,7 +17,7 @@
 RDMAContext::RDMAContext(std::ostream &os, uint8_t ib_port)
 : os_(os),
   ib_port_(ib_port){
-	TEST_NZ (RDMACommon::build_connection(ib_port_, &ib_ctx_, &port_attr_, &pd_, &send_cq_, &recv_cq_, &send_comp_channel_,&recv_comp_channel_, 10000));
+	TEST_NZ (RDMACommon::build_connection(ib_port_, &ib_ctx_, &port_attr_, &pd_, &send_cq_, &recv_cq_, &send_comp_channel_,&recv_comp_channel_, 50000));
 }
 
 uint8_t RDMAContext::getIbPort(){

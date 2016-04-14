@@ -17,8 +17,8 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (true)
-#define DEBUG_OUTPUT config::Output::SCREEN
+#define DEBUG_ENABLED (false)
+#define DEBUG_OUTPUT config::Output::FILE
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
@@ -51,8 +51,8 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 10;				// This is __per client__. For the experiments, we will use 100000
-static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {1.0, 0.0, 0.0};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status. Numbers must add up to 1
+static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100000
+static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {0.5, 0.0, 0.0, 0.5};	// 1st is New Order, 2nd is Payment, 3rd is Order-Status. 4th is Stock-Level. Numbers must add up to 1
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER		= 1;

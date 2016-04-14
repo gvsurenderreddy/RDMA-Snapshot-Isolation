@@ -15,7 +15,8 @@ struct IndexResponseMessage{
 	enum IndexType {
 		CUSTOMER_LAST_NAME_INDEX,
 		LARGEST_ORDER_FOR_CUSTOMER_INDEX,
-		REGISTER_ORDER
+		REGISTER_ORDER,
+		ITEMS_FOR_LAST_20_ORDERS
 	} indexType;
 
 	bool isSuccessful;

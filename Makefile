@@ -7,7 +7,7 @@ LIBS		= -libverbs -lpthread
 
 # the rest of the modules should go here.
 TPC			:= benchmarks/TPC-C
-CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status
+CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status $(TPC)/client/queries/stock-level
 SERVER_MODULES	:= $(TPC)/server 
 TEST_MODULES	:= unit-tests unit-tests/index
 INDEX_MODULES	:= index/hash $(TPC)/index-messages

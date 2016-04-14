@@ -25,7 +25,7 @@
 #include "../index-messages/IndexResponseMessage.hpp"
 #include "../index-messages/CustomerNameIndexRespMsg.hpp"
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
-
+#include "../index-messages/Last20OrdersIndexResMsg.hpp"
 
 namespace TPCC {
 
@@ -45,9 +45,8 @@ public:
 	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
 	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
 	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
-
 	void registerOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
-
+	void getDistinctItemsForLastTwentyOrders(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::Last20OrdersIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled);
 
 	void getReadTimestamp(RDMARegion<primitive::timestamp_t> &, MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
 	void submitResult(primitive::client_id_t, RDMARegion<primitive::timestamp_t> &,  MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
@@ -79,15 +78,15 @@ public:
 	void updateCustomerOlderVersions(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled);
 	void updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled);
 
-	void retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::ItemVersion> &, MemoryHandler<TPCC::ItemVersion> &, ibv_qp *, bool signaled);
-	void retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
-	void retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
+	void retrieveItem(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<TPCC::ItemVersion> &, MemoryHandler<TPCC::ItemVersion> &, ibv_qp *, bool signaled);
+	void retrieveStock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
+	void retrieveStockPointerList(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
 
-	void lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS, RDMARegion<uint64_t> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
-	void revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled);
-	void updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
-	void updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
-	void updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
+	void lockStock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS, RDMARegion<uint64_t> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
+	void revertStockLock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled);
+	void updateStockPointers(size_t offsetInLocalRegion, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
+	void updateStockOlderVersions(size_t offsetInLocalRegion, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
+	void updateStock(size_t offsetInLocalRegion, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &, MemoryHandler<TPCC::StockVersion> &, ibv_qp *, bool signaled);
 
 	void insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &, MemoryHandler<TPCC::OrderVersion> &, ibv_qp *, bool signaled);
 

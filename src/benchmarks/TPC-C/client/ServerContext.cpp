@@ -27,7 +27,7 @@ TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std
 	indexResponseMessage_ 					= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	customerNameIndexRespMsg_ 				= new RDMARegion<TPCC::CustomerNameIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	largestOrderForCustomerIndexRespMsg_ 	= new RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
-
+	last20OrdersIndexRespMsg_				= new RDMARegion<TPCC::Last20OrdersIndexResMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 
@@ -69,6 +69,10 @@ RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* TPCC::ServerContext::getL
 	return largestOrderForCustomerIndexRespMsg_;
 }
 
+RDMARegion<TPCC::Last20OrdersIndexResMsg>* TPCC::ServerContext::getLast20OrdersIndexResponseMessage(){
+	return last20OrdersIndexRespMsg_;
+}
+
 void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }
@@ -82,6 +86,7 @@ TPCC::ServerContext::~ServerContext(){
 	delete indexResponseMessage_;
 	delete customerNameIndexRespMsg_;
 	delete largestOrderForCustomerIndexRespMsg_;
+	delete last20OrdersIndexRespMsg_;
 
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

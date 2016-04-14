@@ -178,7 +178,13 @@ void TPCC::TPCCServer::handleIndexRequests() {
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(CustomerNameIndexRespMsg);
 			}
-
+			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS){
+				TPCC::Last20OrdersIndexResMsg *res = clientCtxs[clientIndex]->getLast20OrdersIndexResponseMessage()->getRegion();
+				db->handleLast20OrdersIndexRequest(*req, *res);
+				resRDMAHandler	= clientCtxs[clientIndex]->getLast20OrdersIndexResponseMessage()->getRDMAHandler();
+				resPointer		=  (uintptr_t)res;
+				resSize 		= sizeof(Last20OrdersIndexResMsg);
+			}
 			else {
 				PRINT_CERR(CLASS_NAME, __func__, "[ERROR] Unknown index message type");
 				exit(-1);

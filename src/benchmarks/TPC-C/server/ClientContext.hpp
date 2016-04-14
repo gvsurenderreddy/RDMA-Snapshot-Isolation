@@ -14,6 +14,7 @@
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
+#include "../index-messages/Last20OrdersIndexResMsg.hpp"
 
 namespace TPCC{
 class ClientContext {
@@ -26,7 +27,7 @@ public:
 	RDMARegion<TPCC::IndexResponseMessage>	*indexResponseMessage_;
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>	*customerNameIndexResponseMessage_;
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>	*largestOrderIndexResponseMessage_;
-
+	RDMARegion<TPCC::Last20OrdersIndexResMsg>	*last20OrdersIndexResponseMessage_;
 
 	ClientContext(std::ostream &os, int sockfd, RDMAContext &context);
 	int getSockFd() const;
@@ -36,6 +37,8 @@ public:
 	RDMARegion<TPCC::IndexResponseMessage>* getIndexResponseMessage() const;
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>* getCustomerNameIndexResponseMessage() const;
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage() const;
+	RDMARegion<TPCC::Last20OrdersIndexResMsg>* getLast20OrdersIndexResponseMessage() const;
+
 	~ClientContext();
 };
 }	// namespace TPCC

@@ -173,7 +173,7 @@ void TPCC::TPCCDB::handleRegisterOrderIndexRequest(const TPCC::IndexRequestMessa
 	uint8_t numOfOrderlines = req.parameters.registerOrderIndex.numOfOrderlines;
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
-			<< ", Type: Register_Order. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID
+			<< ", Type: Register_Order. Params: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", cID = " << cID
 			<< ", oID = " << oID << ", order offset: " << orderRegionOffset << ", neworder offset: " << newOrderRegionOffset
 			<< ", orderline offset: " <<  orderLineRegionOffset << ", #orderlines: " << (int)numOfOrderlines);
 
@@ -182,6 +182,54 @@ void TPCC::TPCCDB::handleRegisterOrderIndexRequest(const TPCC::IndexRequestMessa
 	orderLineTable.registerOrderLineInIndex(warehouseOffset, dID, oID, numOfOrderlines, clientWhoOrdered, orderLineRegionOffset);
 	res.isSuccessful = true;
 }
+
+void TPCC::TPCCDB::handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::Last20OrdersIndexResMsg &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS;
+	res.orderlinesCnt = 0;
+
+	uint16_t warehouseOffset = req.parameters.last20Orders.warehouseOffset;
+	uint8_t dID = req.parameters.last20Orders.dID;
+	uint32_t dNextOID = req.parameters.last20Orders.D_NEXT_O_ID;
+	primitive::client_id_t clientID;
+	size_t regionOffset;
+	uint8_t orderLineCnt;
+
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: Last_20_Orders. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", D_NEXT_O_ID = " << dNextOID);
+
+	if (dNextOID == 0)
+		return;
+
+	int32_t oID_s = (int32_t)dNextOID - 20;
+	uint32_t oID = (oID_s < 0 ) ? 0 : (uint32_t)oID_s;
+
+	std::set<uint32_t> distinctIDs;
+	try{
+
+		for (; oID < dNextOID; oID++){
+			orderLineTable.getOrderLineMemoryAddress(warehouseOffset, dID, oID, &clientID, &regionOffset, &orderLineCnt);
+
+			for (uint8_t i = 0; i < orderLineCnt; i++){
+				size_t ind = (unsigned)((clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + (regionOffset + i));
+				distinctIDs.insert(orderLineTable.headVersions->getRegion()[ind].orderLine.OL_I_ID);
+			}
+		}
+	}
+	catch (const std::out_of_range& oor) {
+		// possible cause: despite the fact that the order is visible in the district table, the order is not yet registered in the index
+		DEBUG_WRITE(os_, CLASS_NAME, __func__,  "OUT_OF_RANGE Error in orderLineTable.getOrderLineMemoryAddress. Parameters: warehouseoffset: " << (int)warehouseOffset <<", dID: " << (int)dID << ", oID: "  <<(int)oID);
+		res.isSuccessful = false;
+		return;
+	}
+
+	res.isSuccessful = true;
+	unsigned i = 0;
+	for(auto id : distinctIDs) {
+		res.itemIDs[i++] = id;
+	}
+	res.orderlinesCnt = distinctIDs.size();
+}
+
 
 TPCC::TPCCDB::~TPCCDB(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called");

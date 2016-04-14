@@ -23,6 +23,7 @@
 #include "../index-messages/IndexResponseMessage.hpp"
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include "../index-messages/CustomerNameIndexRespMsg.hpp"
+#include "../index-messages/Last20OrdersIndexResMsg.hpp"
 #include <ctime>
 #include <vector>
 
@@ -59,6 +60,8 @@ public:
 	void handleLargestOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::LargestOrderForCustomerIndexRespMsg &res);
 	void handleRegisterOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	void handleCustomerNameIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::CustomerNameIndexRespMsg &res);
+	void handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::Last20OrdersIndexResMsg &res);
+
 	void handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying
 	TPCCDB(const TPCCDB&) = delete;				// Disallow copying

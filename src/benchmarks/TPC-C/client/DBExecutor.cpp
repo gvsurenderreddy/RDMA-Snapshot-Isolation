@@ -123,6 +123,32 @@ void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, ui
 			signaled));
 }
 
+void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::Last20OrdersIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::LOOKUP;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS;
+	req->parameters.last20Orders.warehouseOffset = warehouseOffset;
+	req->parameters.last20Orders.dID = dID;
+	req->parameters.last20Orders.D_NEXT_O_ID = D_NEXT_O_ID;
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(Last20OrdersIndexResMsg)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
 
 void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled) {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
@@ -881,7 +907,7 @@ void DBExecutor::updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, 
 
 
 
-void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<ItemVersion> &localRegion, MemoryHandler<TPCC::ItemVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::retrieveItem(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<ItemVersion> &localRegion, MemoryHandler<TPCC::ItemVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	size_t tableOffset = (size_t)(iID * sizeof(TPCC::ItemVersion));		// offset of ItemVersion in ItemTable
 	TPCC::ItemVersion *lookupAddress =  (TPCC::ItemVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
@@ -897,14 +923,14 @@ void DBExecutor::retrieveItem(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMA
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber],
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			signaled));
 }
 
-void DBExecutor::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::retrieveStock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -921,14 +947,14 @@ void DBExecutor::retrieveStock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDM
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber],
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)lookupAddress,
 			size,
 			signaled));
 }
 
-void DBExecutor::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::retrieveStockPointerList(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
@@ -936,10 +962,10 @@ void DBExecutor::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
-	size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
+	size_t offset = (size_t) offsetInLocalRegion * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
 	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
@@ -953,7 +979,7 @@ void DBExecutor::retrieveStockPointerList(uint8_t olNumber, uint32_t iID, uint16
 			signaled));
 }
 
-void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::lockStock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, Timestamp &oldTS, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address of the timestamp
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -963,7 +989,7 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
 	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
@@ -973,7 +999,7 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber],
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
@@ -982,7 +1008,7 @@ void DBExecutor::lockStock(uint8_t olNumber, uint32_t iID, uint16_t wID, Timesta
 			signaled));
 }
 
-void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::revertStockLock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address of the timestamp
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -992,7 +1018,7 @@ void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, R
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
 	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
@@ -1000,17 +1026,17 @@ void DBExecutor::revertStockLock(uint8_t olNumber, uint32_t iID, uint16_t wID, R
 			IBV_WR_RDMA_WRITE,
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber].writeTimestamp,
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion].writeTimestamp,
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			signaled));
 }
 
-void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
+void DBExecutor::updateStockPointers(size_t offsetInLocalRegion, StockVersion *oldHead, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled) {
 	// first, shift the pointers one to the right (this effectively drops the last element)
 	Timestamp *versionArray = localRegion.getRegion();
-	size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
+	size_t offset = (size_t) offsetInLocalRegion * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
 	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
 		versionArray[offset + i + 1] = versionArray[offset + i];
@@ -1027,7 +1053,7 @@ void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, ui
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
 	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
@@ -1041,10 +1067,10 @@ void DBExecutor::updateStockPointers(uint8_t olNumber, StockVersion *oldHead, ui
 			signaled));
 }
 
-void DBExecutor::updateStockOlderVersions(uint8_t olNumber, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled) {
+void DBExecutor::updateStockOlderVersions(size_t offsetInLocalRegion, StockVersion *oldHead, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled) {
 	primitive::version_offset_t versionOffset = oldHead->writeTimestamp.getVersionOffset();
 
-	StockVersion *localBuffer = &localRegion.getRegion()[olNumber];
+	StockVersion *localBuffer = &localRegion.getRegion()[offsetInLocalRegion];
 	memcpy(localBuffer, oldHead, sizeof(TPCC::StockVersion));
 
 	// The remote address to read the item info
@@ -1121,7 +1147,7 @@ void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t ne
 			signaled));
 }
 
-void DBExecutor::updateStock(uint8_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::updateStock(size_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable

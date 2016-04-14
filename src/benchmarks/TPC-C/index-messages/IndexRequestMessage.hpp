@@ -25,7 +25,8 @@ struct IndexRequestMessage {
 	enum IndexType {
 		CUSTOMER_LAST_NAME_INDEX,
 		LARGEST_ORDER_FOR_CUSTOMER_INDEX,
-		REGISTER_ORDER
+		REGISTER_ORDER,
+		ITEMS_FOR_LAST_20_ORDERS
 	} indexType;
 
 	union Parameters {
@@ -51,6 +52,12 @@ struct IndexRequestMessage {
 			size_t orderLineRegionOffset;
 			uint8_t numOfOrderlines;
 		} registerOrderIndex;
+
+		struct Last20Orders {
+			uint16_t warehouseOffset;
+			uint8_t dID;
+			uint32_t D_NEXT_O_ID;
+		} last20Orders;
 	} parameters;
 };
 

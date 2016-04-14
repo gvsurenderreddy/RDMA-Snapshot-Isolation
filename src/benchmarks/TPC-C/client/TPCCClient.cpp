@@ -12,6 +12,7 @@
 #include "queries/new-order/NewOrderTransaction.hpp"
 #include "queries/payment/PaymentTransaction.hpp"
 #include "queries/order-status/OrderStatusTransaction.hpp"
+#include "queries/stock-level/StockLevelTransaction.hpp"
 #include <infiniband/verbs.h>
 #include <string>
 #include <vector>
@@ -111,6 +112,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 
 
 
@@ -186,7 +188,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		std::cout << "[Stat] (Trx: " << n << ") Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
 	}
 
-	std::cout << "[Stat] Ratio of aborted NO trxs which could have been prevented: " << (double)TPCC::NewOrderTransaction::oops / abortCnt[trxs[0]->getTransactionName()] << std::endl;
+	std::cout << "[Stat] Ratio of aborted New-Order trxs that could have been prevented: " << (double)TPCC::NewOrderTransaction::oops / abortCnt[trxs[0]->getTransactionName()] << std::endl;
 
 
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");
