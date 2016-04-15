@@ -22,6 +22,7 @@ TPCC::ClientContext::ClientContext(std::ostream &os, int sockfd, RDMAContext &co
 	customerNameIndexResponseMessage_ 	= new RDMARegion<TPCC::CustomerNameIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	largestOrderIndexResponseMessage_ 	= new RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	last20OrdersIndexResponseMessage_	= new RDMARegion<TPCC::Last20OrdersIndexResMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	oldestUndeliveredOrderIndexResponseMessage_ = new RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 }
 
 int TPCC::ClientContext::getSockFd() const{
@@ -54,8 +55,12 @@ RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* TPCC::ClientContext::getL
 
 RDMARegion<TPCC::Last20OrdersIndexResMsg>* TPCC::ClientContext::getLast20OrdersIndexResponseMessage() const{
 	return last20OrdersIndexResponseMessage_;
-
 }
+
+RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* TPCC::ClientContext::getOldestUndeliveredOrderIndexResponseMessage() const{
+	return oldestUndeliveredOrderIndexResponseMessage_;
+}
+
 
 TPCC::ClientContext::~ClientContext() {
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
@@ -66,5 +71,6 @@ TPCC::ClientContext::~ClientContext() {
 	delete customerNameIndexResponseMessage_;
 	delete largestOrderIndexResponseMessage_;
 	delete last20OrdersIndexResponseMessage_;
+	delete oldestUndeliveredOrderIndexResponseMessage_;
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

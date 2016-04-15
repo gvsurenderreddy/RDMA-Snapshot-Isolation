@@ -13,7 +13,8 @@
 //#include "tpcw-tests/Item_Test.hpp"
 #include "index/HashIndex_Test.hpp"
 #include "index/MultiValueHashIndex_Test.hpp"
-#include "index/TPCCIndices_Test.hpp"
+#include "TPCC/TPCCIndices_Test.hpp"
+#include "basic-types/Timestamp_Test.hpp"
 
 
 template <typename T>
@@ -26,8 +27,7 @@ int main() {
 	appendVector(allTestFunctions, HashIndex_Test::getFunctionList());
 	appendVector(allTestFunctions, MultiValueHashIndex_Test::getFunctionList());
 	appendVector(allTestFunctions, TPCCIndices_Test::getFunctionList());
-
-
+	appendVector(allTestFunctions, Timestamp_Test::getFunctionList());
 
 	for (std::size_t i = 0; i < allTestFunctions.size(); i++){
 		allTestFunctions.at(i)();

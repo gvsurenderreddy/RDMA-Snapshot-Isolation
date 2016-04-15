@@ -44,7 +44,12 @@ historyTable(os_, historyCnt, versionNum, context, mrFlags_){
 void TPCC::TPCCDB::populate() {
 	assert(warehouseIDs_.size() == config::tpcc_settings::WAREHOUSE_PER_SERVER);
 
-	Timestamp initialTS(0,0,0,0);
+	bool isLocked = false;
+	bool isDeleted = false;
+	primitive::client_id_t clientID = 0;
+	primitive::timestamp_t timestamp = 0;
+	primitive::version_offset_t versionOffset = 0;
+	Timestamp initialTS(isDeleted, isLocked, versionOffset, clientID, timestamp);
 
 	// first, populate the item table
 	itemTable.populate(initialTS, random_);
@@ -187,9 +192,9 @@ void TPCC::TPCCDB::handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessag
 	res.indexType = TPCC::IndexResponseMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS;
 	res.orderlinesCnt = 0;
 
-	uint16_t warehouseOffset = req.parameters.last20Orders.warehouseOffset;
-	uint8_t dID = req.parameters.last20Orders.dID;
-	uint32_t dNextOID = req.parameters.last20Orders.D_NEXT_O_ID;
+	uint16_t warehouseOffset = req.parameters.last20OrdersIndex.warehouseOffset;
+	uint8_t dID = req.parameters.last20OrdersIndex.dID;
+	uint32_t dNextOID = req.parameters.last20OrdersIndex.D_NEXT_O_ID;
 	primitive::client_id_t clientID;
 	size_t regionOffset;
 	uint8_t orderLineCnt;
@@ -197,8 +202,10 @@ void TPCC::TPCCDB::handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessag
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
 			<< ", Type: Last_20_Orders. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", D_NEXT_O_ID = " << dNextOID);
 
-	if (dNextOID == 0)
+	if (dNextOID == 0) {
+		res.isSuccessful = true;
 		return;
+	}
 
 	int32_t oID_s = (int32_t)dNextOID - 20;
 	uint32_t oID = (oID_s < 0 ) ? 0 : (uint32_t)oID_s;
@@ -228,6 +235,28 @@ void TPCC::TPCCDB::handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessag
 		res.itemIDs[i++] = id;
 	}
 	res.orderlinesCnt = distinctIDs.size();
+}
+
+void TPCC::TPCCDB::handleOldestUndeliveredOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::OldestUndeliveredOrderIndexResMsg &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::OLDEST_UNDELIVERED_ORDER;
+
+	// first find the biggest orderID
+	uint16_t warehouseOffset = req.parameters.oldestUndeliveredOrderIndex.warehouseOffset;
+	uint8_t dID = req.parameters.oldestUndeliveredOrderIndex.dID;
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: Oldest_Undelivered_Order. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID);
+	try{
+		newOrderTable.getOldestNewOrder(warehouseOffset, dID, &res.oID, &res.clientWhoOrdered, &res.newOrderRegionOffset);
+		orderTable.getOrderMemoryAddress(warehouseOffset, dID, res.oID, &res.clientWhoOrdered, &res.orderRegionOffset);
+		orderLineTable.getOrderLineMemoryAddress(warehouseOffset, dID, res.oID, &res.clientWhoOrdered, &res.orderLineRegionOffset, &res.numOfOrderlines);
+		res.isSuccessful = true;
+		res.existUndeliveredOrder = true;
+	}
+	catch (const std::out_of_range& e) {
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] No undelivered order (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ")");
+		res.isSuccessful = true;
+		res.existUndeliveredOrder = false;
+	}
 }
 
 

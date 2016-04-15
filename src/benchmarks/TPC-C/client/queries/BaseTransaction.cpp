@@ -36,10 +36,13 @@ std::string BaseTransaction::getTransactionName() const{
 	return transactionName_;
 }
 
-
 bool BaseTransaction::isRecordAccessible(Timestamp &ts){
 	if (ts.isLocked())
 		// item is already locked
+		return false;
+
+	if (ts.isDeleted())
+		// item is deleted
 		return false;
 
 	primitive::client_id_t committingClient = ts.getClientID();

@@ -78,6 +78,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 
 		// TODO: IMPORTANT: Instead of aborting, the client should fetch the older versions of district
 		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;;
 	}
 
@@ -99,7 +100,9 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));	// for executor_.getDistinctItemsForLastTwentyOrders()
 
 	if (serverCtx->getLast20OrdersIndexResponseMessage()->getRegion()->isSuccessful == false){
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Unsuccessful --> ** Abort **");
 		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;;
 	}
 
@@ -149,6 +152,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. # orderlines = " << orderlinesCnt);
 		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;
 	}
 	else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");

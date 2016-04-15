@@ -66,6 +66,10 @@ class OrderLineVersion{
 public:
 	Timestamp writeTimestamp;
 	OrderLine orderLine;
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(OrderLineVersion, writeTimestamp);
+	}
 };
 
 class OrderLineTable{

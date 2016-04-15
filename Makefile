@@ -9,12 +9,13 @@ LIBS		= -libverbs -lpthread
 TPC			:= benchmarks/TPC-C
 CLIENT_MODULES	:= $(TPC)/client $(TPC)/client/queries $(TPC)/client/queries/new-order $(TPC)/client/queries/payment $(TPC)/client/queries/order-status $(TPC)/client/queries/stock-level
 SERVER_MODULES	:= $(TPC)/server 
-TEST_MODULES	:= unit-tests unit-tests/index
 INDEX_MODULES	:= index/hash $(TPC)/index-messages
 EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
+
+TEST_MODULES	:= unit-tests unit-tests/index unit-tests/TPCC unit-tests/basic-types
 UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 
 
-MODULES		:= $(EXPERIMENT_MODULES)
+MODULES		:= $(EXPERIMENT_MODULES)		# set to either EXPERIMENT_MODULES or UNIT_TEST_MODULES
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))

@@ -107,14 +107,20 @@ public:
 		// Select 10% of the rows to be marked "original"
 		std::set<int> original_rows = random.selectUniqueIds(size_/10, 1, (int)size_);
 
+		bool isLocked = false;
+		bool isDeleted = false;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+
 		for (unsigned int  i = 0; i < size_; ++i) {
 			bool is_original = original_rows.find(i) != original_rows.end();
 			headVersions->getRegion()[i].item.initialize(i, is_original, random);
-			headVersions->getRegion()[i].writeTimestamp = initialTimestamp;	// calls the assignment operator
+			headVersions->getRegion()[i].writeTimestamp.copy(initialTimestamp);	// calls the assignment operator
 
 			size_t versionCnt = getMaxVersionsCnt();
 			for (size_t j = 0; j < versionCnt; j++){
-				tsList->getRegion()[i * versionCnt + j].setAll(0,0,0,0);
+				tsList->getRegion()[i * versionCnt + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
 			}
 		}
 	}

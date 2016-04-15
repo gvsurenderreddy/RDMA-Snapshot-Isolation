@@ -185,6 +185,13 @@ void TPCC::TPCCServer::handleIndexRequests() {
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(Last20OrdersIndexResMsg);
 			}
+			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::OLDEST_UNDELIVERED_ORDER){
+				TPCC::OldestUndeliveredOrderIndexResMsg *res = clientCtxs[clientIndex]->getOldestUndeliveredOrderIndexResponseMessage()->getRegion();
+				db->handleOldestUndeliveredOrderIndexRequest(*req, *res);
+				resRDMAHandler	= clientCtxs[clientIndex]->getOldestUndeliveredOrderIndexResponseMessage()->getRDMAHandler();
+				resPointer		=  (uintptr_t)res;
+				resSize 		= sizeof(OldestUndeliveredOrderIndexResMsg);
+			}
 			else {
 				PRINT_CERR(CLASS_NAME, __func__, "[ERROR] Unknown index message type");
 				exit(-1);

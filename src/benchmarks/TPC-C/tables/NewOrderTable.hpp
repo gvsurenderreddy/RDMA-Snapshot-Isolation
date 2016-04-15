@@ -43,6 +43,10 @@ class NewOrderVersion{
 public:
 	Timestamp writeTimestamp;
 	NewOrder newOrder;
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(NewOrderVersion, writeTimestamp);
+	}
 };
 
 
@@ -51,11 +55,13 @@ private:
 	std::ostream &os_;
 
 	struct NewOrderAddressIdentifier {
+		uint32_t oID;
 		primitive::client_id_t clientWhoOrdered;
 		size_t clientRegionOffset ;
 	};
 
 	HashIndex<std::string, NewOrderAddressIdentifier> newOrderToMemoryAddress_Index_;
+	HashIndex<std::string, NewOrderAddressIdentifier> oldestNewOrderInDistrict_Index_;
 
 public:
 	RDMARegion<NewOrderVersion> *headVersions;
@@ -88,10 +94,28 @@ public:
 	void registerNewOrderInIndex(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t newOrderRegionOffset) {
 		// First, register its physical address
 		NewOrderAddressIdentifier addr;
+		addr.oID = oID;
 		addr.clientWhoOrdered = clientWhoOrdered;
 		addr.clientRegionOffset = newOrderRegionOffset;
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		newOrderToMemoryAddress_Index_.put(key, addr);
+
+		// Second, update the oldest new order per district
+		key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
+		if (oldestNewOrderInDistrict_Index_.hasKey(key)){
+			uint32_t existingOID = oldestNewOrderInDistrict_Index_.get(key).oID;
+			if (oID < existingOID)
+				oldestNewOrderInDistrict_Index_.put(key, addr);
+		}
+		else oldestNewOrderInDistrict_Index_.put(key, addr);
+	}
+
+	void getOldestNewOrder(uint16_t wID, uint8_t dID, uint32_t *oID_OUTPUT, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT) {
+		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
+		NewOrderAddressIdentifier addr = oldestNewOrderInDistrict_Index_.get(key);
+		*oID_OUTPUT = addr.oID;
+		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
+		*regionOffset_OUTPUT = addr.clientRegionOffset;
 	}
 
 	void getNewOrderMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
@@ -113,9 +137,7 @@ private:
 	size_t maxVersionsCnt_;
 };
 
-
 }	// namespace TPCC
-
 
 
 #endif /* SRC_BENCHMARKS_TPC_C_TABLES_NEWORDERTABLE_HPP_ */

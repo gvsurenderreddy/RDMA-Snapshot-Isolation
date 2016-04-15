@@ -28,9 +28,9 @@ TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std
 	customerNameIndexRespMsg_ 				= new RDMARegion<TPCC::CustomerNameIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	largestOrderForCustomerIndexRespMsg_ 	= new RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	last20OrdersIndexRespMsg_				= new RDMARegion<TPCC::Last20OrdersIndexResMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
+	oldestUndeliveredOrderIndexRespMsg_		= new RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>(1, context, IBV_ACCESS_LOCAL_WRITE);
 
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
-
 }
 
 std::string TPCC::ServerContext::getServerAddress() const{
@@ -73,6 +73,10 @@ RDMARegion<TPCC::Last20OrdersIndexResMsg>* TPCC::ServerContext::getLast20OrdersI
 	return last20OrdersIndexRespMsg_;
 }
 
+RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* TPCC::ServerContext::getOldestUndeliveredOrderIndexResponseMessage(){
+	return oldestUndeliveredOrderIndexRespMsg_;
+}
+
 void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }
@@ -87,6 +91,7 @@ TPCC::ServerContext::~ServerContext(){
 	delete customerNameIndexRespMsg_;
 	delete largestOrderForCustomerIndexRespMsg_;
 	delete last20OrdersIndexRespMsg_;
+	delete oldestUndeliveredOrderIndexRespMsg_;
 
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }

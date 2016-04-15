@@ -249,16 +249,16 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	// Acquire locks for records in write-set
 	// ************************************************
-	primitive::lock_status_t 	lockStatus;
+	bool isLocked = true;
+	bool isDeleted = false;
 	primitive::version_offset_t	versionOffset;
 	unsigned numberOfLocks = 0;
 
 
 	if (! config::APPLY_COMMUTATIVE_UPDATES){
 		// lock district
-		lockStatus 		= 1;
 		versionOffset	= districtV->writeTimestamp.getVersionOffset();
-		Timestamp districtLockTS (lockStatus, versionOffset, clientID_, cts);
+		Timestamp districtLockTS (isDeleted, isLocked, versionOffset, clientID_, cts);
 
 		executor_.lockDistrict(
 				*districtV,
@@ -273,10 +273,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	// lock stocks
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		primitive::lock_status_t 	lockStatus = 1;
 		primitive::version_offset_t	versionOffset = stocks.at(olNumber)->writeTimestamp.getVersionOffset();
 		primitive::client_id_t		clientID = clientID_;
-		Timestamp lockTS (lockStatus, versionOffset, clientID, cts);
+		Timestamp lockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 
 		executor_.lockStock(
 				(size_t)olNumber,
@@ -421,7 +420,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// Insert and unlock new records in write-set
 	// ************************************************
 	// update district (increment the next available order number D_NEXT_O_ID)
-	lockStatus = 0;
+	isLocked = false;
 	uint64_t old_D_NEXT_ID;
 	if (config::APPLY_COMMUTATIVE_UPDATES){
 		executor_.retrieveAndIncrementDistrictNextOID(
@@ -437,7 +436,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	}
 	else {
 		versionOffset = (primitive::version_offset_t)(districtV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-		districtV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+		districtV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 		old_D_NEXT_ID = districtV->district.D_NEXT_O_ID;
 		districtV->district.D_NEXT_O_ID = (uint64_t)districtV->district.D_NEXT_O_ID + 1;
 		executor_.updateDistrict(
@@ -456,7 +455,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	TPCC::OrderVersion *ov = localMemory_->getOrderHead()->getRegion();
 
 	versionOffset = 0;
-	ov->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	ov->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	ov->order.O_ID = assignedOID;
 	ov->order.O_W_ID = cart.wID;
 	ov->order.O_D_ID = cart.dID;
@@ -480,7 +479,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
 	versionOffset = 0;
-	ov->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	ov->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	nov->newOrder.NO_O_ID = assignedOID;
 	nov->newOrder.NO_W_ID = cart.wID;
 	nov->newOrder.NO_D_ID = cart.dID;
@@ -517,9 +516,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		if (olNumber == cart.items.size() - 1)
 			signaled = true;
 
-		lockStatus = 0;
 		versionOffset = (primitive::version_offset_t)(stocks[olNumber]->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-		Timestamp stockUnlockTS(lockStatus, versionOffset, clientID_, cts);
+		Timestamp stockUnlockTS(isDeleted, isLocked, versionOffset, clientID_, cts);
 
 		stocks[olNumber]->writeTimestamp.copy(stockUnlockTS);
 		if (stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY >= 10)
@@ -544,7 +542,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 		TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
 		versionOffset = 0;
-		ov->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+		ov->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 		olv.orderLine.OL_O_ID 			= assignedOID;
 		olv.orderLine.OL_D_ID 			= cart.dID;
 		olv.orderLine.OL_W_ID 			= cart.wID;

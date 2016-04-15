@@ -63,6 +63,10 @@ class OrderVersion{
 public:
 	Timestamp writeTimestamp;
 	Order order;
+
+	static size_t getOffsetOfTimestamp(){
+		return offsetof(OrderVersion, writeTimestamp);
+	}
 };
 
 class OrderTable{

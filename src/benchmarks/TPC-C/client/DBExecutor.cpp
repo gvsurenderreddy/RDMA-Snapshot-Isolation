@@ -130,9 +130,9 @@ void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clie
 	req->clientID = clientID;
 	req->operationType = TPCC::IndexRequestMessage::OperationType::LOOKUP;
 	req->indexType = TPCC::IndexRequestMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS;
-	req->parameters.last20Orders.warehouseOffset = warehouseOffset;
-	req->parameters.last20Orders.dID = dID;
-	req->parameters.last20Orders.D_NEXT_O_ID = D_NEXT_O_ID;
+	req->parameters.last20OrdersIndex.warehouseOffset = warehouseOffset;
+	req->parameters.last20OrdersIndex.dID = dID;
+	req->parameters.last20OrdersIndex.D_NEXT_O_ID = D_NEXT_O_ID;
 
 	// to avoid race, post the next indexResponse message before sending the request
 	TEST_NZ (RDMACommon::post_RECEIVE (
@@ -140,6 +140,31 @@ void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clie
 			responseRegion.getRDMAHandler(),
 			(uintptr_t)responseRegion.getRegion(),
 			sizeof(Last20OrdersIndexResMsg)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
+void DBExecutor::getOldestUndeliveredOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::LOOKUP;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::OLDEST_UNDELIVERED_ORDER;
+	req->parameters.oldestUndeliveredOrderIndex.warehouseOffset = warehouseOffset;
+	req->parameters.oldestUndeliveredOrderIndex.dID = dID;
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(OldestUndeliveredOrderIndexResMsg)));
 
 	TEST_NZ (RDMACommon::post_SEND(
 			qp,
@@ -169,6 +194,8 @@ void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegio
 			size,
 			signaled));
 }
+
+
 
 void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primitive::timestamp_t> &localRegion,  MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address of the timestamp
@@ -330,10 +357,10 @@ void DBExecutor::updateWarehousePointers(TPCC::WarehouseVersion &oldHead, RDMARe
 	Timestamp *versionArray = localRegion.getRegion();
 
 	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
-		versionArray[i + 1] = versionArray[i];
+		versionArray[i + 1].copy(versionArray[i]);
 
 	// second, set the head of the pointer list to point to the head of the old versions
-	versionArray[0] = oldHead.writeTimestamp;
+	versionArray[0].copy(oldHead.writeTimestamp);
 
 	// The remote address to read the item info
 	uint16_t wID = oldHead.warehouse.W_ID;
@@ -594,10 +621,10 @@ void DBExecutor::updateDistrictPointers(TPCC::DistrictVersion &oldHead, RDMARegi
 	Timestamp *versionArray = localRegion.getRegion();
 
 	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
-		versionArray[i + 1] = versionArray[i];
+		versionArray[i + 1].copy(versionArray[i]);
 
 	// second, set the head of the pointer list to point to the head of the old versions
-	versionArray[0] = oldHead.writeTimestamp;
+	versionArray[0].copy(oldHead.writeTimestamp);
 
 	// The remote address to read the item info
 	uint16_t wID = oldHead.district.D_W_ID;
@@ -808,10 +835,10 @@ void DBExecutor::updateCustomerPointers(TPCC::CustomerVersion &oldHead, RDMARegi
 	Timestamp *versionArray = localRegion.getRegion();
 
 	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
-		versionArray[i + 1] = versionArray[i];
+		versionArray[i + 1].copy(versionArray[i]);
 
 	// second, set the head of the pointer list to point to the head of the old versions
-	versionArray[0] = oldHead.writeTimestamp;
+	versionArray[0].copy(oldHead.writeTimestamp);
 
 	// The remote address to read the item info
 	uint16_t wID = oldHead.customer.C_W_ID;
@@ -1039,10 +1066,10 @@ void DBExecutor::updateStockPointers(size_t offsetInLocalRegion, StockVersion *o
 	size_t offset = (size_t) offsetInLocalRegion * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
 	for (int i = config::tpcc_settings::VERSION_NUM - 2; i >= 0; i--)
-		versionArray[offset + i + 1] = versionArray[offset + i];
+		versionArray[offset + i + 1].copy(versionArray[offset + i]);
 
 	// second, set the head of the pointer list to point to the head of the old versions
-	versionArray[offset + 0] = oldHead->writeTimestamp;
+	versionArray[offset + 0].copy(oldHead->writeTimestamp);
 
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
@@ -1099,13 +1126,37 @@ void DBExecutor::updateStockOlderVersions(size_t offsetInLocalRegion, StockVersi
 			signaled));
 }
 
-void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextOrderID, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::retrieveOrder(primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT) + clientRegionOffset)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in Order Table
+	TPCC::OrderVersion *lookupAddress =  (TPCC::OrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
+
+	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + nextOrderID)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
 	TPCC::OrderVersion *writeAddress =  (TPCC::OrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
-	// Size to be written tothe remote side
+	// Size to be written to the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
 
 	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
@@ -1123,10 +1174,89 @@ void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, uint64_t nextO
 			signaled));
 }
 
-void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t nextNewOrderID, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::lockOrder(TPCC::OrderVersion &orderV, primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address of the timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	size_t timestampOffset = (size_t)TPCC::OrderVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	uint64_t* oldTS_ULL = (uint64_t *) &orderV.writeTimestamp;
+	uint64_t* newTS_ULL = (uint64_t *) &newTS;
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			*oldTS_ULL,
+			*newTS_ULL,
+			signaled));
+}
+
+void DBExecutor::revertOrderLock(primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::OrderVersion> &localRegion, MemoryHandler<TPCC::OrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to revert the order timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::OrderVersion));	// offset of OrderVersion in OrderTable
+	size_t timestampOffset = (size_t)TPCC::OrderVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()->writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+
+void DBExecutor::retrieveNewOrder(primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the item info
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT) + clientRegionOffset)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrder Table
+	TPCC::NewOrderVersion *lookupAddress =  (TPCC::NewOrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
+
+	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to which the order will be written
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + nextNewOrderID)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
 	TPCC::NewOrderVersion *writeAddress =  (TPCC::NewOrderVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be written tothe remote side
@@ -1147,7 +1277,61 @@ void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t ne
 			signaled));
 }
 
-void DBExecutor::updateStock(size_t olNumber, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::lockNewOrder(TPCC::NewOrderVersion &orderV, primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address of the timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::NewOrderVersion));	// offset of NewOrderVersion in NewOrderTable
+	size_t timestampOffset = (size_t)TPCC::NewOrderVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	uint64_t* oldTS_ULL = (uint64_t *) &orderV.writeTimestamp;
+	uint64_t* newTS_ULL = (uint64_t *) &newTS;
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)localRegion.getRegion(),
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			*oldTS_ULL,
+			*newTS_ULL,
+			signaled));
+}
+
+void DBExecutor::revertNewOrderLock(primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::NewOrderVersion> &localRegion, MemoryHandler<TPCC::NewOrderVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to revert the NewOrder timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT + clientRegionOffset)  * sizeof(TPCC::NewOrderVersion));	// offset of OrderVersion in OrderTable
+	size_t timestampOffset = (size_t)TPCC::NewOrderVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()->writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
+
+void DBExecutor::updateStock(size_t offsetInLocalRegion, TPCC::StockVersion *stockV, uint16_t wID, RDMARegion<TPCC::StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
 	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + stockV->stock.S_I_ID) * sizeof(TPCC::StockVersion));		// offset of StockVersion in StockTable
@@ -1157,38 +1341,38 @@ void DBExecutor::updateStock(size_t olNumber, TPCC::StockVersion *stockV, uint16
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
 
 	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)stockV->stock.S_I_ID << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)stockV->stock.S_I_ID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber],
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
 			signaled));
 }
 
-void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t olID, uint8_t olNumber, uint16_t wID,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
+void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t clientRegionOffset, uint8_t offsetInLocalRegion, uint16_t wID,  RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
-	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + olID)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
 	TPCC::OrderLineVersion *writeAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
 
 	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", olNumber = " << (int)olNumber);
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
 
 	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_WRITE,
 			qp,
 			localRegion.getRDMAHandler(),
-			(uintptr_t)&localRegion.getRegion()[olNumber],
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
 			&remoteMH.rdmaHandler_,
 			(uintptr_t)writeAddress,
 			size,
@@ -1202,7 +1386,7 @@ void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wI
 	TPCC::OrderLineVersion *lookupAddress =  (TPCC::OrderLineVersion *)(tableOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
 
 	// Size to be read from the remote side
-	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
+	uint32_t size = (uint32_t) (sizeof(TPCC::OrderLineVersion) * numOfOrderlines);
 
 	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)lookupAddress, remoteMH) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", #orderlines = " << (int)numOfOrderlines);
@@ -1219,6 +1403,59 @@ void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wI
 			signaled));
 }
 
+void DBExecutor::lockOrderLine(size_t offsetInLocalRegion, TPCC::OrderLineVersion &orderLineV, primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address of the timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	size_t timestampOffset = (size_t)TPCC::OrderLineVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderLineVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(uint64_t);
+
+	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
+		exit(-1);
+	}
+
+	uint64_t* oldTS_ULL = (uint64_t *) &orderLineV.writeTimestamp;
+	uint64_t *newTS_ULL = (uint64_t *)&newTS;
+
+	TEST_NZ (RDMACommon::post_RDMA_CMP_SWAP(
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			*oldTS_ULL,
+			*newTS_ULL,
+			signaled));
+}
+
+void DBExecutor::revertOrderLineLock(size_t offsetInLocalRegion, primitive::client_id_t clientID, size_t clientRegionOffset, uint16_t wID, RDMARegion<TPCC::OrderLineVersion> &localRegion, MemoryHandler<TPCC::OrderLineVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to revert the NewOrder timestamp
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)( ( (clientID * config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) + clientRegionOffset)  * sizeof(TPCC::OrderLineVersion));	// offset of OLVersion in OLTable
+	size_t timestampOffset = (size_t)TPCC::OrderLineVersion::getOffsetOfTimestamp();		// offset of Timestamp in OrderLineVersion
+	uint64_t *writeAddress = (uint64_t *)(tableOffset + timestampOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	uint32_t size = (uint32_t) sizeof(Timestamp);
+
+	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+			IBV_WR_RDMA_WRITE,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion].writeTimestamp,
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)writeAddress,
+			size,
+			signaled));
+}
 
 void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID, RDMARegion<TPCC::HistoryVersion> &localRegion, MemoryHandler<TPCC::HistoryVersion> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info

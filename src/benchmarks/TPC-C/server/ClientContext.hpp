@@ -12,6 +12,7 @@
 #include "../index-messages/IndexResponseMessage.hpp"
 #include "../index-messages/CustomerNameIndexRespMsg.hpp"
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
+#include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
@@ -28,6 +29,8 @@ public:
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>	*customerNameIndexResponseMessage_;
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>	*largestOrderIndexResponseMessage_;
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>	*last20OrdersIndexResponseMessage_;
+	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>	*oldestUndeliveredOrderIndexResponseMessage_;
+
 
 	ClientContext(std::ostream &os, int sockfd, RDMAContext &context);
 	int getSockFd() const;
@@ -38,6 +41,8 @@ public:
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>* getCustomerNameIndexResponseMessage() const;
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage() const;
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>* getLast20OrdersIndexResponseMessage() const;
+	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* getOldestUndeliveredOrderIndexResponseMessage() const;
+
 
 	~ClientContext();
 };

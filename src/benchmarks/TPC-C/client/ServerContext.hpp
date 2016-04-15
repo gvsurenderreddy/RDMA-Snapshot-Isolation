@@ -15,6 +15,7 @@
 #include "../index-messages/CustomerNameIndexRespMsg.hpp"
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
+#include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
 #include <string>	// for std::string
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <cstdint>	// uintX_t
@@ -39,6 +40,8 @@ private:
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>	*customerNameIndexRespMsg_;
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>	*largestOrderForCustomerIndexRespMsg_;
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>	*last20OrdersIndexRespMsg_;
+	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>	*oldestUndeliveredOrderIndexRespMsg_;
+
 
 
 
@@ -55,6 +58,8 @@ public:
 	RDMARegion<TPCC::CustomerNameIndexRespMsg>* getCustomerNameIndexResponseMessage();
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage();
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>* getLast20OrdersIndexResponseMessage();
+	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* getOldestUndeliveredOrderIndexResponseMessage();
+
 	void activateQueuePair(RDMAContext &context);
 
 	ServerContext& operator=(const ServerContext&) = delete;	// Disallow copying

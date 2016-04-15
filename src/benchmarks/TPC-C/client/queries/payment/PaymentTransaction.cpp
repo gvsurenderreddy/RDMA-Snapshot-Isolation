@@ -223,10 +223,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// ************************************************
 	// Acquire locks for records in write-set
 	// ************************************************
-	primitive::lock_status_t 	lockStatus = 1;
+	bool isLocked = true;
+	bool isDeleted = false;
 	primitive::version_offset_t	versionOffset = warehouseV->writeTimestamp.getVersionOffset();
 	primitive::client_id_t		clientID = clientID_;
-	Timestamp warehouseLockTS (lockStatus, versionOffset, clientID, cts);
+	Timestamp warehouseLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 
 	executor_.lockWarehouse(
 			*warehouseV,
@@ -236,10 +237,9 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			getServerContext(cart.wID)->getQP(),
 			false);
 
-	lockStatus = 1;
 	versionOffset = districtV->writeTimestamp.getVersionOffset();
 	clientID = clientID_;
-	Timestamp districtLockTS (lockStatus, versionOffset, clientID, cts);
+	Timestamp districtLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 
 	executor_.lockDistrict(
 			*districtV,
@@ -250,10 +250,9 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			true);
 
 
-	lockStatus = 1;
 	versionOffset = customerV->writeTimestamp.getVersionOffset();
 	clientID = clientID_;
-	Timestamp customerLockTS (lockStatus, versionOffset, clientID, cts);
+	Timestamp customerLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 
 	executor_.lockCustomer(
 			*customerV,
@@ -346,9 +345,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		return trxResult;
 
 	}
-	else{
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
-	}
+	else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
 
 
 	// ************************************************
@@ -417,9 +414,9 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// ************************************************
 
 	// update warehouse
-	lockStatus = 0;
+	isLocked = false;
 	versionOffset = (primitive::version_offset_t)(warehouseV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-	warehouseV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	warehouseV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	warehouseV->warehouse.W_YTD += cart.hAmount;
 	executor_.updateWarehouse(
 			*localMemory_->getWarehouseHead(),
@@ -431,7 +428,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 	// update district
 	versionOffset = (primitive::version_offset_t)(districtV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-	districtV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	districtV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	districtV->district.D_YTD += cart.hAmount;
 	executor_.updateDistrict(
 			*localMemory_->getDistrictHead(),
@@ -443,7 +440,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 	// update customer
 	versionOffset = (primitive::version_offset_t)(customerV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
-	customerV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	customerV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	customerV->customer.C_BALANCE -= cart.hAmount;
 	customerV->customer.C_YTD_PAYMENT += cart.hAmount;
 	customerV->customer.C_PAYMENT_CNT = (uint16_t)(customerV->customer.C_PAYMENT_CNT + 1);
@@ -476,7 +473,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// insert new history
 	TPCC::HistoryVersion *historyV = localMemory_->getHistoryHead()->getRegion();
 	versionOffset = 0;
-	historyV->writeTimestamp.setAll(lockStatus, versionOffset, clientID_, cts);
+	historyV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	historyV->history.H_D_ID	= cart.dID;
 	historyV->history.H_C_W_ID	= cart.residentWarehouseID;
 	historyV->history.H_C_D_ID	= cart.dID;
