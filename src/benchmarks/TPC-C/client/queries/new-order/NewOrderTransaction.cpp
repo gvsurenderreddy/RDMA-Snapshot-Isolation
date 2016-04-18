@@ -590,7 +590,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			*serverCtx->getRegisterOrderIndexResponseMessage(),
 			serverCtx->getQP(),
 			true);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_INDEX. Parameters: wID = " << (int)cart.wID
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_ORDER. Parameters: wID = " << (int)cart.wID
 			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << (int)nextOrderID_ << ", #orderlines: " << cart.items.size());
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));

@@ -174,6 +174,33 @@ void DBExecutor::getOldestUndeliveredOrder(primitive::client_id_t clientID, uint
 			signaled));
 }
 
+void DBExecutor::registerDelivery(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t oID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+	uint16_t warehouseOffset = getWarehouseOffsetOnServer(wID);
+
+	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
+	req->clientID = clientID;
+	req->operationType = TPCC::IndexRequestMessage::OperationType::UPDATE;
+	req->indexType = TPCC::IndexRequestMessage::IndexType::REGISTER_DELIVERY;
+	req->parameters.registerDeliveryIndex.warehouseOffset = warehouseOffset;
+	req->parameters.registerDeliveryIndex.dID = dID;
+	req->parameters.registerDeliveryIndex.oID = oID;
+
+
+	// to avoid race, post the next indexResponse message before sending the request
+	TEST_NZ (RDMACommon::post_RECEIVE (
+			qp,
+			responseRegion.getRDMAHandler(),
+			(uintptr_t)responseRegion.getRegion(),
+			sizeof(IndexResponseMessage)));
+
+	TEST_NZ (RDMACommon::post_SEND(
+			qp,
+			requestRegion.getRDMAHandler(),
+			(uintptr_t)requestRegion.getRegion(),
+			sizeof(IndexRequestMessage),
+			signaled));
+}
+
 
 void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled) {
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;

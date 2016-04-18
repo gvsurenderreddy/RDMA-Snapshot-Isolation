@@ -63,6 +63,8 @@ public:
 	void handleCustomerNameIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::CustomerNameIndexRespMsg &res);
 	void handleLast20OrdersIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::Last20OrdersIndexResMsg &res);
 	void handleOldestUndeliveredOrderIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::OldestUndeliveredOrderIndexResMsg &res);
+	void handleRegisterDeliveryIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
+
 
 	void handleIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res);
 	TPCCDB& operator=(const TPCCDB&) = delete;	// Disallow copying

@@ -53,7 +53,7 @@ template <class KeyT, class ValueT>
 const ValueT& SortedMultiValueHashIndex<KeyT, ValueT>::top(const KeyT &k) const {
 	const std::priority_queue<ValueT, std::vector<ValueT>, std::greater<ValueT> > &queue = BaseClass::hashMap_.at(k);
 	if (!queue.empty())
-		queue.top();
+		return queue.top();
 	else throw std::out_of_range("Empty list");
 }
 

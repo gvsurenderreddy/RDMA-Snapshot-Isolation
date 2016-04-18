@@ -19,6 +19,8 @@
 #include <thread>
 #include <chrono>         // std::chrono::seconds
 #include <string>
+#include <cmath>		// std::abs
+
 
 #define CLASS_NAME "executor"
 
@@ -159,12 +161,14 @@ int main (int argc, char *argv[]) {
 
 void checkConfigFile() {
 	// check if different ratios in the transaction mix are correct.
+	double eps = 0.00001;
 	double d = 0;
+
 	for (unsigned i = 0; i < config::tpcc_settings::TRANSACTION_MIX_RATIOS.size(); i++)
 		d += config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i);
 
-	if (d != 1) {
-		PRINT_CERR(CLASS_NAME, __func__, "Transactions' ratios in the config file do not add up to 1");
+	if (std::abs(d - 1) > eps) {
+		PRINT_CERR(CLASS_NAME, __func__, "Transactions' ratios in the config file do not add up to 1 (Currently it's " << d << ")");
 		exit(-1);
 	}
 }

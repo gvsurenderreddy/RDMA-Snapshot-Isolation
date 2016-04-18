@@ -259,6 +259,25 @@ void TPCC::TPCCDB::handleOldestUndeliveredOrderIndexRequest(const TPCC::IndexReq
 	}
 }
 
+void TPCC::TPCCDB::handleRegisterDeliveryIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::IndexResponseMessage &res){
+	res.indexType = TPCC::IndexResponseMessage::IndexType::REGISTER_DELIVERY;
+
+	// first find the biggest orderID
+	uint16_t warehouseOffset = req.parameters.registerDeliveryIndex.warehouseOffset;
+	uint8_t dID = req.parameters.registerDeliveryIndex.dID;
+	uint32_t oID = req.parameters.registerDeliveryIndex.oID;
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
+			<< ", Type: REGISTER_DELIVERY. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", oID = " << (int)oID);
+	try{
+		newOrderTable.registerDelivery(warehouseOffset, dID, oID);
+		res.isSuccessful = true;
+	}
+	catch (const std::out_of_range& e) {
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Error] cannot register delivery for order (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", oID: " << oID << ")");
+		res.isSuccessful = false;
+	}
+}
+
 
 TPCC::TPCCDB::~TPCCDB(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called");

@@ -59,6 +59,8 @@ public:
 	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* getLargestOrderForCustomerIndexResponseMessage();
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>* getLast20OrdersIndexResponseMessage();
 	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* getOldestUndeliveredOrderIndexResponseMessage();
+	RDMARegion<TPCC::IndexResponseMessage>* getRegisterDeliveryIndexResponseMessage();
+
 
 	void activateQueuePair(RDMAContext &context);
 

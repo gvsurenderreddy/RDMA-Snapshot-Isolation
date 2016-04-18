@@ -31,7 +31,6 @@ public:
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>	*last20OrdersIndexResponseMessage_;
 	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>	*oldestUndeliveredOrderIndexResponseMessage_;
 
-
 	ClientContext(std::ostream &os, int sockfd, RDMAContext &context);
 	int getSockFd() const;
 	ibv_qp* getQP() const;

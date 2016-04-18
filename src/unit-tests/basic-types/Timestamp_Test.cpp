@@ -107,9 +107,9 @@ void Timestamp_Test::test_equality(){
 	Timestamp ts_eq(isDeleted, isLocked, versionOffset, clientID, timestamp);
 	Timestamp ts2(!isDeleted, isLocked, versionOffset, clientID, timestamp);
 	Timestamp ts3(isDeleted, !isLocked, versionOffset, clientID, timestamp);
-	Timestamp ts4(isDeleted, isLocked, versionOffset + 1, clientID, timestamp);
-	Timestamp ts5(isDeleted, isLocked, versionOffset, clientID + 1, timestamp);
-	Timestamp ts6(isDeleted, isLocked, versionOffset, clientID + 1, timestamp + 1);
+	Timestamp ts4(isDeleted, isLocked, (primitive::version_offset_t)(versionOffset + 1), clientID, timestamp);
+	Timestamp ts5(isDeleted, isLocked, versionOffset, (primitive::client_id_t)(clientID + 1), timestamp);
+	Timestamp ts6(isDeleted, isLocked, versionOffset, clientID , (primitive::timestamp_t)(timestamp + 1));
 
 	assert(ts.isEqual(ts_eq) == true);
 	assert(ts.isEqual(ts2) == false);

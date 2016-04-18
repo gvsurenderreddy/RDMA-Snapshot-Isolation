@@ -77,6 +77,10 @@ RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* TPCC::ServerContext::getOld
 	return oldestUndeliveredOrderIndexRespMsg_;
 }
 
+RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getRegisterDeliveryIndexResponseMessage(){
+	return indexResponseMessage_;
+}
+
 void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }

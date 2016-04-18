@@ -13,7 +13,7 @@
 #include "queries/payment/PaymentTransaction.hpp"
 #include "queries/order-status/OrderStatusTransaction.hpp"
 #include "queries/stock-level/StockLevelTransaction.hpp"
-//#include "queries/delivery/DeliveryTransaction.hpp"
+#include "queries/delivery/DeliveryTransaction.hpp"
 #include <infiniband/verbs.h>
 #include <string>
 #include <vector>
@@ -113,8 +113,8 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
-	//trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 
 
 	struct timespec trxBeginTime, trxFinishTime;

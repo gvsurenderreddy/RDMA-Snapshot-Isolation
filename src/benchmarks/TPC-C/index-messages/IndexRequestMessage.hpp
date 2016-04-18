@@ -27,7 +27,8 @@ struct IndexRequestMessage {
 		LARGEST_ORDER_FOR_CUSTOMER_INDEX,
 		REGISTER_ORDER,
 		ITEMS_FOR_LAST_20_ORDERS,
-		OLDEST_UNDELIVERED_ORDER
+		OLDEST_UNDELIVERED_ORDER,
+		REGISTER_DELIVERY
 	} indexType;
 
 	union Parameters {
@@ -64,6 +65,12 @@ struct IndexRequestMessage {
 			uint16_t warehouseOffset;
 			uint8_t dID;
 		} oldestUndeliveredOrderIndex;
+
+		struct RegisterDeliveryIndex {
+			uint16_t warehouseOffset;
+			uint8_t dID;
+			uint32_t oID;
+		} registerDeliveryIndex;
 	} parameters;
 };
 
