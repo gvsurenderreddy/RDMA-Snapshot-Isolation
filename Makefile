@@ -15,7 +15,7 @@ EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)
 TEST_MODULES	:= unit-tests unit-tests/index unit-tests/TPCC unit-tests/basic-types
 UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 
 
-MODULES		:= $(EXPERIMENT_MODULES)		# set to either EXPERIMENT_MODULES or UNIT_TEST_MODULES
+MODULES		:= $(UNIT_TEST_MODULES)		# set to either EXPERIMENT_MODULES or UNIT_TEST_MODULES
 
 SRC_DIR		:= $(addprefix src/,$(MODULES))
 BUILD_DIR	:= $(addprefix build/,$(MODULES))
