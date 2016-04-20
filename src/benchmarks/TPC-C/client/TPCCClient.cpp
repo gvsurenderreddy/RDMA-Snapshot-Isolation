@@ -22,6 +22,7 @@
 #include <memory>	//std::unique_ptr
 #include <fstream>      // std::ofstream
 #include <iostream>
+#include <unistd.h>
 
 
 #define CLASS_NAME "TPCCClient"
@@ -110,6 +111,10 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	TPCC::DBExecutor executor_(*os_);
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
+
+	// ************************************************
+	//	Preparing the transactions
+	// ************************************************
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
@@ -134,14 +139,14 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	}
 
 
+	// ************************************************
+	//	Running the transactions
+	// ************************************************
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Starting transactions ");
-	// std::cout << "client_id: " << clientID_ << "  starting" << std::endl;
-
-
 	for (int t = 0; t < config::tpcc_settings::TRANSACTION_CNT; t++){
-
 		// decided which transaction to execute
 		BaseTransaction *trx;
+
 		int r = random_.number(1, 100);
 		double d = (double) r / 100;
 		for (size_t i = 0; i < config::tpcc_settings::TRANSACTION_MIX_RATIOS.size(); i++){
@@ -149,14 +154,10 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 				trx = trxs[i].get();
 				break;
 			}
-			else
-				d -= config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i);
+			else d -= config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i);
 		}
 
-		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "--------------- [Info] Transaction " << t << " (" << trx->getTransactionName() << ") --------------");
-
-		// std::cout << "client_id: " << clientID_ << "  transaction #" << t << std::endl;
-
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] --------------- Transaction " << t << " (" << trx->getTransactionName() << ") --------------");
 		clock_gettime(CLOCK_REALTIME, &trxBeginTime);
 		TransactionResult trxResult = trx->doOne();
 		clock_gettime(CLOCK_REALTIME, &trxFinishTime);
@@ -171,7 +172,6 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 			else if (trxResult.reason == TransactionResult::Reason::UNSUCCESSFUL_LOCK)
 				abortDueToUnsuccessfulLock[trx->getTransactionName()]++;
 		}
-
 	}
 
 	std::cout << std::endl;
@@ -190,9 +190,6 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		std::cout << "[Stat] (Trx: " << n << ") Avg abort type II (failed locks) ratio	" << unsuccessfulLockRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
 	}
-
-	std::cout << "[Stat] Ratio of aborted New-Order trxs that could have been prevented: " << (double)TPCC::NewOrderTransaction::oops / abortCnt[trxs[0]->getTransactionName()] << std::endl;
-
 
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");
 	for (int i = 0; i < config::SERVER_CNT; i++){

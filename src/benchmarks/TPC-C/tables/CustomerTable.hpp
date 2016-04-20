@@ -103,6 +103,11 @@ public:
 	static size_t getOffsetOfTimestamp(){
 		return offsetof(CustomerVersion, writeTimestamp);
 	}
+
+	friend std::ostream& operator<<(std::ostream& os, const CustomerVersion& v) {
+		os << v.customer << "(" << v.writeTimestamp << ")";
+		return os;
+	}
 };
 
 
@@ -124,6 +129,17 @@ public:
 		headVersions 	= new RDMARegion<CustomerVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<CustomerVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+		for (unsigned int  i = 0; i < size_; ++i) {
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
 	}
 
 	~CustomerTable(){

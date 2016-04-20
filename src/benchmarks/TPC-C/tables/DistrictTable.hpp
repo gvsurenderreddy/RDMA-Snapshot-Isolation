@@ -17,51 +17,51 @@ using namespace tpcc_settings;
 
 namespace TPCC{
 class District{
-	public:
-		//	Primary Key: (D_W_ID, D_ID)
-		//	D_W_ID Foreign Key, references W_ID
-		// 	Size:	100 Bytes
+public:
+	//	Primary Key: (D_W_ID, D_ID)
+	//	D_W_ID Foreign Key, references W_ID
+	// 	Size:	100 Bytes
 
-		uint8_t		D_ID;			// 20 unique IDs 10 are populated per warehouse
-		uint16_t 	D_W_ID; 		// 2*W unique IDs
-		uint64_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number (64bit for atomic operations)
-		char 		D_NAME[11];		// variable text, size 10
-		char 		D_STREET_1[21];	// variable text, size 20
-		char 		D_STREET_2[21]; // variable text, size 20
-		char		D_CITY[21]; 	// variable text, size 20
-		char		D_STATE[3]; 	// fixed text, size 2
-		char		D_ZIP[10];		// fixed text, size 9
-		float 		D_YTD;			// signed numeric(12,2) Year to date balance
-		float 		D_TAX;			// signed numeric(4,4) Sales tax
+	uint8_t		D_ID;			// 20 unique IDs 10 are populated per warehouse
+	uint16_t 	D_W_ID; 		// 2*W unique IDs
+	uint64_t	D_NEXT_O_ID;	// 10,000,000 unique IDs Next available Order number (64bit for atomic operations)
+	char 		D_NAME[11];		// variable text, size 10
+	char 		D_STREET_1[21];	// variable text, size 20
+	char 		D_STREET_2[21]; // variable text, size 20
+	char		D_CITY[21]; 	// variable text, size 20
+	char		D_STATE[3]; 	// fixed text, size 2
+	char		D_ZIP[10];		// fixed text, size 9
+	float 		D_YTD;			// signed numeric(12,2) Year to date balance
+	float 		D_TAX;			// signed numeric(4,4) Sales tax
 
-		void initialize(uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random){
-		    D_ID = dID;
-		    D_W_ID = wID;
-		    D_TAX = makeTax(random);
-		    D_YTD = DISTRICT_INITIAL_YTD;
-		    //D_NEXT_O_ID = config::tpcc_settings::CUSTOMER_PER_DISTRICT + 1;
-		    D_NEXT_O_ID = 0;
-		    random.astring(D_NAME, DISTRICT_MIN_NAME, DISTRICT_MAX_NAME);
-		    random.astring(D_STREET_1, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
-		    random.astring(D_STREET_2, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
-		    random.astring(D_CITY, ADDRESS_MIN_CITY, ADDRESS_MAX_CITY);
-		    random.astring(D_STATE, ADDRESS_STATE, ADDRESS_STATE);
-		    makeZip(random, D_ZIP);
-		}
+	void initialize(uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random){
+		D_ID = dID;
+		D_W_ID = wID;
+		D_TAX = makeTax(random);
+		D_YTD = DISTRICT_INITIAL_YTD;
+		//D_NEXT_O_ID = config::tpcc_settings::CUSTOMER_PER_DISTRICT + 1;
+		D_NEXT_O_ID = 0;
+		random.astring(D_NAME, DISTRICT_MIN_NAME, DISTRICT_MAX_NAME);
+		random.astring(D_STREET_1, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
+		random.astring(D_STREET_2, ADDRESS_MIN_STREET, ADDRESS_MAX_STREET);
+		random.astring(D_CITY, ADDRESS_MIN_CITY, ADDRESS_MAX_CITY);
+		random.astring(D_STATE, ADDRESS_STATE, ADDRESS_STATE);
+		makeZip(random, D_ZIP);
+	}
 
-		static size_t getOffsetOfTax(){
-			return offsetof(District, D_TAX);
-		}
+	static size_t getOffsetOfTax(){
+		return offsetof(District, D_TAX);
+	}
 
-		static size_t getOffsetOfNextOID(){
-			return offsetof(District, D_NEXT_O_ID);
-		}
+	static size_t getOffsetOfNextOID(){
+		return offsetof(District, D_NEXT_O_ID);
+	}
 
-		friend std::ostream& operator<<(std::ostream& os, const District& d) {
-			os << "D_ID:" << (int)d.D_ID << "|D_W_ID:" << (int)d.D_W_ID;
-			return os;
-		}
-	};
+	friend std::ostream& operator<<(std::ostream& os, const District& d) {
+		os << "D_ID:" << (int)d.D_ID << "|D_W_ID:" << (int)d.D_W_ID;
+		return os;
+	}
+};
 
 class DistrictVersion{
 public:
@@ -74,6 +74,11 @@ public:
 
 	static size_t getOffsetOfTimestamp(){
 		return offsetof(DistrictVersion, writeTimestamp);
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const DistrictVersion& v) {
+		os << v.district << "(" << v.writeTimestamp << ")";
+		return os;
 	}
 };
 
@@ -94,6 +99,17 @@ public:
 		headVersions 	= new RDMARegion<DistrictVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<DistrictVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+		for (unsigned int  i = 0; i < size_; ++i) {
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
 	}
 
 	void insert(size_t warehouseOffset, uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random, Timestamp &ts){

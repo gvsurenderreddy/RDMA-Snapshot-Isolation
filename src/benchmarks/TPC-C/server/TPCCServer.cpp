@@ -43,6 +43,9 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 
 	context_ = new RDMAContext(*os_, ib_port_);
 
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is populating its database. Please do not start the clients before this process is over .... ");
+
+
 	size_t warehouseTableSize = WAREHOUSE_PER_SERVER;
 	size_t districtTableSize = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
 	size_t customerTableSize = CUSTOMER_PER_DISTRICT * DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;
@@ -60,13 +63,13 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 
 	db = new TPCC::TPCCDB(*os_, warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << "'s database is successfully loaded");
+
+
 	// Put the memory keys into the message that is to be sent to clients
 	memoryKeysMessage_ = new RDMARegion<ServerMemoryKeys>(1, *context_, IBV_ACCESS_LOCAL_WRITE);
 	db->getMemoryKeys(memoryKeysMessage_->getRegion());
 	memoryKeysMessage_->getRegion()->serverInstanceNum = instanceNum_;
-
-	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is waiting for " << clientsCnt_
-			<< " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_);
 
 	struct sockaddr_in serv_addr, cli_addr;
 	socklen_t clilen = sizeof(cli_addr);
@@ -88,6 +91,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 
 	// listen
 	TEST_NZ(listen (server_sockfd_, clientsCnt_));
+
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is waiting for " << clientsCnt_ << " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_);
 
 	// accept connections
 	for (size_t c = 0; c < clientsCnt_; c++){

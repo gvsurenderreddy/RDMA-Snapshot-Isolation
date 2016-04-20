@@ -53,6 +53,11 @@ class HistoryVersion{
 public:
 	Timestamp writeTimestamp;
 	History history;
+
+	friend std::ostream& operator<<(std::ostream& os, const HistoryVersion& v) {
+		os << v.history << "(" << v.writeTimestamp << ")";
+		return os;
+	}
 };
 
 class HistoryTable{
@@ -71,6 +76,18 @@ public:
 		headVersions 	= new RDMARegion<HistoryVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<HistoryVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+		for (unsigned int  i = 0; i < size_; ++i) {
+			headVersions->getRegion()[i].writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
 	}
 
 	void getMemoryHandler(MemoryHandler<HistoryVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<HistoryVersion> &olderVersionsMH){

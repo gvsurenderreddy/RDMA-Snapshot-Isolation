@@ -39,9 +39,11 @@ protected:
 	uint64_t nextHistoryID_;
 
 	ServerContext* getServerContext(uint16_t wID);
-	bool isRecordAccessible(Timestamp &ts);
+	bool isRecordAccessible(const Timestamp &ts) const;
+	int findValidVersion(const Timestamp *timestampList, const size_t versionCnt) const;
 	primitive::timestamp_t getNewCommitTimestamp();
 	std::string pointer_to_string(Timestamp* ts) const;
+	std::string readTimestampToString() const;
 
 
 public:

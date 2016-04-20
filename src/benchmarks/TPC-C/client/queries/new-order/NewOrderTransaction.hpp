@@ -27,9 +27,9 @@ struct NewOrderCart{
 	std::vector<NewOrderItem> items;
 
 	friend std::ostream& operator<<(std::ostream& os, const NewOrderCart& c) {
-		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | cID:" << (int)c.cID << ". --- Items (iID, suppWID):";
+		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | cID:" << (int)c.cID << " -- Items (iID,suppWID):";
 		for(auto const& value: c.items)
-			os << " {i: " << value.I_ID << " | W: " << value.OL_SUPPLY_W_ID << "}, ";
+			os << " {i:" << value.I_ID << " | W:" << value.OL_SUPPLY_W_ID << "},";
 		return os;
 	}
 };
@@ -53,7 +53,6 @@ public:
 	NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
 	virtual ~NewOrderTransaction();
 	TPCC::TransactionResult doOne();
-	static int oops;
 
 	NewOrderTransaction& operator=(const NewOrderTransaction&) = delete;	// Disallow copying
 	NewOrderTransaction(const NewOrderTransaction&) = delete;				// Disallow copying

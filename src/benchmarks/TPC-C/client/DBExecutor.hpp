@@ -57,6 +57,7 @@ public:
 	void submitResult(primitive::client_id_t, RDMARegion<primitive::timestamp_t> &,  MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
 
 	void retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &, MemoryHandler<TPCC::WarehouseVersion> &, ibv_qp *, bool signaled);
+	void retrieveWarehouseOlderVersion(uint16_t wID, size_t versionOffset, RDMARegion<WarehouseVersion> &, MemoryHandler<TPCC::WarehouseVersion> &, ibv_qp *, bool signaled);
 	void retrieveWarehouseTax(uint16_t wID, RDMARegion<TPCC::WarehouseVersion> &, MemoryHandler<TPCC::WarehouseVersion> &, ibv_qp *);
 	void retrieveWarehousePointerList(uint16_t wID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
 	void lockWarehouse(TPCC::WarehouseVersion &warehouseV, Timestamp &newTS, RDMARegion<uint64_t> &, MemoryHandler<TPCC::WarehouseVersion> &, ibv_qp *, bool signaled);
@@ -66,6 +67,7 @@ public:
 	void updateWarehouse(RDMARegion<TPCC::WarehouseVersion> &localRegion, MemoryHandler<TPCC::WarehouseVersion> &remoteMH, ibv_qp *qp, bool signaled);
 
 	void retrieveDistrict(uint16_t wID, uint8_t dID, RDMARegion<DistrictVersion> &, MemoryHandler<TPCC::DistrictVersion> &, ibv_qp* , bool signaled);
+	void retrieveDistrictOlderVersion(uint16_t wID, uint8_t dID, size_t versionOffset, RDMARegion<DistrictVersion> &, MemoryHandler<TPCC::DistrictVersion> &, ibv_qp *, bool signaled);
 	void retrieveDistrictTax(uint16_t wID, uint8_t dID, RDMARegion<TPCC::DistrictVersion> &, MemoryHandler<TPCC::DistrictVersion> &, ibv_qp*);
 	void retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID, RDMARegion<TPCC::DistrictVersion> &, MemoryHandler<TPCC::DistrictVersion> &, ibv_qp *, bool signaled);
 	void retrieveDistrictPointerList(uint16_t wID, uint8_t dID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
@@ -76,6 +78,7 @@ public:
 	void updateDistrict(RDMARegion<TPCC::DistrictVersion> &localRegion, MemoryHandler<TPCC::DistrictVersion> &remoteMH, ibv_qp *qp, bool signaled);
 
 	void retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::CustomerVersion> &, MemoryHandler<TPCC::CustomerVersion> &, ibv_qp *, bool signaled);
+	void retrieveCustomerOlderVersion(uint16_t wID, uint8_t dID, uint32_t cID, size_t versionOffset, RDMARegion<TPCC::CustomerVersion> &, MemoryHandler<TPCC::CustomerVersion> &, ibv_qp *, bool signaled);
 	void retrieveCustomerPointerList(uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<Timestamp> &, MemoryHandler<Timestamp> &, ibv_qp *, bool signaled);
 	void lockCustomer(TPCC::CustomerVersion &customerV, Timestamp &newTS, RDMARegion<uint64_t> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled);
 	void revertCustomerLock(RDMARegion<TPCC::CustomerVersion> &localRegion, MemoryHandler<TPCC::CustomerVersion> &remoteMH, ibv_qp *qp, bool signaled);

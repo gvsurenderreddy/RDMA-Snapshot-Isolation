@@ -69,6 +69,11 @@ public:
 	static size_t getOffsetOfTimestamp(){
 		return offsetof(WarehouseVersion, writeTimestamp);
 	}
+
+	friend std::ostream& operator<<(std::ostream& os, const WarehouseVersion& v) {
+		os << v.warehouse << "(" << v.writeTimestamp << ")";
+		return os;
+	}
 };
 
 
@@ -87,6 +92,18 @@ public:
 		headVersions 	= new RDMARegion<WarehouseVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<WarehouseVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+
+		for (unsigned int  i = 0; i < size_; ++i) {
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
 	}
 
 	void insert(size_t warehouseOffset, uint16_t wID, TPCC::RandomGenerator& random, Timestamp& ts){

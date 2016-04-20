@@ -12,7 +12,6 @@
 #include "TPCCUtil.hpp"
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../rdma-region/MemoryHandler.hpp"
-
 #include <iostream>
 
 using namespace tpcc_settings;
@@ -108,7 +107,7 @@ public:
 		std::set<int> original_rows = random.selectUniqueIds(size_/10, 1, (int)size_);
 
 		bool isLocked = false;
-		bool isDeleted = false;
+		bool isDeleted = true;
 		primitive::client_id_t clientID = 0;
 		primitive::timestamp_t timestamp = 0;
 		primitive::version_offset_t versionOffset = 0;

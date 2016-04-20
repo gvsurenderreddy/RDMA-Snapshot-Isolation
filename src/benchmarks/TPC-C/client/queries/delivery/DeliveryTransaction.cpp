@@ -60,7 +60,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle: " << readTimestampToString());
 
 
 		// ************************************************
@@ -91,7 +91,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		}
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index response message received. Type: Oldest_Undelivered_Order. Parameters: oID = " << (int)oldestUndeliveredOrderRes->oID
-					<< ", #orderlines = " << (int)oldestUndeliveredOrderRes->numOfOrderlines);
+				<< ", #orderlines = " << (int)oldestUndeliveredOrderRes->numOfOrderlines);
 
 		// From Order table, retrieve the row with matching O_W_ID, O_D_ID and O_ID.
 		executor_.retrieveOrder(
@@ -140,18 +140,27 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				*localMemory_->getCustomerHead(),
 				serverCtx->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
 				serverCtx->getQP(),
+				false);
+		customerV = localMemory_->getCustomerHead()->getRegion();
+
+		executor_.retrieveCustomerPointerList(
+				cart.wID,
+				dID,
+				cID,
+				*localMemory_->getCustomerTS(),
+				getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
+				getServerContext(cart.wID)->getQP(),
 				true);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveCustomer()
-		customerV = localMemory_->getCustomerHead()->getRegion();
 
 
 		// printing for debugging purposes
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved NewOrder: " << newOrderV->newOrder);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Order: " << orderV->order);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << customerV->customer);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved NewOrder: " << *newOrderV);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Order: " << *orderV);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << *customerV);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)oldestUndeliveredOrderRes->numOfOrderlines << " OrderLines ");
 		for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++)
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved OrderLine " << orderLinesV[olNumber].orderLine);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved OrderLine " << orderLinesV[olNumber]);
 
 
 		// ************************************************
@@ -160,35 +169,53 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		bool abortFlag = false;
 		if (! isRecordAccessible(orderV->writeTimestamp)){
 			abortFlag = true;
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Order " << orderV->order
-					<< " (" << orderV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Order " << *orderV << " is not consistent (locked or from a later snapshot)");
 		}
 		else if (! isRecordAccessible(newOrderV->writeTimestamp)){
 			abortFlag = true;
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": NewOrder " << newOrderV->newOrder
-					<< " (" << newOrderV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
-		}
-		else if (! isRecordAccessible(customerV->writeTimestamp)){
-			abortFlag = true;
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << (int)customerV->customer.C_ID
-					<< " (" << customerV->writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": NewOrder " << *newOrderV << " is not consistent (locked or from a later snapshot)");
 		}
 
 		for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++) {
 			if (! isRecordAccessible(orderLinesV[olNumber].writeTimestamp)){
 				abortFlag = true;
-				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << orderLinesV[olNumber].orderLine
-						<< " (" << orderLinesV[olNumber].writeTimestamp << ") is not consistent (locked or from a later snapshot)");
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << orderLinesV[olNumber] << " is not consistent (locked or from a later snapshot)");
 				break;
+			}
+		}
+		if (!abortFlag && ! isRecordAccessible(customerV->writeTimestamp)){
+			int ind = findValidVersion(localMemory_->getCustomerTS()->getRegion(), config::tpcc_settings::VERSION_NUM);
+			if (ind < 0) {
+				abortFlag = true;
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << *customerV << " and none of its versions are not consistent (locked or from a later snapshot)");
+			}
+			else{
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << *customerV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getCustomerTS()->getRegion()[ind] << ")");
+
+				executor_.retrieveCustomerOlderVersion(
+						cart.wID,
+						dID,
+						cID,
+						(size_t)ind,
+						*localMemory_->getCustomerHead(),
+						getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->customerTableOlderVersions,
+						getServerContext(cart.wID)->getQP(),
+						true);
+				TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveCustomerOlderVersion()
+
+				if (! isRecordAccessible(customerV->writeTimestamp)) {
+					DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": the newly read version is also inconsistent (customer: " << customerV->writeTimestamp << ")");
+					abortFlag = true;
+				}
 			}
 		}
 
 
 		if (abortFlag == true) {
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 			trxResult.result = TransactionResult::Result::ABORTED;
 			trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
-			return trxResult;
+			continue;
 		}
 		else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
 
@@ -282,10 +309,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			orderlineExistingLocks[olNumber].copy(localMemory_->getOrderLinesLocksRegion()->getRegion()[olNumber]);
 		}
 
-
 		*localMemory_->getCustomerLockRegion()->getRegion() = utils::bigEndianToHost(*localMemory_->getCustomerLockRegion()->getRegion());
 		customerExistingLock.copy(*localMemory_->getCustomerLockRegion()->getRegion());
-
 
 		// checks if locks are successful
 		abortFlag = false;
@@ -326,8 +351,11 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		if (abortFlag){
 			// some locks couldn't get acquired. must first release the successful ones, then abort
+			size_t successfulLocks = 0;
 			bool signaled;
 			if (orderExistingLock.isEqual(orderV->writeTimestamp)) {
+				successfulLocks++;
+
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
 				if (isNewOrderChanged || isLineOrderChanged || isCustomerChanged) signaled = false;
 				else signaled = true;
@@ -342,6 +370,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			}
 
 			if (newOrderExistingLock.isEqual(newOrderV->writeTimestamp)) {
+				successfulLocks++;
+
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
 				if (isLineOrderChanged || isCustomerChanged) signaled = false;
 				else signaled = true;
@@ -357,6 +387,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 			for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++){
 				if (orderlineExistingLocks[olNumber].isEqual(orderLinesV[olNumber].writeTimestamp)) {
+					successfulLocks++;
+
 					if (olNumber != largestChangedLineOrder || isCustomerChanged) signaled = false;
 					else signaled = true;
 					executor_.revertOrderLineLock(
@@ -372,6 +404,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			}
 
 			if (customerExistingLock.isEqual(customerV->writeTimestamp)) {
+				successfulLocks++;
 				executor_.revertCustomerLock(
 						*localMemory_->getCustomerHead(),
 						serverCtx->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
@@ -379,14 +412,16 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 						true);
 			}
 
-			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
-
+			if (successfulLocks > 0) {
+				TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
+			}
 
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 			trxResult.result = TransactionResult::Result::ABORTED;
 			trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
-			return trxResult;
+			//return trxResult;
+			continue;
 		}
 		else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
 
@@ -394,8 +429,24 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		//	Append old version to the versions list, and update the pointers list
 		// ************************************************
-		// DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older version");
+		executor_.updateCustomerPointers(
+				*customerV,
+				*localMemory_->getCustomerTS(),
+				serverCtx->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
+				serverCtx->getQP(),
+				false);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for customer" << customerV->customer);
 
+
+		executor_.updateCustomerOlderVersions(
+				//*localMemory_->getCustomerOlderVersions(),
+				*localMemory_->getCustomerHead(),	// using CustomerHead instead of CustomerOlderVersions avoids redundant copying
+				serverCtx->getRemoteMemoryKeys()->getRegion()->customerTableOlderVersions,
+				serverCtx->getQP(),
+				false);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for customer" << customerV->customer);
+
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older version");
 
 
 		// ************************************************

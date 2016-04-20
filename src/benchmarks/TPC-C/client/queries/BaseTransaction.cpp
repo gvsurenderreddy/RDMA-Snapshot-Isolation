@@ -36,13 +36,11 @@ std::string BaseTransaction::getTransactionName() const{
 	return transactionName_;
 }
 
-bool BaseTransaction::isRecordAccessible(Timestamp &ts){
-	if (ts.isLocked())
-		// item is already locked
+bool BaseTransaction::isRecordAccessible(const Timestamp &ts) const{
+	if (ts.isLocked())	// item is already locked
 		return false;
 
-	if (ts.isDeleted())
-		// item is deleted
+	if (ts.isDeleted())	// item is deleted (or not valid)
 		return false;
 
 	primitive::client_id_t committingClient = ts.getClientID();
@@ -56,6 +54,15 @@ bool BaseTransaction::isRecordAccessible(Timestamp &ts){
 
 	return true;
 }
+
+int BaseTransaction::findValidVersion(const Timestamp *timestampList, const size_t versionCnt) const{
+	for (int i = 0; i < (int)versionCnt; i++){
+		if (isRecordAccessible(timestampList[i]))
+			return i;
+	}
+	return -1;
+}
+
 
 TPCC::ServerContext* BaseTransaction::getServerContext(uint16_t wID){
 	size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
@@ -75,5 +82,14 @@ std::string BaseTransaction::pointer_to_string(Timestamp* ts) const{
 		stream << ts[i] << ", ";
 	return stream.str();
 }
+
+std::string BaseTransaction::readTimestampToString() const{
+	std::stringstream ss;
+	for (size_t i = 0; i < clientCnt_; i++)
+		ss << "client " << i << ": " << localTimestampVector_->getRegion()[i] << ", ";
+
+	return ss.str();
+}
+
 
 } /* namespace TPCC */

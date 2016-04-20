@@ -109,6 +109,17 @@ public:
 			headVersions->getRegion()[warehouseOffset * itemsCnt + i].stock.initialize(i, wID, is_original, random);
 			headVersions->getRegion()[warehouseOffset * itemsCnt + i].writeTimestamp.copy(ts);
 		}
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+		for (unsigned int  i = 0; i < size_; ++i) {
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
 	}
 
 	void getMemoryHandler(MemoryHandler<StockVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<StockVersion> &olderVersionsMH){

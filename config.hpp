@@ -51,25 +51,25 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 10000;					// This is __per client__. For the experiments, we will use 100000
+static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
-		0.5,  //0.45,	// Ratio of New Order
-		0.5,  //0.43,	// Ratio of Payment
-		0,  //0.04,	// Ratio of Order-Status
-		0,  //0.04,	// Ratio of Delivery
-		0}; //0.04};	// Ratio of Stock-Level.
+		0.45,	// Ratio of New Order
+		0.43,	// Ratio of Payment
+		0.04,	// Ratio of Order-Status
+		0.04,	// Ratio of Delivery
+		0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
 static const int WAREHOUSE_PER_SERVER		= 1;
 static const int WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
 static const int ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
-static const int DISTRICT_PER_WAREHOUSE		= 2; 			// TPCC default is 10;
+static const int DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
 static const int CUSTOMER_PER_DISTRICT		= 3000; 		// TPCC default is 3000;
 static const int STOCK_PER_WAREHOUSE		= ITEMS_CNT;
 static const int ORDER_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// The buffer size allocated to each client for storing orders/new orders/orderlines
 static const int HISTORY_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// the buffer size allocated to each client for storing history
 static const double REMOTE_WAREHOUSE_PROB	= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
-static const int VERSION_NUM 				= 2;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
+static const int VERSION_NUM 				= 3;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
 }	// namespace tpcc_settings
 
 

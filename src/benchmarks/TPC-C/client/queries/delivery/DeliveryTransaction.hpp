@@ -33,9 +33,6 @@ struct DeliveryCart{
 //			- Modify set: {10 new_orders, 10 orders, 10 * [5-15] orderlines, 10 customers}
 //		- Indices:
 //			- {NewOrder.w_id, NewOrder.d_id}		--> smallest NewOrder.o_id, pointers to the entries in order, new order, and orderline tables
-//		Network Messages Size:
-//			- read: (5150 + 4 * #clients)B
-//			- write: 6750B
 // ************************************************
 class DeliveryTransaction : public BaseTransaction {
 private:
