@@ -43,6 +43,7 @@ struct OrderStatusCart{
 //		Network Messages Size: (V = # of versions)
 //			- read: (847 + 4 * #clients)B = (4 * #clients + 60% * 12 + 40 + 10*80 )
 //			- write: 102 B = (60% * 64 + 64)
+//			- total (for V=3 and 100 clients): 1350 B
 // ************************************************
 class OrderStatusTransaction: public BaseTransaction {
 private:

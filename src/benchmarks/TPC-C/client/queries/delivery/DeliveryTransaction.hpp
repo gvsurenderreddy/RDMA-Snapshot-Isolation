@@ -37,6 +37,7 @@ struct DeliveryCart{
 //		Network Messages Size: (V = number of versions)
 //			- read: (16140 + 80*V + 40 * #clients)B = 10 * (56 + 40 + 20 + 800 + 690 + 8*V + 4*#clients + 8)B		--> 2 assumptions: 1-there is at least one undelivered order per district (10 full transactions). 2- without considering fetching older versions
 //			- write: (25800 + 80*V)B = 10 * (64 + 16 + 16 + 160 + 16 + 8*V + 690 + 40 + 20 + 800 + 690 + 64 + 4)
+//			- total (for V=3 and 100 clients): 46400 B
 // ************************************************
 class DeliveryTransaction : public BaseTransaction {
 private:

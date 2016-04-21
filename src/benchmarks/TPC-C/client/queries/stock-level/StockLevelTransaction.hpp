@@ -36,6 +36,7 @@ struct StockLevelCart{
 //		Network Messages Size: (V = # of versions)
 //			- read: (4636 + 4 * #clients)B = (4 * #clients + 120 + 1216 + 10 * 330)
 //			- write: 64 B
+//			- total (for V=3 and 100 clients): 5100 B
 // ************************************************
 class StockLevelTransaction: public BaseTransaction {
 private:

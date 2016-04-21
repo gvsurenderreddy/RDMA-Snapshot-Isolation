@@ -1,0 +1,24 @@
+## Network load analysis
+
+Assumptions:
+1- not considering loading older version in the case of non-accessible head versions
+2- we only consider "commited" transaction. taking into account the aborts would be more complicated.
+3- these numbers are for 100 client
+4- these numbers are for 3 versions per record (excluding the header)  
+
+###################################
+# Analysis of the client side     #
+###################################
+(total network read and write):
+- Delivery  trx:    46400 B
+- New Order trx:    14000 B
+- Order Status trx: 1350 B
+- Payment trx:      3500 B
+- Stock Level trx:  5100 B
+
+Taking into account the original mix ratio of TPCC workload, the expected value of the networl load per transaction is: 9919 B
+     = 0.04(46400 + 1350 + 5100) + 0.43 * 3500 + 0.45 * 14000
+
+the maximum number of (cumulative) trxs per dual-port machine to saturate the network on the client side is:
+(2)port * (6192*1024)MB_per_port / (9.9)expected_network_load_per_trx = 1280930
+Thus, we will have 45% * 1280930 = 576418 New Order transactions.

@@ -44,6 +44,7 @@ struct NewOrderCart{
 //		Network Messages Size: (V = # of versions)
 //			- read: (5322 + 104*V + 4 * #clients)B = (4 * #clients + 108 + 8*V + 120 + 8*V + 690 + 8*V + 10*(100 + 330 + 8*V) + 8 + 10*8 + 8 + 8)
 //			- write: (7712 + 80*V)B = (16 + 10*(16) + 10*(330 + 8*V) + 16 + 40 + 12 + 10*(330 + 80) + 64 + 4)
+//			- total (for V=3 and 100 clients): 14000 B
 // ************************************************
 class NewOrderTransaction : public BaseTransaction {
 private:
