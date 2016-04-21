@@ -25,9 +25,10 @@ static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you 
 
 /* Server settings */
 static const int						SERVER_CNT	= 1;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.2.1"};
 static const std::vector<uint16_t>		TCP_PORT	= {45680};
 static const std::vector<uint8_t>		IB_PORT		= {1};
+static const size_t						THREADS_CNT = 2;					// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
 static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI

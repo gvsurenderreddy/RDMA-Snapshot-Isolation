@@ -78,6 +78,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	TPCC::CustomerVersion *customerV;
 	std::vector<TPCC::ItemVersion*> items;
 	std::vector<TPCC::StockVersion*> stocks;
+	struct timespec beforeReadSnapshotTime, beforeIndexTime, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterUpdateTime, afterCommitTime;
 
 
 	// ************************************************
@@ -90,6 +91,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
+	clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
 	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 
 
@@ -213,6 +215,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		(void) offset; // to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 	}
 
+	clock_gettime(CLOCK_REALTIME, &afterExecutionTime);
+
+
 	// ************************************************
 	//	Check whether fetched items are from a consistent snapshot, and not locked
 	// ************************************************
@@ -310,6 +315,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		return trxResult;
 	}
 	else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
+	clock_gettime(CLOCK_REALTIME, &afterCheckVersionTime);
 
 
 	// ************************************************
@@ -444,6 +450,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;
 	}
+	clock_gettime(CLOCK_REALTIME, &afterLockTime);
+
 
 	// ************************************************
 	//	Append old version to the versions list, and update the pointers list
@@ -645,6 +653,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
 	// update the index
+	clock_gettime(CLOCK_REALTIME, &beforeIndexTime);
 	TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
 	executor_.registerOrder(
 			clientID_,
@@ -671,6 +680,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_ORDER");
 
 
+
 	// ************************************************
 	// Perform computation
 	// ************************************************
@@ -682,6 +692,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	float totalAmount = sum * (1 - customerV->customer.C_DISCOUNT) * (1 + warehouseV->warehouse.W_TAX + districtV->district.D_TAX);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": totalAmount: " << totalAmount);
 	(void)totalAmount;
+
+	clock_gettime(CLOCK_REALTIME, &afterUpdateTime);
 
 
 	// ************************************************
@@ -699,7 +711,17 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	nextNewOrderID_++;
 	nextOrderLineID_ = (uint64_t)(nextOrderLineID_ + cart.items.size());
 
+	clock_gettime(CLOCK_REALTIME, &afterCommitTime);
 
+	// ************************************************
+	//	Compute statistics
+	// ************************************************
+	trxResult.statistics.executionPhaseMicroSec = ( (double)( afterExecutionTime.tv_sec - beforeReadSnapshotTime.tv_sec ) * 1E9 + (double)( afterExecutionTime.tv_nsec - beforeReadSnapshotTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.checkVersionsPhaseMicroSec = ( (double)( afterCheckVersionTime.tv_sec - afterExecutionTime.tv_sec ) * 1E9 + (double)( afterCheckVersionTime.tv_nsec - afterExecutionTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.lockPhaseMicroSec = ( (double)( afterLockTime.tv_sec - afterCheckVersionTime.tv_sec ) * 1E9 + (double)( afterLockTime.tv_nsec - afterCheckVersionTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.updatePhaseMicroSec = ( (double)( afterUpdateTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.indexElapsedMicroSec = ( (double)( afterUpdateTime.tv_sec - beforeIndexTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - beforeIndexTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.commitSnapshotMicroSec = ( (double)( afterCommitTime.tv_sec - afterUpdateTime.tv_sec ) * 1E9 + (double)( afterCommitTime.tv_nsec - afterUpdateTime.tv_nsec ) ) / 1000;
 	return trxResult;
 }
 

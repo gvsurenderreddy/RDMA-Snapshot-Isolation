@@ -21,6 +21,15 @@ struct TransactionResult {
 		INCONSISTENT_SNAPSHOT,
 		UNSUCCESSFUL_LOCK
 	} reason;
+
+	struct Statistics{
+		double indexElapsedMicroSec = 0;
+		double executionPhaseMicroSec = 0;
+		double checkVersionsPhaseMicroSec = 0;
+		double lockPhaseMicroSec = 0;
+		double updatePhaseMicroSec = 0;
+		double commitSnapshotMicroSec = 0;
+	} statistics;
 	primitive::timestamp_t cts;
 };
 }

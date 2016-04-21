@@ -43,6 +43,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 	TPCC::NewOrderVersion *newOrderV;
 	TPCC::OrderLineVersion *orderLinesV;
 	TPCC::CustomerVersion *customerV;
+	struct timespec beforeReadSnapshotTime, beforeIndexTime1, beforeIndexTime2, afterIndexTime1, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterUpdateTime, afterCommitTime;
+
 
 	// ************************************************
 	//	Constructing the transaction cart
@@ -58,6 +60,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		//	Acquire read timestamp
 		// ************************************************
+		clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
 		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle: " << readTimestampToString());
@@ -68,6 +71,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		// The row in the NEW-ORDER table with matching NO_W_ID (equals W_ID) and NO_D_ID (equals D_ID) and with the lowest NO_O_ID value is selected.
 		// This is the oldest undelivered order of that district.
+		clock_gettime(CLOCK_REALTIME, &beforeIndexTime1);
+
 		TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
 		executor_.getOldestUndeliveredOrder(
 				clientID_,
@@ -78,10 +83,11 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				serverCtx->getQP(),
 				true);
 
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getOldestUndeliveredOrder()
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: Oldest_Undelivered_Order. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)dID);
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getOldestUndeliveredOrder()
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));	// for executor_.getOldestUndeliveredOrder()
+		clock_gettime(CLOCK_REALTIME, &afterIndexTime1);
 
 		// check if there is an undelivered order in this district
 		TPCC::OldestUndeliveredOrderIndexResMsg *oldestUndeliveredOrderRes = serverCtx->getOldestUndeliveredOrderIndexResponseMessage()->getRegion();
@@ -153,6 +159,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				true);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveCustomer()
 
+		clock_gettime(CLOCK_REALTIME, &afterExecutionTime);
 
 		// printing for debugging purposes
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved NewOrder: " << *newOrderV);
@@ -218,6 +225,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			continue;
 		}
 		else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": All received versions are consistent with READ snapshot, and all are unlocked");
+
+		clock_gettime(CLOCK_REALTIME, &afterCheckVersionTime);
 
 
 		// ************************************************
@@ -425,6 +434,9 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		}
 		else DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully acquired all locks");
 
+		clock_gettime(CLOCK_REALTIME, &afterLockTime);
+
+
 
 		// ************************************************
 		//	Append old version to the versions list, and update the pointers list
@@ -532,6 +544,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
 		// update the index
+		clock_gettime(CLOCK_REALTIME, &beforeIndexTime2);
 		executor_.registerDelivery(
 				clientID_,
 				cart.wID,
@@ -551,6 +564,9 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		assert(serverCtx->getRegisterOrderIndexResponseMessage()->getRegion()->isSuccessful == true);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_DELIVERY");
 
+		clock_gettime(CLOCK_REALTIME, &afterUpdateTime);
+
+
 		// ************************************************
 		//	Submit the result to the oracle
 		// ************************************************
@@ -561,6 +577,16 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
+
+		clock_gettime(CLOCK_REALTIME, &afterCommitTime);
+
+		trxResult.statistics.executionPhaseMicroSec += ( (double)( afterExecutionTime.tv_sec - beforeReadSnapshotTime.tv_sec ) * 1E9 + (double)( afterExecutionTime.tv_nsec - beforeReadSnapshotTime.tv_nsec ) ) / 1000;
+		trxResult.statistics.checkVersionsPhaseMicroSec += ( (double)( afterCheckVersionTime.tv_sec - afterExecutionTime.tv_sec ) * 1E9 + (double)( afterCheckVersionTime.tv_nsec - afterExecutionTime.tv_nsec ) ) / 1000;
+		trxResult.statistics.lockPhaseMicroSec += ( (double)( afterLockTime.tv_sec - afterCheckVersionTime.tv_sec ) * 1E9 + (double)( afterLockTime.tv_nsec - afterCheckVersionTime.tv_nsec ) ) / 1000;
+		trxResult.statistics.updatePhaseMicroSec += ( (double)( afterUpdateTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
+		trxResult.statistics.indexElapsedMicroSec += ( ( (double)( afterUpdateTime.tv_sec - beforeIndexTime2.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - beforeIndexTime2.tv_nsec ) ) / 1000
+				+ ( (double)( afterIndexTime1.tv_sec - beforeIndexTime1.tv_sec ) * 1E9 + (double)( afterIndexTime1.tv_nsec - beforeIndexTime1.tv_nsec ) ) / 1000 );
+		trxResult.statistics.commitSnapshotMicroSec = ( (double)( afterCommitTime.tv_sec - afterUpdateTime.tv_sec ) * 1E9 + (double)( afterCommitTime.tv_nsec - afterUpdateTime.tv_nsec ) ) / 1000;
 	}
 
 	trxResult.result = TransactionResult::Result::COMMITTED;

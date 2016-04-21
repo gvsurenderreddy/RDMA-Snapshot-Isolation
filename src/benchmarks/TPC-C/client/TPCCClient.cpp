@@ -128,6 +128,12 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	std::unordered_map<std::string, unsigned> abortDueToUnsuccessfulLock;
 	std::unordered_map<std::string, double> elapsedMicroSec;
 	std::unordered_map<std::string, unsigned> executedTrxCnt;
+	std::unordered_map<std::string, double> elapsedMicroSecInExecution;
+	std::unordered_map<std::string, double> elapsedMicroSecInIndex;
+	std::unordered_map<std::string, double> elapsedMicroSecInCheckingVersions;
+	std::unordered_map<std::string, double> elapsedMicroSecInLocking;
+	std::unordered_map<std::string, double> elapsedMicroSecInUpdatingRecords;
+	std::unordered_map<std::string, double> elapsedMicroSecInCommitingSnapshot;
 
 	for (auto& trx: trxs){
 		std::string s = trx->getTransactionName();
@@ -135,6 +141,12 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		abortDueToInconsistentSnapshot[s] = 0;
 		abortDueToUnsuccessfulLock[s] = 0;
 		elapsedMicroSec[s] = 0.0;
+		elapsedMicroSecInExecution[s] = 0.0;
+		elapsedMicroSecInIndex[s] = 0.0;
+		elapsedMicroSecInCheckingVersions[s] = 0.0;
+		elapsedMicroSecInLocking[s] = 0.0;
+		elapsedMicroSecInUpdatingRecords[s] = 0.0;
+		elapsedMicroSecInCommitingSnapshot[s] = 0.0;
 		executedTrxCnt[s] = 0;
 	}
 
@@ -162,18 +174,28 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		TransactionResult trxResult = trx->doOne();
 		clock_gettime(CLOCK_REALTIME, &trxFinishTime);
 
-		executedTrxCnt[trx->getTransactionName()]++;
-		elapsedMicroSec[trx->getTransactionName()] +=  ( (double)( trxFinishTime.tv_sec - trxBeginTime.tv_sec ) * 1E9 + (double)( trxFinishTime.tv_nsec - trxBeginTime.tv_nsec ) ) / 1000;
+		std::string trxName = trx->getTransactionName();
+		executedTrxCnt[trxName]++;
+		elapsedMicroSecInExecution[trxName] = trxResult.statistics.executionPhaseMicroSec;
+		elapsedMicroSecInIndex[trxName] = trxResult.statistics.indexElapsedMicroSec;
+		elapsedMicroSecInCheckingVersions[trxName] = trxResult.statistics.checkVersionsPhaseMicroSec;
+		elapsedMicroSecInLocking[trxName] = trxResult.statistics.lockPhaseMicroSec;
+		elapsedMicroSecInUpdatingRecords[trxName] = trxResult.statistics.updatePhaseMicroSec;
+		elapsedMicroSecInCommitingSnapshot[trxName] = trxResult.statistics.commitSnapshotMicroSec;
+		elapsedMicroSec[trxName] +=  ( (double)( trxFinishTime.tv_sec - trxBeginTime.tv_sec ) * 1E9 + (double)( trxFinishTime.tv_nsec - trxBeginTime.tv_nsec ) ) / 1000;
 
 		if (trxResult.result == TransactionResult::Result::ABORTED){
-			abortCnt[trx->getTransactionName()]++;
+			abortCnt[trxName]++;
 			if (trxResult.reason == TransactionResult::Reason::INCONSISTENT_SNAPSHOT)
-				abortDueToInconsistentSnapshot[trx->getTransactionName()]++;
+				abortDueToInconsistentSnapshot[trxName]++;
 			else if (trxResult.reason == TransactionResult::Reason::UNSUCCESSFUL_LOCK)
-				abortDueToUnsuccessfulLock[trx->getTransactionName()]++;
+				abortDueToUnsuccessfulLock[trxName]++;
 		}
 	}
 
+	// ************************************************
+	//	Printing the statistics
+	// ************************************************
 	std::cout << std::endl;
 	for (auto& trx: trxs){
 		std::string n = trx->getTransactionName();
@@ -189,6 +211,16 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		std::cout << "[Stat] (Trx: " << n << ") Avg abort type I (stale snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Avg abort type II (failed locks) ratio	" << unsuccessfulLockRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
+
+		if (n == trxs[0]->getTransactionName()) {
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in execution (usec):	" << elapsedMicroSecInExecution[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in index (usec):	" << elapsedMicroSecInIndex[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in version check (usec):	" << elapsedMicroSecInCheckingVersions[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in locking (usec):	" << elapsedMicroSecInLocking[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in updating records (usec):	" << elapsedMicroSecInUpdatingRecords[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in committing snapshot (usec):	" << elapsedMicroSecInCommitingSnapshot[n] << std::endl;
+		}
+
 	}
 
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");
