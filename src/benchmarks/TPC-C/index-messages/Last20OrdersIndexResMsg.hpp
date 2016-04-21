@@ -14,6 +14,8 @@
 
 namespace TPCC{
 struct Last20OrdersIndexResMsg: public IndexResponseMessage{
+	// Size: 1216 B
+
 	size_t orderlinesCnt;
 	uint32_t itemIDs[20 * tpcc_settings::ORDER_MAX_OL_CNT];
 };

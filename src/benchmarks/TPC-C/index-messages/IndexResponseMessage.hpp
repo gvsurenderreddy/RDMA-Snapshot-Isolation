@@ -12,6 +12,8 @@
 
 namespace TPCC {
 struct IndexResponseMessage{
+	// Size: 8 Bytes
+
 	enum IndexType {
 		CUSTOMER_LAST_NAME_INDEX,
 		LARGEST_ORDER_FOR_CUSTOMER_INDEX,

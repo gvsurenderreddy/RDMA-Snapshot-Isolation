@@ -13,6 +13,8 @@
 
 namespace TPCC {
 struct IndexRequestMessage {
+	// Size: 64 Bytes
+
 	primitive::client_id_t clientID;
 
 	enum OperationType {

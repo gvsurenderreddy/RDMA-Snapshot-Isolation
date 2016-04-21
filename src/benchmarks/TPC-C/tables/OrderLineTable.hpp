@@ -23,7 +23,7 @@ public:
 	//	Primary Key: (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)
 	//	(OL_W_ID, OL_D_ID, OL_O_ID) Foreign Key, references (O_W_ID, O_D_ID, O_ID)
 	//	(OL_SUPPLY_W_ID, OL_I_ID) Foreign Key, references (S_W_ID, S_I_ID)
-	// Size: 64 Bytes
+	// Size: 72 Bytes
 
 	uint32_t 	OL_O_ID;			// 10,000,000 unique IDs
 	uint8_t		OL_D_ID; 			// 20 unique IDs

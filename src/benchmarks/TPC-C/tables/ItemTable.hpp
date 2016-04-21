@@ -23,7 +23,7 @@ namespace TPCC {
 class Item{
 public:
 	// Primary Key: I_ID
-	// Size: 88 Bytes
+	// Size: 92 Bytes
 	uint32_t 	I_ID;		// 200,000 unique IDs 100,000 items are populated
 	uint32_t 	I_IM_ID;	// 200,000 unique IDs Image ID associated to Item
 	char		I_NAME[25];	// variable text, size 24

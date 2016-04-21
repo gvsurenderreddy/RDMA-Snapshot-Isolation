@@ -41,6 +41,10 @@ struct PaymentCart{
 //		- Write Set:
 //			- Modify set: {1 warehouse, 1 district, 1 customer}
 //			- New: {1 history}
+//
+//		Network Messages Size: (V = # of versions)
+//			- read: (950 + 24*V + 4 * #clients)B = (4 * #clients + 110 + 8*V + 120 + 8*V + 690 + 8*V + 60% * 12 + 8 + 8 + 8)
+//			- write: (1990 + 24*V) B = (60% * 64 + 16 + 16 + 16 + 110 + 8*V + 120 + 8*V + 690 + 8*V + 110 + 120 + 690 + 60 + 4)
 // ************************************************
 class PaymentTransaction : public BaseTransaction {
 private:

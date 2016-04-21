@@ -22,6 +22,7 @@ public:
 	//	Primary Key: none
 	//	(H_C_W_ID, H_C_D_ID, H_C_ID) Foreign Key, references (C_W_ID, C_D_ID, C_ID)
 	//	(H_W_ID, H_D_ID) Foreign Key, references (D_W_ID, D_ID)
+	//  Size: 56 Bytes
 
 	uint32_t	H_C_ID;		// 96,000 unique IDs
 	uint8_t		H_C_D_ID;	// 20 unique IDs

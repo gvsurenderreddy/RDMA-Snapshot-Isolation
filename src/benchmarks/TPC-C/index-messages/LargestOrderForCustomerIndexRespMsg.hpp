@@ -13,6 +13,8 @@
 namespace TPCC{
 
 struct LargestOrderForCustomerIndexRespMsg: public IndexResponseMessage{
+	// Size: 40 bytes
+
 	uint32_t oID;
 	primitive::client_id_t clientWhoOrdered;
 	size_t orderRegionOffset;

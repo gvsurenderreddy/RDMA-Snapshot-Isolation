@@ -13,6 +13,8 @@
 namespace TPCC {
 
 struct CustomerNameIndexRespMsg : public IndexResponseMessage {
+	// Size: 12B
+
 	uint32_t cID;
 };
 }	// namespace TPCC

@@ -26,7 +26,7 @@ class Customer{
 public:
 	// 	Primary Key: (C_W_ID, C_D_ID, C_ID)
 	//	(C_W_ID, C_D_ID) Foreign Key, references (D_W_ID, D_ID)
-	// 	Size: 656 bytes
+	// 	Size: 680 bytes
 
 	uint32_t 	C_ID;			// 96,000 unique IDs 3,000 are populated per district
 	uint8_t		C_D_ID;			// 20 unique IDs

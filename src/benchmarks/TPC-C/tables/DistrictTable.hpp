@@ -20,7 +20,7 @@ class District{
 public:
 	//	Primary Key: (D_W_ID, D_ID)
 	//	D_W_ID Foreign Key, references W_ID
-	// 	Size:	100 Bytes
+	// 	Size:	112 Bytes
 
 	uint8_t		D_ID;			// 20 unique IDs 10 are populated per warehouse
 	uint16_t 	D_W_ID; 		// 2*W unique IDs

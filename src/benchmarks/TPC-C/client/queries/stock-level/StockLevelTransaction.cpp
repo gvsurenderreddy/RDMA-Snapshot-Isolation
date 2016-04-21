@@ -159,8 +159,9 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 
 
 	// ************************************************
-	//	Count stocks whose quantity is lower than the given threshold
+	//	Perform computation
 	// ************************************************
+	// Count stocks whose quantity is lower than the given threshold
 	unsigned lowStockCnt = 0;
 	for (size_t i=0; i < orderlinesCnt; i++){
 		if (localMemory_->getStockHead()->getRegion()[i].stock.S_QUANTITY < cart.threshold)

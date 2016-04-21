@@ -14,8 +14,9 @@
 
 namespace TPCC{
 struct OldestUndeliveredOrderIndexResMsg: public IndexResponseMessage{
-	bool existUndeliveredOrder;
+	// Size: 56 Bytes
 
+	bool existUndeliveredOrder;
 	uint32_t oID;
 	primitive::client_id_t clientWhoOrdered;
 	size_t orderRegionOffset;

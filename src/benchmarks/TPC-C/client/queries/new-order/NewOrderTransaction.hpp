@@ -40,9 +40,10 @@ struct NewOrderCart{
 //		- Write Set:
 //			- Modify set: {1 district, 5-15 stocks}
 //			- New: {1 order, 1 neworder, 5-15 orderlines}
-//		Network Messages Size:
-//			- read: (5150 + 4 * #clients)B
-//			- write: 6750B
+//
+//		Network Messages Size: (V = # of versions)
+//			- read: (5322 + 104*V + 4 * #clients)B = (4 * #clients + 108 + 8*V + 120 + 8*V + 690 + 8*V + 10*(100 + 330 + 8*V) + 8 + 10*8 + 8 + 8)
+//			- write: (7712 + 80*V)B = (16 + 10*(16) + 10*(330 + 8*V) + 16 + 40 + 12 + 10*(330 + 80) + 64 + 4)
 // ************************************************
 class NewOrderTransaction : public BaseTransaction {
 private:

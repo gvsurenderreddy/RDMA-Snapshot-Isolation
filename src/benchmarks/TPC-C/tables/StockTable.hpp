@@ -24,7 +24,7 @@ public:
 	//	Primary Key: (S_W_ID, S_I_ID)
 	//	S_W_ID Foreign Key, references W_ID
 	//	S_I_ID Foreign Key, references I_ID
-	//	Size: 316 B
+	//	Size: 320 B
 
 	uint32_t	S_I_ID;			// 200,000 unique IDs 100,000 populated per warehouse
 	uint16_t	S_W_ID;			// 2*W unique IDs

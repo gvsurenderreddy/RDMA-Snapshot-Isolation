@@ -32,6 +32,10 @@ struct StockLevelCart{
 //		- Read Set: {1 district, 20 * [5-15] stocks}
 //		- Indices:
 //			- {OrderLine.w_id, OrderLine.d_id, OrderLine.o_id}	--> all the orderlines for the last 20 orders
+//
+//		Network Messages Size: (V = # of versions)
+//			- read: (4636 + 4 * #clients)B = (4 * #clients + 120 + 1216 + 10 * 330)
+//			- write: 64 B
 // ************************************************
 class StockLevelTransaction: public BaseTransaction {
 private:

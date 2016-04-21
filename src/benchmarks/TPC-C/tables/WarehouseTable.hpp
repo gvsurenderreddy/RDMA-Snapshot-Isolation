@@ -22,7 +22,7 @@ namespace TPCC{
 class Warehouse {
 public:
 	// Primary Key: W_ID
-	// Size: 96 Bytes
+	// Size: 100 Bytes
 
 	uint16_t	W_ID;			// 2*W unique IDs
 	char 		W_NAME[11]; 	// variable text, size 10

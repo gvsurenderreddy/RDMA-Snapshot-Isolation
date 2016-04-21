@@ -21,7 +21,7 @@ class NewOrder{
 public:
 	// Primary Key: (NO_W_ID, NO_D_ID, NO_O_ID)
 	// (NO_W_ID, NO_D_ID, NO_O_ID) Foreign Key, references (O_W_ID, O_D_ID, O_ID)
-	// Size: 12 Bytes
+	// Size: 8 Bytes
 
 	uint32_t 	NO_O_ID;	// 10,000,000 unique IDs
 	uint8_t 	NO_D_ID;	// 20 unique IDs
