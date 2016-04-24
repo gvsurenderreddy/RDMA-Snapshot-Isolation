@@ -10,24 +10,27 @@
 
 #include <unordered_map>
 #include <iostream>
-#include <cstring>      // std::memcpy
+#include <cstring>      // for std::memcpy
+#include <mutex>		// for std::lock_guard
 
 template <class KeyT, class ValueT>
 class HashIndex {
 
 protected:
    std::unordered_map<KeyT, ValueT> hashMap_;
+   std::mutex writeLock;
+
 public:
 	HashIndex();
 	virtual ~HashIndex();
 
     void put(const KeyT &k, const ValueT &v);
-    ValueT get(const KeyT &k) const;
-    bool hasKey(const KeyT &k) const;
+    ValueT get(const KeyT &k);
+    bool hasKey(const KeyT &k);
     void erase(const KeyT &k);
     void clear();
     size_t size();
-    void printAll() const;
+    void printAll();
 
 };
 
@@ -51,36 +54,44 @@ HashIndex<KeyT, ValueT>::~HashIndex() {
 
 template <class KeyT, class ValueT>
 void HashIndex<KeyT, ValueT>::put(const KeyT &k, const ValueT &v) {
-	std::memcpy(&hashMap_[k], &v, sizeof(ValueT));
+	std::lock_guard<std::mutex> lock(writeLock);
+	//std::memcpy(&hashMap_[k], &v, sizeof(ValueT));
+	hashMap_[k] = v;
 }
 
 template <class KeyT, class ValueT>
-ValueT HashIndex<KeyT, ValueT>::get(const KeyT &k) const{
+ValueT HashIndex<KeyT, ValueT>::get(const KeyT &k){
+	std::lock_guard<std::mutex> lock(writeLock);
 	return hashMap_.at(k);
 }
 
 template <class KeyT, class ValueT>
-bool HashIndex<KeyT, ValueT>::hasKey(const KeyT &k) const{
+bool HashIndex<KeyT, ValueT>::hasKey(const KeyT &k){
+	std::lock_guard<std::mutex> lock(writeLock);
 	return hashMap_.find(k) != hashMap_.end();
 }
 
 template <class KeyT, class ValueT>
 void HashIndex<KeyT, ValueT>::erase(const KeyT &k){
+	std::lock_guard<std::mutex> lock(writeLock);
 	hashMap_.erase(k);
 }
 
 template <class KeyT, class ValueT>
 void HashIndex<KeyT, ValueT>::clear(){
+	std::lock_guard<std::mutex> lock(writeLock);
 	hashMap_.clear();
 }
 
 template <class KeyT, class ValueT>
 size_t HashIndex<KeyT, ValueT>::size(){
+	std::lock_guard<std::mutex> lock(writeLock);
 	return hashMap_.size();
 }
 
 template <class KeyT, class ValueT>
-void HashIndex<KeyT, ValueT>::printAll() const {
+void HashIndex<KeyT, ValueT>::printAll() {
+	std::lock_guard<std::mutex> lock(writeLock);
 	for (auto& x: hashMap_)
 		std::cout << x.first << ": " << x.second << std::endl;
 }

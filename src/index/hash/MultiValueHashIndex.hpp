@@ -43,6 +43,7 @@ MultiValueHashIndex<KeyT, ValueT>::~MultiValueHashIndex() {
 
 template <class KeyT, class ValueT>
 void MultiValueHashIndex<KeyT, ValueT>::append(const KeyT &k, const ValueT &v) {
+	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
 	BaseClass::hashMap_[k].push_back(v);
 }
 

@@ -184,8 +184,8 @@ public:
 	******************************************************************************/
 	static int poll_completion(struct ibv_cq* cq);
 
-	// overloaded version of poll_completion, where it also returns the qp_num associated with the queue where the message is received
-	static int poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num);
+	// overloaded version of poll_completion, where it also returns the qp_num associated with the queue where the message is received. It only keep polling as long as *keepPolling is evaluating to true
+	static int poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num, bool *keepPolling);
 	
 	
 	static int event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq);

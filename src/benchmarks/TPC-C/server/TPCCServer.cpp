@@ -22,12 +22,15 @@ using namespace config::tpcc_settings;
 #define CLASS_NAME	"TPCCServer"
 
 
+bool TPCC::TPCCServer::threadsActiveStateFlag[config::SERVER_THREADS_CNT];
+
 TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt)
 : serverNum_(serverNum),
   instanceNum_(instanceNum),
   clientsCnt_(clientsCnt),
   tcp_port_(config::TCP_PORT[serverNum]),
   ib_port_(config::IB_PORT[serverNum]){
+  //threadsActiveStateFlag(config::SERVER_THREADS_CNT, true){
 
 	if (config::Output::FILE == DEBUG_OUTPUT) {
 		std::string filename = std::string(config::LOG_FOLDER) + "/server_" + std::to_string(serverNum_) + ".log";
@@ -127,12 +130,20 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
 	}
 
-	handleIndexRequests();
+	// Handle Index requests using multiple threads
+	for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++) {
+		threadsActiveStateFlag[i] = true;
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Starting thread #" << i << " for handling index requests");
+		indexHandlerThreads.push_back(std::thread(&TPCC::TPCCServer::handleIndexRequests, this, &threadsActiveStateFlag[i]));
+	}
+	for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++) {
+		indexHandlerThreads[i].join();
+		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Thread " << i << " is finished");
+	}
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Update handler is finished");
 
-	/*
-		Server waits for the client to muck with its memory
-	 */
 
+	// Gracefully destroy the connections
 	for (size_t c = 0; c < clientsCnt_; c++) {
 		TEST_NZ (utils::sock_sync (clientCtxs[c]->getSockFd()));	// just send a dummy char back and forth
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Client " << c << " notified it's finished");
@@ -141,11 +152,20 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
 }
 
-void TPCC::TPCCServer::handleIndexRequests() {
+void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 	size_t liveClientCnt = clientsCnt_;
-	while (liveClientCnt > 0){
+	int ret;
+	while (liveClientCnt > 0 && *isThreadInActiveState){
 		uint32_t qpNum = -1;
-		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq(), qpNum));
+		ret = RDMACommon::poll_completion(context_->getRecvCq(), qpNum, isThreadInActiveState);
+		if (ret < 0){
+			utils::die("Cause of Error", __FILE__, __LINE__);
+		}
+		else if (ret == 1){
+			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] The thread is signaled to stop");
+			break;
+		}
+
 		size_t clientIndex =  qpNum_to_clientIndex_map[qpNum];	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
 
 		TPCC::IndexRequestMessage *req = clientCtxs[clientIndex]->getIndexRequestMessage()->getRegion();
@@ -156,6 +176,15 @@ void TPCC::TPCCServer::handleIndexRequests() {
 		if (req->operationType == TPCC::IndexRequestMessage::TERMINATE){
 			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID  << " :: TERMINATE");
 			liveClientCnt--;
+
+			// check if there is any more live clients. If not, signal other threads to stop
+			if (liveClientCnt == 0){
+				DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] TERMINATE was for the last client. Signaling other threads to stop");
+
+				for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++)
+					threadsActiveStateFlag[i] = false;
+				break;
+			}
 		}
 		else{
 			ibv_mr		*resRDMAHandler;

@@ -22,11 +22,11 @@ fi
 
 echo "sending file(s) to /data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest"
 
-#rsync -ruvh  $file erfanz@bsn00.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-rsync -ruvh  $file erfanz@bsn01.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-rsync -ruvh  $file erfanz@bsn02.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-rsync -ruvh  $file erfanz@bsn03.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-#rsync -ruvh  $file erfanz@bsn04.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-#rsync -ruvh  $file erfanz@bsn05.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-#rsync -ruvh  $file erfanz@bsn06.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
-#rsync -ruvh  $file erfanz@bsn07.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -rhazP  $file erfanz@bsn00.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+rsync -rhazP  $file erfanz@bsn01.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+rsync -rhazP  $file erfanz@bsn02.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+rsync -rvhazP  $file erfanz@bsn03.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -rvhazP  $file erfanz@bsn04.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -rvhazP  $file erfanz@bsn05.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -rvhazP  $file erfanz@bsn06.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest
+#rsync -rvhazP  $file erfanz@bsn07.cs.brown.edu:/data/erfanz/rdma/RDMA-Snapshot-Isolation/$dest

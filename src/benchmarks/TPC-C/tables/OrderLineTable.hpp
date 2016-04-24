@@ -81,11 +81,45 @@ class OrderLineTable{
 private:
 	std::ostream &os_;
 
+
 	struct OrderLineAddressIdentifier {
-		primitive::client_id_t clientWhoOrdered;
-		size_t clientRegionOffset;
-		uint8_t orderLineCnt;
+	private:
+		primitive::client_id_t clientWhoOrdered_;
+		size_t clientRegionOffset_;
+		uint8_t orderLineCnt_;
+	public:
+		OrderLineAddressIdentifier(){}
+
+		OrderLineAddressIdentifier(primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset, uint8_t orderLineCnt)
+		: clientWhoOrdered_(clientWhoOrdered),
+		  clientRegionOffset_(clientRegionOffset),
+		  orderLineCnt_(orderLineCnt){}
+
+		~OrderLineAddressIdentifier(){}
+
+		primitive::client_id_t getClientWhoOrdered() const { return clientWhoOrdered_;}
+		size_t getClientRegionOffset() const { return clientRegionOffset_; }
+		uint8_t getOrderLineCnt() const{ return orderLineCnt_;}
+
+		void swap(OrderLineAddressIdentifier & other) // the swap member function (should never fail!)
+		{
+			// swap all the members (and base subobject, if applicable) with other
+			std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
+			std::swap(clientRegionOffset_, other.clientRegionOffset_);
+			std::swap(orderLineCnt_, other.orderLineCnt_);
+		}
+
+		OrderLineAddressIdentifier& operator=(OrderLineAddressIdentifier other){
+			swap(other);	// swap this with other
+			return *this;	// by convention, always return *this
+		}
+
+		OrderLineAddressIdentifier(const OrderLineAddressIdentifier& other)
+		: clientWhoOrdered_(other.clientWhoOrdered_),
+		  clientRegionOffset_(other.clientRegionOffset_),
+		  orderLineCnt_(other.orderLineCnt_){}
 	};
+
 
 	HashIndex<std::string, OrderLineAddressIdentifier> orderLineToMemoryAddress_Index_;
 
@@ -115,15 +149,15 @@ public:
 		}
 	}
 
-//	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
-//		size_t ind = ( (
-//				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-//				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
-//				+ oID) * ORDER_MAX_OL_CNT + olNumber;
-//
-//		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
-//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-//	}
+	//	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
+	//		size_t ind = ( (
+	//				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	//				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
+	//				+ oID) * ORDER_MAX_OL_CNT + olNumber;
+	//
+	//		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
+	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+	//	}
 
 	void getMemoryHandler(MemoryHandler<OrderLineVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<OrderLineVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);
@@ -133,10 +167,7 @@ public:
 
 	void registerOrderLineInIndex(uint16_t wID, uint8_t dID, uint32_t oID, uint8_t orderLineCnt, primitive::client_id_t clientWhoOrdered, size_t orderLineRegionOffset) {
 		// First, register its physical address
-		OrderLineAddressIdentifier addr;
-		addr.clientWhoOrdered = clientWhoOrdered;
-		addr.clientRegionOffset = orderLineRegionOffset;
-		addr.orderLineCnt = orderLineCnt;
+		OrderLineAddressIdentifier addr(clientWhoOrdered, orderLineRegionOffset, orderLineCnt);
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		orderLineToMemoryAddress_Index_.put(key, addr);
 	}
@@ -144,9 +175,9 @@ public:
 	void getOrderLineMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT, uint8_t *orderLineCnt_OUTPUT){
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		OrderLineAddressIdentifier addr = orderLineToMemoryAddress_Index_.get(key);
-		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
-		*regionOffset_OUTPUT = addr.clientRegionOffset;
-		*orderLineCnt_OUTPUT = addr.orderLineCnt;
+		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
+		*regionOffset_OUTPUT = addr.getClientRegionOffset();
+		*orderLineCnt_OUTPUT = addr.getOrderLineCnt();
 	}
 
 	~OrderLineTable(){

@@ -19,13 +19,14 @@
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <vector>	// for std::vector
 #include <unordered_map>
+#include <thread>	// for std::thread
 
 
 namespace TPCC{
 class TPCCServer {
 public:
 	TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt);
-	void handleIndexRequests();
+	void handleIndexRequests(bool *isAlive);
 	virtual ~TPCCServer();
 
 private:
@@ -41,6 +42,9 @@ private:
 	RDMARegion<ServerMemoryKeys> *memoryKeysMessage_;
 	std::unordered_map<uint32_t, primitive::client_id_t> qpNum_to_clientIndex_map;	// client index is not the same as clientID. it is simply the index of the client's queue pair in clientCtxs vector.
 	std::ostream *os_;
+	std::vector<std::thread> indexHandlerThreads;
+	static bool threadsActiveStateFlag[config::SERVER_THREADS_CNT];
+
 };
 }
 

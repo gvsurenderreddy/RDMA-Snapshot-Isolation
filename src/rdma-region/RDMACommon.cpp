@@ -34,7 +34,7 @@ int RDMACommon::post_SEND (struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t
 		wr.send_flags 		= IBV_SEND_SIGNALED;
 	else
 		wr.send_flags 		= 0;
-	
+
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
@@ -57,7 +57,7 @@ int RDMACommon::post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintpt
 	wr.wr_id		= 0;
 	wr.sg_list		= &sge;
 	wr.num_sge		= 1;
-	
+
 	if (ibv_post_recv(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_recv() failed" << std::endl;
 		return -1;
@@ -66,7 +66,7 @@ int RDMACommon::post_RECEIVE (struct ibv_qp *qp, struct ibv_mr *local_mr, uintpt
 }
 
 int RDMACommon::post_RDMA_READ_WRT(enum ibv_wr_opcode opcode, struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
-struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
+		struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 {
 	struct ibv_sge sge;
 	struct ibv_send_wr wr, *bad_wr;
@@ -87,7 +87,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 		wr.send_flags 		= IBV_SEND_SIGNALED;
 	else
 		wr.send_flags 		= 0;
-	
+
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
@@ -96,16 +96,16 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, bool signaled)
 }
 
 int RDMACommon::post_RDMA_FETCH_ADD(struct ibv_qp *qp, struct ibv_mr *local_mr, uint64_t local_buffer, 
-struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length, bool signaled)
+		struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length, bool signaled)
 {
 	struct ibv_sge sge;
 	struct ibv_send_wr wr, *bad_wr = NULL;
-	
+
 	memset(&sge, 0, sizeof(sge));
 	sge.addr 		= local_buffer;
 	sge.length 		= length;
 	sge.lkey 		= local_mr->lkey;
-	
+
 	memset(&wr, 0, sizeof(wr));
 	wr.wr_id					= 0;
 	wr.sg_list 					= &sge;
@@ -118,7 +118,7 @@ struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length
 	wr.wr.atomic.remote_addr	= peer_buffer;
 	wr.wr.atomic.rkey        	= peer_mr->rkey;
 	wr.wr.atomic.compare_add	= addition; /* value to be added to the remote address content */
-	
+
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
@@ -127,16 +127,16 @@ struct ibv_mr *peer_mr, uint64_t peer_buffer, uint64_t addition, uint32_t length
 }
 
 int RDMACommon::post_RDMA_CMP_SWAP(struct ibv_qp *qp, struct ibv_mr *local_mr, uintptr_t local_buffer,
-struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value, bool signaled)
+		struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expected_value, uint64_t new_value, bool signaled)
 {
 	struct ibv_send_wr wr, *bad_wr = NULL;
 	struct ibv_sge sge;
-		
+
 	memset(&sge, 0, sizeof(sge));
 	sge.addr 		= local_buffer;
 	sge.length 		= length;
 	sge.lkey 		= local_mr->lkey;
-	
+
 	memset(&wr, 0, sizeof(wr));
 	wr.wr_id					= 0;
 	wr.opcode 					= IBV_WR_ATOMIC_CMP_AND_SWP;
@@ -150,7 +150,7 @@ struct ibv_mr *peer_mr, uintptr_t peer_buffer, uint32_t length, uint64_t expecte
 	wr.wr.atomic.rkey        	= peer_mr->rkey;
 	wr.wr.atomic.compare_add	= expected_value; /* expected value in remote address */
 	wr.wr.atomic.swap        	= new_value; /* the value that remote address will be assigned to */
-		
+
 	if (ibv_post_send(qp, &wr, &bad_wr)) {
 		std::cerr << "Error, ibv_post_send() failed" << std::endl;
 		return -1;
@@ -162,7 +162,7 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 {
 	struct ibv_exp_device_attr dev_attr;
 	struct ibv_exp_qp_init_attr	attr;
-	
+
 	memset(&dev_attr, 0, sizeof(dev_attr));
 	dev_attr.comp_mask |= IBV_EXP_DEVICE_ATTR_EXT_ATOMIC_ARGS | IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS;
 	if (ibv_exp_query_device(ib_ctx, &dev_attr)) {
@@ -187,9 +187,9 @@ int RDMACommon::create_queuepair(struct ibv_context *ib_ctx, struct ibv_pd *pd, 
 	attr.comp_mask |= IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG;
 	attr.srq = NULL;
 	attr.qp_type = IBV_QPT_RC;
-	
+
 	(*qp) = ibv_exp_create_qp(ib_ctx, &attr);
-   	if (!(*qp))
+	if (!(*qp))
 	{
 		std::cerr << "failed to create QP" << std::endl;
 		return -1;
@@ -234,7 +234,7 @@ int RDMACommon::modify_qp_to_rtr (uint8_t ib_port, struct ibv_qp *qp, uint32_t r
 	attr.ah_attr.port_num = ib_port;
 
 	flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
-		IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
+			IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
 		std::cerr << "failed to modify QP state to RTR" << std::endl;
@@ -254,7 +254,7 @@ int RDMACommon::modify_qp_to_rts (struct ibv_qp *qp)
 	attr.sq_psn = 0;
 	attr.max_rd_atomic = 16;
 	flags = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT |
-		IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
+			IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
 	rc = ibv_modify_qp (qp, &attr, flags);
 	if (rc)
 		std::cerr << "failed to modify QP state to RTS" << std::endl;
@@ -283,7 +283,7 @@ int RDMACommon::poll_completion(struct ibv_cq* cq)
 	return 0;
 }
 
-int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num)
+int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num, bool *keepPolling)
 {
 	struct ibv_wc wc;
 	int ne;
@@ -296,14 +296,21 @@ int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num)
 
 			return -1;
 		}
-	}while(ne==0);
+	}while(ne==0 && *keepPolling);
 
-	if(ne<0 || ne != 1) {
-		std::cerr << "RDMA polling from CQ failed!" << std::endl;
-		return -1;
+	if (ne > 0) {
+		returned_qp_num = wc.qp_num;
+		return 0;
 	}
-	returned_qp_num = wc.qp_num;
-	return 0;
+	else {
+		if (*keepPolling) {
+			std::cerr << "RDMA polling from CQ failed!" << std::endl;
+			return -1;
+		}
+		else
+			// the polling thread was signalled to stop polling. So it's not an error.
+			return 1;
+	}
 }
 
 int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq) {
@@ -324,26 +331,26 @@ int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channe
 
 	/* Empty the CQ: poll all of the completions from the CQ (if any exist) */
 	do {
-	    ne = ibv_poll_cq(cq, 1, &wc);
-	    if (ne < 0) {
-	            fprintf(stderr, "Failed to poll completions from the CQ: ret = %d\n", ne);
-	            return -1;
-	    }
-	    /* there may be an extra event with no completion in the CQ */
-	    if (ne == 0)
-	            continue;
+		ne = ibv_poll_cq(cq, 1, &wc);
+		if (ne < 0) {
+			fprintf(stderr, "Failed to poll completions from the CQ: ret = %d\n", ne);
+			return -1;
+		}
+		/* there may be an extra event with no completion in the CQ */
+		if (ne == 0)
+			continue;
 
-	    if (wc.status != IBV_WC_SUCCESS) {
-	            fprintf(stderr, "Completion with status 0x%x was found\n", wc.status);
-	            return -1;
-	    }
+		if (wc.status != IBV_WC_SUCCESS) {
+			fprintf(stderr, "Completion with status 0x%x was found\n", wc.status);
+			return -1;
+		}
 	} while (ne);
 	return 0;
 }
 
 int RDMACommon::build_connection(int ib_port, struct ibv_context** ib_ctx,
-struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **send_cq, struct ibv_cq **recv_cq,
-struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp_channel, int cq_size)
+		struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **send_cq, struct ibv_cq **recv_cq,
+		struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp_channel, int cq_size)
 {
 	struct	ibv_device **dev_list = NULL;
 	struct	ibv_device *ib_dev = NULL;
@@ -357,14 +364,14 @@ struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp
 	// select the first device
 	//const char *dev_name = strdup (ibv_get_device_name (dev_list[0]));
 	TEST_Z(ib_dev = dev_list[0]);	// if the device wasn't found in host
-	
+
 	TEST_Z(*ib_ctx = ibv_open_device (ib_dev));		// get device handle
 
 	// We are now done with device list, free it
 	ibv_free_device_list (dev_list);
 	dev_list = NULL;
 	ib_dev = NULL;
-	
+
 	TEST_NZ (ibv_query_port (*ib_ctx, ib_port, port_attr));
 
 	TEST_Z(*pd = ibv_alloc_pd (*ib_ctx));		// allocate Protection Domain
@@ -373,12 +380,12 @@ struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp
 	TEST_Z(*send_comp_channel = ibv_create_comp_channel(*ib_ctx));
 	TEST_Z(*send_cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *send_comp_channel, 0));
 	TEST_NZ (ibv_req_notify_cq(*send_cq, 0));
-	
+
 	// Create completion channel and completion queue for receive queue
 	TEST_Z(*recv_comp_channel = ibv_create_comp_channel(*ib_ctx));
 	TEST_Z(*recv_cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *recv_comp_channel, 0));
 	TEST_NZ (ibv_req_notify_cq(*recv_cq, 0));
-	
+
 	return 0;
 }
 
@@ -387,21 +394,21 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, i
 	struct CommExchData local_con_data, remote_con_data, tmp_con_data;
 	char temp_char;
 	union ibv_gid my_gid;
-	
+
 	memset (&my_gid, 0, sizeof my_gid);
-	
+
 	// exchange using TCP sockets info required to connect QPs
 	local_con_data.qp_num	= htonl ((*qp)->qp_num);
 	local_con_data.lid		= htons (lid);
-	
+
 	memcpy (local_con_data.gid, &my_gid, sizeof my_gid);
-	
+
 	TEST_NZ (utils::sock_sync_data(sockfd, sizeof (struct CommExchData), (char *) &local_con_data, (char *) &tmp_con_data));
 
 	remote_con_data.qp_num	= ntohl (tmp_con_data.qp_num);
 	remote_con_data.lid		= ntohs (tmp_con_data.lid);
 	memcpy (remote_con_data.gid, tmp_con_data.gid, 16);
-	
+
 	// save the remote side attributes, we will need it for the post SR
 	// this line might be needed:
 	// ctx->remote_props = remote_con_data;
@@ -409,13 +416,13 @@ int RDMACommon::connect_qp (struct ibv_qp **qp, uint8_t ib_port, uint16_t lid, i
 	// fprintf (stdout, "Remote LID = 0x%x\n", remote_con_data.lid);
 	// modify the QP to init
 	TEST_NZ(RDMACommon::modify_qp_to_init (ib_port, *qp));
-	
+
 	// modify the QP to RTR
 	TEST_NZ(RDMACommon::modify_qp_to_rtr (ib_port, *qp, remote_con_data.qp_num, remote_con_data.lid));
-	
+
 	// modify the QP to RTS
 	TEST_NZ(RDMACommon::modify_qp_to_rts (*qp));
-	
+
 
 	// sync to make sure that both sides are in states that they can connect to prevent packet loss
 	TEST_NZ(utils::sock_sync_data (sockfd, 1, "Q", &temp_char));	// just send a dummy char back and forth

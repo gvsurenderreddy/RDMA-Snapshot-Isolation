@@ -22,7 +22,7 @@ SortedMultiValueHashIndex();
 	virtual ~SortedMultiValueHashIndex();
 
 	void push(const KeyT &k, const ValueT &v);
-	const ValueT& top(const KeyT &k) const;
+	const ValueT& top(const KeyT &k) ;
 	void pop(const KeyT &k);
 };
 
@@ -46,11 +46,13 @@ SortedMultiValueHashIndex<KeyT, ValueT>::~SortedMultiValueHashIndex() {
 
 template <class KeyT, class ValueT>
 void SortedMultiValueHashIndex<KeyT, ValueT>::push(const KeyT &k, const ValueT &v) {
+	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
 	BaseClass::hashMap_[k].push(v);
 }
 
 template <class KeyT, class ValueT>
-const ValueT& SortedMultiValueHashIndex<KeyT, ValueT>::top(const KeyT &k) const {
+const ValueT& SortedMultiValueHashIndex<KeyT, ValueT>::top(const KeyT &k)  {
+	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
 	const std::priority_queue<ValueT, std::vector<ValueT>, std::greater<ValueT> > &queue = BaseClass::hashMap_.at(k);
 	if (!queue.empty())
 		return queue.top();
@@ -59,6 +61,7 @@ const ValueT& SortedMultiValueHashIndex<KeyT, ValueT>::top(const KeyT &k) const 
 
 template <class KeyT, class ValueT>
 void SortedMultiValueHashIndex<KeyT, ValueT>::pop(const KeyT &k) {
+	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
 	BaseClass::hashMap_[k].pop();
 }
 

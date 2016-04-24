@@ -77,10 +77,41 @@ public:
 class OrderTable{
 private:
 	std::ostream &os_;
+
 	struct OrderAddressIdentifier {
-		primitive::client_id_t clientWhoOrdered;
-		size_t clientRegionOffset;
+	private:
+		primitive::client_id_t clientWhoOrdered_;
+		size_t clientRegionOffset_;
+	public:
+		OrderAddressIdentifier(){}
+
+		OrderAddressIdentifier(primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset)
+		: clientWhoOrdered_(clientWhoOrdered),
+		  clientRegionOffset_(clientRegionOffset){}
+
+		~OrderAddressIdentifier(){}
+
+		primitive::client_id_t getClientWhoOrdered() const { return clientWhoOrdered_;}
+		size_t getClientRegionOffset() const { return clientRegionOffset_; }
+
+		void swap(OrderAddressIdentifier & other) // the swap member function (should never fail!)
+		{
+			// swap all the members (and base subobject, if applicable) with other
+			std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
+			std::swap(clientRegionOffset_, other.clientRegionOffset_);
+		}
+
+		OrderAddressIdentifier& operator=(OrderAddressIdentifier other){
+			swap(other);	// swap this with other
+			return *this;	// by convention, always return *this
+		}
+
+		OrderAddressIdentifier(const OrderAddressIdentifier& other)
+		: clientWhoOrdered_(other.clientWhoOrdered_),
+		  clientRegionOffset_(other.clientRegionOffset_){}
 	};
+
+
 
 	HashIndex<std::string, uint32_t> largestOrderForCustomer_Index_;	// the key is concatenation of wID, dID, and cID
 	HashIndex<std::string, OrderAddressIdentifier> orderToMemoryAddress_Index_;	// the key is concatentation of wID, dID, and oID
@@ -137,9 +168,7 @@ public:
 
 	void registerOrderInIndex(uint16_t warehouseOffset, uint8_t dID, uint32_t cID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t regionOffset) {
 		// First, register its physical address
-		OrderAddressIdentifier addr;
-		addr.clientWhoOrdered = clientWhoOrdered;
-		addr.clientRegionOffset = regionOffset;
+		OrderAddressIdentifier addr(clientWhoOrdered, regionOffset);
 		std::string key1 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		orderToMemoryAddress_Index_.put(key1, addr);
 
@@ -161,8 +190,8 @@ public:
 	void getOrderMemoryAddress(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
 		std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		OrderAddressIdentifier addr = orderToMemoryAddress_Index_.get(key);
-		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
-		*regionOffset_OUTPUT = addr.clientRegionOffset;
+		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
+		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
 
 	void clearIndex(){

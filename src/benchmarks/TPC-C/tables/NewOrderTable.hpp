@@ -11,6 +11,7 @@
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../index/hash/SortedMultiValueHashIndex.hpp"
 #include <string>
+#include <utility>	// std::swap
 
 using namespace tpcc_settings;
 
@@ -54,19 +55,60 @@ public:
 	}
 };
 
-
 class NewOrderTable{
 private:
 	std::ostream &os_;
 
 	struct NewOrderAddressIdentifier {
-		uint32_t oID;
-		primitive::client_id_t clientWhoOrdered;
-		size_t clientRegionOffset ;
+	private:
+		uint32_t oID_;
+		primitive::client_id_t clientWhoOrdered_;
+		size_t clientRegionOffset_;
+	public:
+		NewOrderAddressIdentifier(){}
 
-	    bool operator>(const NewOrderAddressIdentifier &other) const{
-	        return oID > other.oID;
+		NewOrderAddressIdentifier(uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset){
+			oID_ = oID;
+			clientWhoOrdered_ = clientWhoOrdered;
+			clientRegionOffset_ = clientRegionOffset;
+		}
+
+		~NewOrderAddressIdentifier(){}
+
+		uint32_t getOID() const{
+			return oID_;
+		}
+
+		primitive::client_id_t getClientWhoOrdered() const {
+			return clientWhoOrdered_;
+		}
+
+		size_t getClientRegionOffset() const {
+			return clientRegionOffset_;
+		}
+
+	    void swap(NewOrderAddressIdentifier & other) // the swap member function (should never fail!)
+	    {
+	        // swap all the members (and base subobject, if applicable) with other
+	        std::swap(oID_, other.oID_);
+	        std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
+	        std::swap(clientRegionOffset_, other.clientRegionOffset_);
 	    }
+
+		NewOrderAddressIdentifier& operator=(NewOrderAddressIdentifier other){
+			swap(other);	// swap this with other
+			return *this;	// by convention, always return *this
+		}
+
+		NewOrderAddressIdentifier(const NewOrderAddressIdentifier& other)
+		: oID_(other.oID_),
+		  clientWhoOrdered_(other.clientWhoOrdered_),
+		  clientRegionOffset_(other.clientRegionOffset_){
+		}
+
+		bool operator>(const NewOrderAddressIdentifier &other) const{
+			return oID_ > other.oID_;
+		}
 	};
 
 	HashIndex<std::string, NewOrderAddressIdentifier> newOrderToMemoryAddress_Index_;
@@ -114,10 +156,7 @@ public:
 
 	void registerNewOrderInIndex(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t newOrderRegionOffset) {
 		// First, register its physical address
-		NewOrderAddressIdentifier addr;
-		addr.oID = oID;
-		addr.clientWhoOrdered = clientWhoOrdered;
-		addr.clientRegionOffset = newOrderRegionOffset;
+		NewOrderAddressIdentifier addr(oID, clientWhoOrdered, newOrderRegionOffset);
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		newOrderToMemoryAddress_Index_.put(key, addr);
 
@@ -129,9 +168,9 @@ public:
 	void getOldestNewOrder(uint16_t wID, uint8_t dID, uint32_t *oID_OUTPUT, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT) {
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
 		const NewOrderAddressIdentifier &addr = oldestNewOrderInDistrict_Index_.top(key);
-		*oID_OUTPUT = addr.oID;
-		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
-		*regionOffset_OUTPUT = addr.clientRegionOffset;
+		*oID_OUTPUT = addr.getOID();
+		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
+		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
 
 	void registerDelivery(uint16_t wID, uint8_t dID, uint32_t oID){
@@ -144,8 +183,8 @@ public:
 	void getNewOrderMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
 		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
 		NewOrderAddressIdentifier addr = newOrderToMemoryAddress_Index_.get(key);
-		*clientWhoOrdered_OUTPUT = addr.clientWhoOrdered;
-		*regionOffset_OUTPUT = addr.clientRegionOffset;
+		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
+		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
 
 	~NewOrderTable(){
