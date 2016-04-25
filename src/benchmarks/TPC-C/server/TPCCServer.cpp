@@ -29,7 +29,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
   instanceNum_(instanceNum),
   clientsCnt_(clientsCnt),
   tcp_port_(config::TCP_PORT[serverNum]),
-  ib_port_(config::IB_PORT[serverNum]){
+  ib_port_(config::IB_PORT[serverNum]),
+  liveClientCnt_(clientsCnt){
   //threadsActiveStateFlag(config::SERVER_THREADS_CNT, true){
 
 	if (config::Output::FILE == DEBUG_OUTPUT) {
@@ -153,9 +154,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 }
 
 void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
-	size_t liveClientCnt = clientsCnt_;
 	int ret;
-	while (liveClientCnt > 0 && *isThreadInActiveState){
+	while (liveClientCnt_ > 0 && *isThreadInActiveState){
 		uint32_t qpNum = -1;
 		ret = RDMACommon::poll_completion(context_->getRecvCq(), qpNum, isThreadInActiveState);
 		if (ret < 0){
@@ -175,12 +175,12 @@ void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 
 		if (req->operationType == TPCC::IndexRequestMessage::TERMINATE){
 			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)clientID  << " :: TERMINATE");
-			liveClientCnt--;
+			std::lock_guard<std::mutex> lock(liveClientCntLock_);
+			liveClientCnt_--;
 
 			// check if there is any more live clients. If not, signal other threads to stop
-			if (liveClientCnt == 0){
+			if (liveClientCnt_ == 0){
 				DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] TERMINATE was for the last client. Signaling other threads to stop");
-
 				for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++)
 					threadsActiveStateFlag[i] = false;
 				break;

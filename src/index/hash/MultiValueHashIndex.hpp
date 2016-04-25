@@ -21,6 +21,7 @@ public:
 	virtual ~MultiValueHashIndex();
 
 	void append(const KeyT &k, const ValueT &v);
+	ValueT getMiddle(const KeyT &k);
 };
 
 
@@ -45,6 +46,13 @@ template <class KeyT, class ValueT>
 void MultiValueHashIndex<KeyT, ValueT>::append(const KeyT &k, const ValueT &v) {
 	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
 	BaseClass::hashMap_[k].push_back(v);
+}
+
+template <class KeyT, class ValueT>
+ValueT MultiValueHashIndex<KeyT, ValueT>::getMiddle(const KeyT &k) {
+	std::lock_guard<std::mutex> lock(BaseClass::writeLock);
+	std::vector<ValueT> valVector = BaseClass::hashMap_[k];
+	return valVector.at(valVector.size() / 2);
 }
 
 

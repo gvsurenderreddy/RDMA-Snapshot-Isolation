@@ -75,56 +75,18 @@ public:
 };
 
 class OrderTable{
-private:
-	std::ostream &os_;
-
-	struct OrderAddressIdentifier {
-	private:
-		primitive::client_id_t clientWhoOrdered_;
-		size_t clientRegionOffset_;
-	public:
-		OrderAddressIdentifier(){}
-
-		OrderAddressIdentifier(primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset)
-		: clientWhoOrdered_(clientWhoOrdered),
-		  clientRegionOffset_(clientRegionOffset){}
-
-		~OrderAddressIdentifier(){}
-
-		primitive::client_id_t getClientWhoOrdered() const { return clientWhoOrdered_;}
-		size_t getClientRegionOffset() const { return clientRegionOffset_; }
-
-		void swap(OrderAddressIdentifier & other) // the swap member function (should never fail!)
-		{
-			// swap all the members (and base subobject, if applicable) with other
-			std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
-			std::swap(clientRegionOffset_, other.clientRegionOffset_);
-		}
-
-		OrderAddressIdentifier& operator=(OrderAddressIdentifier other){
-			swap(other);	// swap this with other
-			return *this;	// by convention, always return *this
-		}
-
-		OrderAddressIdentifier(const OrderAddressIdentifier& other)
-		: clientWhoOrdered_(other.clientWhoOrdered_),
-		  clientRegionOffset_(other.clientRegionOffset_){}
-	};
-
-
-
-	HashIndex<std::string, uint32_t> largestOrderForCustomer_Index_;	// the key is concatenation of wID, dID, and cID
-	HashIndex<std::string, OrderAddressIdentifier> orderToMemoryAddress_Index_;	// the key is concatentation of wID, dID, and oID
 
 public:
 	RDMARegion<OrderVersion> 	*headVersions;
 	RDMARegion<Timestamp> 		*tsList;
 	RDMARegion<OrderVersion>	*olderVersions;
 
-	OrderTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	OrderTable(std::ostream &os, size_t size, size_t warehouseCnt, size_t districtCnt,  size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
 	: os_(os),
 	  size_(size),
-	  maxVersionsCnt_(maxVersionsCnt){
+	  maxVersionsCnt_(maxVersionsCnt),
+	  largestOrderForCustomer_Index_(warehouseCnt * districtCnt),
+	  orderToMemoryAddress_Index_(warehouseCnt * districtCnt) {
 		headVersions 	= new RDMARegion<OrderVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<OrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -169,27 +131,30 @@ public:
 	void registerOrderInIndex(uint16_t warehouseOffset, uint8_t dID, uint32_t cID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t regionOffset) {
 		// First, register its physical address
 		OrderAddressIdentifier addr(clientWhoOrdered, regionOffset);
-		std::string key1 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		orderToMemoryAddress_Index_.put(key1, addr);
+		//std::string key1 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		orderToMemoryAddress_Index_[ind].put(oID, addr);
 
 		// then, update the customer's biggest order, if necessary
-		std::string key2 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
-		if (largestOrderForCustomer_Index_.hasKey(key2)) {
-			uint32_t existingOID = largestOrderForCustomer_Index_.get(key2);
+		//std::string key2 = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
+		if (largestOrderForCustomer_Index_[ind].hasKey(cID)) {
+			uint32_t existingOID = largestOrderForCustomer_Index_[ind].get(cID);
 			if (existingOID < oID)
-				largestOrderForCustomer_Index_.put(key2, oID);
+				largestOrderForCustomer_Index_[ind].put(cID, oID);
 		}
-		else largestOrderForCustomer_Index_.put(key2, oID);
+		else largestOrderForCustomer_Index_[ind].put(cID, oID);
 	}
 
 	uint32_t getBiggestOrderIDForCustomer(uint16_t warehouseOffset, uint8_t dID, uint32_t cID){
-		std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
-		return largestOrderForCustomer_Index_.get(key);
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + std::to_string(cID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		return largestOrderForCustomer_Index_[ind].get(cID);
 	}
 
 	void getOrderMemoryAddress(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
-		std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		OrderAddressIdentifier addr = orderToMemoryAddress_Index_.get(key);
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		OrderAddressIdentifier addr = orderToMemoryAddress_Index_[ind].get(oID);
 		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
 		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
@@ -211,8 +176,48 @@ public:
 	}
 
 private:
+private:
+	struct OrderAddressIdentifier {
+	private:
+		primitive::client_id_t clientWhoOrdered_;
+		size_t clientRegionOffset_;
+	public:
+		OrderAddressIdentifier(){}
+
+		OrderAddressIdentifier(primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset)
+		: clientWhoOrdered_(clientWhoOrdered),
+		  clientRegionOffset_(clientRegionOffset){}
+
+		~OrderAddressIdentifier(){}
+
+		primitive::client_id_t getClientWhoOrdered() const { return clientWhoOrdered_;}
+		size_t getClientRegionOffset() const { return clientRegionOffset_; }
+
+		void swap(OrderAddressIdentifier & other) // the swap member function (should never fail!)
+		{
+			// swap all the members (and base subobject, if applicable) with other
+			std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
+			std::swap(clientRegionOffset_, other.clientRegionOffset_);
+		}
+
+		OrderAddressIdentifier& operator=(OrderAddressIdentifier other){
+			swap(other);	// swap this with other
+			return *this;	// by convention, always return *this
+		}
+
+		OrderAddressIdentifier(const OrderAddressIdentifier& other)
+		: clientWhoOrdered_(other.clientWhoOrdered_),
+		  clientRegionOffset_(other.clientRegionOffset_){}
+	};
+
+
+
+	std::ostream &os_;
 	size_t size_;
 	size_t maxVersionsCnt_;
+	std::vector<HashIndex<uint32_t, uint32_t> > largestOrderForCustomer_Index_;				// the key is cID
+	std::vector<HashIndex<uint32_t, OrderAddressIdentifier> > orderToMemoryAddress_Index_;	// the key is oID
+
 };
 }	// namespace TPCC
 

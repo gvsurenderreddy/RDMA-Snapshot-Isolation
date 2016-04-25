@@ -20,6 +20,8 @@
 #include <vector>	// for std::vector
 #include <unordered_map>
 #include <thread>	// for std::thread
+#include <mutex>		// for std::lock_guard
+
 
 
 namespace TPCC{
@@ -44,6 +46,8 @@ private:
 	std::ostream *os_;
 	std::vector<std::thread> indexHandlerThreads;
 	static bool threadsActiveStateFlag[config::SERVER_THREADS_CNT];
+	size_t liveClientCnt_;
+	std::mutex liveClientCntLock_;
 
 };
 }

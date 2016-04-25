@@ -78,10 +78,74 @@ public:
 };
 
 class OrderLineTable{
+public:
+	RDMARegion<OrderLineVersion> *headVersions;
+	RDMARegion<Timestamp> 	*tsList;
+	RDMARegion<OrderLineVersion>	*olderVersions;
+
+	OrderLineTable(std::ostream &os, size_t size, size_t warehouseCnt, size_t districtCnt, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	: os_(os),
+	  size_(size),
+	  maxVersionsCnt_(maxVersionsCnt),
+	  orderLineToMemoryAddress_Index_(warehouseCnt * districtCnt) {
+		headVersions 	= new RDMARegion<OrderLineVersion>(size, baseContext, mrFlags);
+		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
+		olderVersions	= new RDMARegion<OrderLineVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		bool isLocked = false;
+		bool isDeleted = true;
+		primitive::client_id_t clientID = 0;
+		primitive::timestamp_t timestamp = 0;
+		primitive::version_offset_t versionOffset = 0;
+		for (unsigned int  i = 0; i < size_; ++i) {
+			headVersions->getRegion()[i].writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			for (size_t j = 0; j < maxVersionsCnt_; j++){
+				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
+			}
+		}
+	}
+
+	//	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
+	//		size_t ind = ( (
+	//				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
+	//				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
+	//				+ oID) * ORDER_MAX_OL_CNT + olNumber;
+	//
+	//		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
+	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
+	//	}
+
+	void getMemoryHandler(MemoryHandler<OrderLineVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<OrderLineVersion> &olderVersionsMH){
+		headVersions->getMemoryHandler(headVersionsMH);
+		tsList->getMemoryHandler(tsListMH);
+		olderVersions->getMemoryHandler(olderVersionsMH);
+	}
+
+	void registerOrderLineInIndex(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, uint8_t orderLineCnt, primitive::client_id_t clientWhoOrdered, size_t orderLineRegionOffset) {
+		// First, register its physical address
+		OrderLineAddressIdentifier addr(clientWhoOrdered, orderLineRegionOffset, orderLineCnt);
+		// std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		orderLineToMemoryAddress_Index_[ind].put(oID, addr);
+	}
+
+	void getOrderLineMemoryAddress(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT, uint8_t *orderLineCnt_OUTPUT){
+		//std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		OrderLineAddressIdentifier addr = orderLineToMemoryAddress_Index_[ind].get(oID);
+		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
+		*regionOffset_OUTPUT = addr.getClientRegionOffset();
+		*orderLineCnt_OUTPUT = addr.getOrderLineCnt();
+	}
+
+	~OrderLineTable(){
+		DEBUG_WRITE(os_, "OrderLineTable", __func__, "[Info] Deconstructor called");
+		delete headVersions;
+		delete tsList;
+		delete olderVersions;
+	}
+
 private:
-	std::ostream &os_;
-
-
 	struct OrderLineAddressIdentifier {
 	private:
 		primitive::client_id_t clientWhoOrdered_;
@@ -120,76 +184,10 @@ private:
 		  orderLineCnt_(other.orderLineCnt_){}
 	};
 
-
-	HashIndex<std::string, OrderLineAddressIdentifier> orderLineToMemoryAddress_Index_;
-
-public:
-	RDMARegion<OrderLineVersion> *headVersions;
-	RDMARegion<Timestamp> 	*tsList;
-	RDMARegion<OrderLineVersion>	*olderVersions;
-
-	OrderLineTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
-	: os_(os),
-	  size_(size),
-	  maxVersionsCnt_(maxVersionsCnt){
-		headVersions 	= new RDMARegion<OrderLineVersion>(size, baseContext, mrFlags);
-		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
-		olderVersions	= new RDMARegion<OrderLineVersion>(size * maxVersionsCnt, baseContext, mrFlags);
-
-		bool isLocked = false;
-		bool isDeleted = true;
-		primitive::client_id_t clientID = 0;
-		primitive::timestamp_t timestamp = 0;
-		primitive::version_offset_t versionOffset = 0;
-		for (unsigned int  i = 0; i < size_; ++i) {
-			headVersions->getRegion()[i].writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			for (size_t j = 0; j < maxVersionsCnt_; j++){
-				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			}
-		}
-	}
-
-	//	void insert(size_t warehouseOffset, uint8_t olNumber, uint32_t oID, uint8_t dID, uint16_t wID,  bool newOrder, TPCC::RandomGenerator& random, time_t now, Timestamp &ts) {
-	//		size_t ind = ( (
-	//				warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE
-	//				+ dID) * config::tpcc_settings::ORDER_PER_DISTRICT
-	//				+ oID) * ORDER_MAX_OL_CNT + olNumber;
-	//
-	//		headVersions->getRegion()[ind].orderLine.initialize(olNumber, oID, dID, wID, newOrder, random, now);
-	//		headVersions->getRegion()[ind].writeTimestamp.copy(ts);
-	//	}
-
-	void getMemoryHandler(MemoryHandler<OrderLineVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<OrderLineVersion> &olderVersionsMH){
-		headVersions->getMemoryHandler(headVersionsMH);
-		tsList->getMemoryHandler(tsListMH);
-		olderVersions->getMemoryHandler(olderVersionsMH);
-	}
-
-	void registerOrderLineInIndex(uint16_t wID, uint8_t dID, uint32_t oID, uint8_t orderLineCnt, primitive::client_id_t clientWhoOrdered, size_t orderLineRegionOffset) {
-		// First, register its physical address
-		OrderLineAddressIdentifier addr(clientWhoOrdered, orderLineRegionOffset, orderLineCnt);
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		orderLineToMemoryAddress_Index_.put(key, addr);
-	}
-
-	void getOrderLineMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT, uint8_t *orderLineCnt_OUTPUT){
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		OrderLineAddressIdentifier addr = orderLineToMemoryAddress_Index_.get(key);
-		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
-		*regionOffset_OUTPUT = addr.getClientRegionOffset();
-		*orderLineCnt_OUTPUT = addr.getOrderLineCnt();
-	}
-
-	~OrderLineTable(){
-		DEBUG_WRITE(os_, "OrderLineTable", __func__, "[Info] Deconstructor called");
-		delete headVersions;
-		delete tsList;
-		delete olderVersions;
-	}
-
-private:
+	std::ostream &os_;
 	size_t size_;
 	size_t maxVersionsCnt_;
+	std::vector<HashIndex<uint32_t, OrderLineAddressIdentifier> > orderLineToMemoryAddress_Index_;	// the key to the hash index is oID
 };
 }	// namespace TPCC
 

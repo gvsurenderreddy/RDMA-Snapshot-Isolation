@@ -12,6 +12,9 @@
 #include "../../../index/hash/SortedMultiValueHashIndex.hpp"
 #include <string>
 #include <utility>	// std::swap
+#include <queue>	// std::priority_queue
+#include <mutex>		// for std::lock_guard
+
 
 using namespace tpcc_settings;
 
@@ -56,73 +59,18 @@ public:
 };
 
 class NewOrderTable{
-private:
-	std::ostream &os_;
-
-	struct NewOrderAddressIdentifier {
-	private:
-		uint32_t oID_;
-		primitive::client_id_t clientWhoOrdered_;
-		size_t clientRegionOffset_;
-	public:
-		NewOrderAddressIdentifier(){}
-
-		NewOrderAddressIdentifier(uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset){
-			oID_ = oID;
-			clientWhoOrdered_ = clientWhoOrdered;
-			clientRegionOffset_ = clientRegionOffset;
-		}
-
-		~NewOrderAddressIdentifier(){}
-
-		uint32_t getOID() const{
-			return oID_;
-		}
-
-		primitive::client_id_t getClientWhoOrdered() const {
-			return clientWhoOrdered_;
-		}
-
-		size_t getClientRegionOffset() const {
-			return clientRegionOffset_;
-		}
-
-	    void swap(NewOrderAddressIdentifier & other) // the swap member function (should never fail!)
-	    {
-	        // swap all the members (and base subobject, if applicable) with other
-	        std::swap(oID_, other.oID_);
-	        std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
-	        std::swap(clientRegionOffset_, other.clientRegionOffset_);
-	    }
-
-		NewOrderAddressIdentifier& operator=(NewOrderAddressIdentifier other){
-			swap(other);	// swap this with other
-			return *this;	// by convention, always return *this
-		}
-
-		NewOrderAddressIdentifier(const NewOrderAddressIdentifier& other)
-		: oID_(other.oID_),
-		  clientWhoOrdered_(other.clientWhoOrdered_),
-		  clientRegionOffset_(other.clientRegionOffset_){
-		}
-
-		bool operator>(const NewOrderAddressIdentifier &other) const{
-			return oID_ > other.oID_;
-		}
-	};
-
-	HashIndex<std::string, NewOrderAddressIdentifier> newOrderToMemoryAddress_Index_;
-	SortedMultiValueHashIndex<std::string, NewOrderAddressIdentifier> oldestNewOrderInDistrict_Index_;
-
 public:
 	RDMARegion<NewOrderVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<NewOrderVersion>	*olderVersions;
 
-	NewOrderTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	NewOrderTable(std::ostream &os, size_t size, size_t warehouseCnt, size_t districtCnt, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
 	: os_(os),
 	  size_(size),
-	  maxVersionsCnt_(maxVersionsCnt){
+	  maxVersionsCnt_(maxVersionsCnt),
+	  newOrderToMemoryAddress_Index_(warehouseCnt * districtCnt),
+	  oldestNewOrderInDistrict_Index_(warehouseCnt * districtCnt){
+		// oldestNewOrderInDistrict_Index_(warehouseCnt * districtCnt) {
 		headVersions 	= new RDMARegion<NewOrderVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<NewOrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -154,35 +102,50 @@ public:
 		olderVersions->getMemoryHandler(olderVersionsMH);
 	}
 
-	void registerNewOrderInIndex(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t newOrderRegionOffset) {
+	void registerNewOrderInIndex(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t newOrderRegionOffset) {
 		// First, register its physical address
 		NewOrderAddressIdentifier addr(oID, clientWhoOrdered, newOrderRegionOffset);
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		newOrderToMemoryAddress_Index_.put(key, addr);
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		newOrderToMemoryAddress_Index_[ind].put(oID, addr);
 
 		// Second, update the oldest new order per district
-		key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
-		oldestNewOrderInDistrict_Index_.push(key, addr);
+		//key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID);
+		std::lock_guard<std::mutex> lock(writeLock);
+		oldestNewOrderInDistrict_Index_[ind].push(addr);
 	}
 
-	void getOldestNewOrder(uint16_t wID, uint8_t dID, uint32_t *oID_OUTPUT, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT) {
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
-		const NewOrderAddressIdentifier &addr = oldestNewOrderInDistrict_Index_.top(key);
+	void getOldestNewOrder(uint16_t warehouseOffset, uint8_t dID, uint32_t *oID_OUTPUT, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT) {
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID);
+		//const NewOrderAddressIdentifier &addr = oldestNewOrderInDistrict_Index_.top(key);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+
+		std::lock_guard<std::mutex> lock(writeLock);
+		if (oldestNewOrderInDistrict_Index_[ind].empty())
+			throw std::out_of_range("Empty list");
+		const NewOrderAddressIdentifier &addr = oldestNewOrderInDistrict_Index_[ind].top();
 		*oID_OUTPUT = addr.getOID();
 		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
 		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
 
-	void registerDelivery(uint16_t wID, uint8_t dID, uint32_t oID){
+	void registerDelivery(uint16_t warehouseOffset, uint8_t dID, uint32_t oID){
 		// TODO: is popping safe here?
 		(void) oID;
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID);
-		oldestNewOrderInDistrict_Index_.pop(key);
+
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID);
+		//oldestNewOrderInDistrict_Index_.pop(key);
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		std::lock_guard<std::mutex> lock(writeLock);
+		oldestNewOrderInDistrict_Index_[ind].pop();
 	}
 
-	void getNewOrderMemoryAddress(uint16_t wID, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
-		NewOrderAddressIdentifier addr = newOrderToMemoryAddress_Index_.get(key);
+	void getNewOrderMemoryAddress(uint16_t warehouseOffset, uint8_t dID, uint32_t oID, primitive::client_id_t *clientWhoOrdered_OUTPUT, size_t *regionOffset_OUTPUT){
+		//std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_o_" + std::to_string(oID);
+		// NewOrderAddressIdentifier addr = newOrderToMemoryAddress_Index_.get(key);
+
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		NewOrderAddressIdentifier addr = newOrderToMemoryAddress_Index_[ind].get(oID);
 		*clientWhoOrdered_OUTPUT = addr.getClientWhoOrdered();
 		*regionOffset_OUTPUT = addr.getClientRegionOffset();
 	}
@@ -195,8 +158,66 @@ public:
 	}
 
 private:
+	struct NewOrderAddressIdentifier {
+	private:
+		uint32_t oID_;
+		primitive::client_id_t clientWhoOrdered_;
+		size_t clientRegionOffset_;
+	public:
+		NewOrderAddressIdentifier(){}
+
+		NewOrderAddressIdentifier(uint32_t oID, primitive::client_id_t clientWhoOrdered, size_t clientRegionOffset){
+			oID_ = oID;
+			clientWhoOrdered_ = clientWhoOrdered;
+			clientRegionOffset_ = clientRegionOffset;
+		}
+
+		~NewOrderAddressIdentifier(){}
+
+		uint32_t getOID() const{
+			return oID_;
+		}
+
+		primitive::client_id_t getClientWhoOrdered() const {
+			return clientWhoOrdered_;
+		}
+
+		size_t getClientRegionOffset() const {
+			return clientRegionOffset_;
+		}
+
+		void swap(NewOrderAddressIdentifier & other) // the swap member function (should never fail!)
+		{
+			// swap all the members (and base subobject, if applicable) with other
+			std::swap(oID_, other.oID_);
+			std::swap(clientWhoOrdered_, other.clientWhoOrdered_);
+			std::swap(clientRegionOffset_, other.clientRegionOffset_);
+		}
+
+		NewOrderAddressIdentifier& operator=(NewOrderAddressIdentifier other){
+			swap(other);	// swap this with other
+			return *this;	// by convention, always return *this
+		}
+
+		NewOrderAddressIdentifier(const NewOrderAddressIdentifier& other)
+		: oID_(other.oID_),
+		  clientWhoOrdered_(other.clientWhoOrdered_),
+		  clientRegionOffset_(other.clientRegionOffset_){
+		}
+
+		bool operator>(const NewOrderAddressIdentifier &other) const{
+			return oID_ > other.oID_;
+		}
+	};
+
+	std::ostream &os_;
 	size_t size_;
 	size_t maxVersionsCnt_;
+	std::vector<HashIndex<uint32_t, NewOrderAddressIdentifier> > newOrderToMemoryAddress_Index_;
+	//std::vector<SortedMultiValueHashIndex<std::string, NewOrderAddressIdentifier> > oldestNewOrderInDistrict_Index_;
+	std::vector<std::priority_queue<NewOrderAddressIdentifier, std::vector<NewOrderAddressIdentifier>, std::greater<NewOrderAddressIdentifier> > > oldestNewOrderInDistrict_Index_;
+	std::mutex writeLock;
+
 };
 
 }	// namespace TPCC

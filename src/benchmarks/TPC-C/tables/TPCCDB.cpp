@@ -28,13 +28,13 @@ now_(std::time(nullptr)),
 mrFlags_(IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC),
 warehouseIDs_(warehouseIDs),
 itemTable (os_, itemCnt, versionNum, context, mrFlags_),
-customerTable(os_, customerCnt, versionNum, context, mrFlags_),
+customerTable(os_, customerCnt, config::tpcc_settings::WAREHOUSE_PER_SERVER, districtCnt, versionNum, context, mrFlags_),
 stockTable(os_, stockCnt, versionNum, context, mrFlags_),
 warehouseTable (os_, warehouseCnt, versionNum, context, mrFlags_),
 districtTable (os_, districtCnt, versionNum, context, mrFlags_),
-orderTable (os_, orderCnt, versionNum, context, mrFlags_),
-orderLineTable(os_, orderLineCnt, versionNum, context, mrFlags_),
-newOrderTable(os_, newOrderCnt, versionNum, context, mrFlags_),
+orderTable (os_, orderCnt, config::tpcc_settings::WAREHOUSE_PER_SERVER, districtCnt, versionNum, context, mrFlags_),
+orderLineTable(os_, orderLineCnt, config::tpcc_settings::WAREHOUSE_PER_SERVER, districtCnt, versionNum, context, mrFlags_),
+newOrderTable(os_, newOrderCnt, config::tpcc_settings::WAREHOUSE_PER_SERVER, districtCnt, versionNum, context, mrFlags_),
 historyTable(os_, historyCnt, versionNum, context, mrFlags_){
 
 	populate();
@@ -136,7 +136,7 @@ void TPCC::TPCCDB::handleLargestOrderIndexRequest(const TPCC::IndexRequestMessag
 		res.isSuccessful = true;
 	}
 	catch (const std::exception& e) {
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] The customer (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] The customer (warehouseOffset: " << (int)warehouseOffset << ", dID: " << (int)dID << ", cID: " << (int)cID  <<  ") has not registered any order yet");
 		res.isSuccessful = false;
 	}
 }
@@ -144,16 +144,16 @@ void TPCC::TPCCDB::handleLargestOrderIndexRequest(const TPCC::IndexRequestMessag
 void TPCC::TPCCDB::handleCustomerNameIndexRequest(const TPCC::IndexRequestMessage &req, TPCC::CustomerNameIndexRespMsg &res){
 	res.indexType = TPCC::IndexResponseMessage::IndexType::CUSTOMER_LAST_NAME_INDEX;
 
-	uint16_t wID = req.parameters.lastNameIndex.warehouseOffset;
+	uint16_t warehouseOffset = req.parameters.lastNameIndex.warehouseOffset;
 	uint8_t dID = req.parameters.lastNameIndex.dID;
 	std::string lastName = std::string(req.parameters.lastNameIndex.customerLastName);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index request from client " << (int)req.clientID
-			<< ", Type: C_LastName_TO_C_ID. Parameters: wID = " << (int)wID << ", dID = " << (int)dID << ", lastName = " << lastName );
+			<< ", Type: C_LastName_TO_C_ID. Parameters: warehouseOffset = " << (int)warehouseOffset << ", dID = " << (int)dID << ", lastName = " << lastName );
 
 	assert(req.operationType == TPCC::IndexRequestMessage::OperationType::LOOKUP);
 	try{
-		res.cID = customerTable.getMiddleIDByLastName(wID, dID, lastName);
+		res.cID = customerTable.getMiddleIDByLastName(warehouseOffset, dID, lastName);
 		res.isSuccessful = true;
 	}
 	catch (const std::exception& e) {
@@ -253,7 +253,7 @@ void TPCC::TPCCDB::handleOldestUndeliveredOrderIndexRequest(const TPCC::IndexReq
 		res.existUndeliveredOrder = true;
 	}
 	catch (const std::out_of_range& e) {
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] No undelivered order (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ")");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] No undelivered order (warehouseOffset: " << (int)warehouseOffset << ", dID: " << (int)dID << ")");
 		res.isSuccessful = true;
 		res.existUndeliveredOrder = false;
 	}
@@ -273,7 +273,7 @@ void TPCC::TPCCDB::handleRegisterDeliveryIndexRequest(const TPCC::IndexRequestMe
 		res.isSuccessful = true;
 	}
 	catch (const std::out_of_range& e) {
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Error] cannot register delivery for order (wID: " << (int)warehouseOffset << ", dID: " << (int)dID << ", oID: " << oID << ")");
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Error] cannot register delivery for order (warehouseOffset: " << (int)warehouseOffset << ", dID: " << (int)dID << ", oID: " << oID << ")");
 		res.isSuccessful = false;
 	}
 }

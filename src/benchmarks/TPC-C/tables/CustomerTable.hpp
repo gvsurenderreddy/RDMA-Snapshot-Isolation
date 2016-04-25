@@ -9,6 +9,7 @@
 #define SRC_BENCHMARKS_TPC_C_TABLES_CUSTOMERTABLE_HPP_
 
 #include "../../../basic-types/timestamp.hpp"
+#include "WarehouseTable.hpp"
 #include "TPCCUtil.hpp"
 #include "../random/randomgenerator.hpp"
 #include "../../../../config.hpp"
@@ -112,20 +113,17 @@ public:
 
 
 class CustomerTable{
-private:
-	std::ostream &os_;
-	MultiValueHashIndex<std::string, uint32_t> customerLastNameToID_Index_;
-
 public:
 	RDMARegion<CustomerVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<CustomerVersion>	*olderVersions;
 
 
-	CustomerTable(std::ostream &os, size_t size, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
+	CustomerTable(std::ostream &os, size_t size, size_t warehouseCnt, size_t districtCnt, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
 	: os_(os),
 	  size_(size),
-	  maxVersionsCnt_(maxVersionsCnt){
+	  maxVersionsCnt_(maxVersionsCnt),
+	  customerLastNameToID_Index_(warehouseCnt * districtCnt){
 		headVersions 	= new RDMARegion<CustomerVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<CustomerVersion>(size * maxVersionsCnt, baseContext, mrFlags);
@@ -164,11 +162,13 @@ public:
 	void buildIndexOnLastName() {
 		for (size_t i = 0; i < headVersions->getRegionSize(); i++){
 			uint16_t wID = headVersions->getRegion()[i].customer.C_W_ID;
+			uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
 			uint8_t dID = headVersions->getRegion()[i].customer.C_D_ID;
 			uint32_t cID = headVersions->getRegion()[i].customer.C_ID;
 			std::string lastName = std::string(headVersions->getRegion()[i].customer.C_LAST);
-			std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_c_" + lastName;
-			customerLastNameToID_Index_.append(key, cID);
+			//std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_c_" + lastName;
+			size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+			customerLastNameToID_Index_[ind].append(lastName, cID);
 		}
 	}
 
@@ -177,15 +177,17 @@ public:
 		return headVersions->getRegion()[index].customer;
 	}
 
-	uint32_t getMiddleIDByLastName(uint16_t wID, uint8_t dID, std::string lastName) {
-		std::string key = "w_" + std::to_string(wID) + "_d_" + std::to_string(dID) + "_c_" + lastName;
-		std::vector<uint32_t> ids = customerLastNameToID_Index_.get(key);
-		return ids.at(ids.size() / 2);
+	uint32_t getMiddleIDByLastName(uint16_t warehouseOffset, uint8_t dID, std::string lastName) {
+		//std::string key = "w_" + std::to_string(warehouseOffset) + "_d_" + std::to_string(dID) + "_c_" + lastName;
+		size_t ind = (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+		return customerLastNameToID_Index_[ind].getMiddle(lastName);
 	}
 
 private:
+	std::ostream &os_;
 	size_t size_;
 	size_t maxVersionsCnt_;
+	std::vector<MultiValueHashIndex<std::string, uint32_t> > customerLastNameToID_Index_;	// key is the customer last name, value is cID
 };
 
 }	// namespace TPCC

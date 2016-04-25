@@ -37,7 +37,6 @@ private:
 	std::ostream &os_;
 	template <typename T>
 	bool isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH);
-	uint16_t getWarehouseOffsetOnServer(uint16_t wID);
 
 public:
 	virtual ~DBExecutor();

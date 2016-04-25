@@ -54,6 +54,11 @@ public:
 		os << "W_ID:" << (int)w.W_ID;
 		return os;
 	}
+
+	static uint16_t getWarehouseOffsetOnServer(uint16_t wID){
+		size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
+		return (uint16_t)(wID - (serverNum * config::tpcc_settings::WAREHOUSE_PER_SERVER));
+	}
 };
 
 
