@@ -486,14 +486,14 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	strcat(historyV->history.H_DATA, districtV->district.D_NAME);
 	executor_.insertIntoHistory(
 			clientID_,
-			nextHistoryID_,
+			BaseTransaction::getHistoryRID(),
 			*localMemory_->getHistoryHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->historyTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			true);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)nextHistoryID_);
-	nextHistoryID_++;
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)BaseTransaction::getHistoryRID());
+	BaseTransaction::incrementHistoryRID(1);
 
 	// ************************************************
 	//	Submit the result to the oracle

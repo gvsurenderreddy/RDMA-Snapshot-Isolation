@@ -31,7 +31,6 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
   tcp_port_(config::TCP_PORT[serverNum]),
   ib_port_(config::IB_PORT[serverNum]),
   liveClientCnt_(clientsCnt){
-  //threadsActiveStateFlag(config::SERVER_THREADS_CNT, true){
 
 	if (config::Output::FILE == DEBUG_OUTPUT) {
 		std::string filename = std::string(config::LOG_FOLDER) + "/server_" + std::to_string(serverNum_) + ".log";
@@ -39,16 +38,13 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	}
 	else os_ = &std::cout;
 
-
 	TPCC::RealRandomGenerator random;
 	TPCC::NURandC cLoad = TPCC::NURandC::makeRandom(random);
 	random.setC(cLoad);
 
-
 	context_ = new RDMAContext(*os_, ib_port_);
 
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is populating its database. Please do not start the clients before this process is over .... ");
-
 
 	size_t warehouseTableSize = WAREHOUSE_PER_SERVER;
 	size_t districtTableSize = DISTRICT_PER_WAREHOUSE * WAREHOUSE_PER_SERVER;

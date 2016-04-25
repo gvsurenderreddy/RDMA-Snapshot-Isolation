@@ -24,16 +24,16 @@ static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you 
 
 
 /* Server settings */
-static const int						SERVER_CNT	= 1;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.2.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680};
-static const std::vector<uint8_t>		IB_PORT		= {1};
+static const int						SERVER_CNT	= 3;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.2.1", "192.168.3.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680, 45680};
+static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};
 static const size_t						SERVER_THREADS_CNT = 40;				// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
-static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
+static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.4.1";	// only relevant for Tranditional-SI
 static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;			// only relevant for Tranditional-SI
-static const int			TIMESTAMP_SERVER_IB_PORT	= 1;				// only relevant for Tranditional-SI
+static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;				// only relevant for Tranditional-SI
 
 
 /* Client setting */
@@ -52,7 +52,7 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100000
+static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100 000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment
@@ -67,8 +67,8 @@ static const int ITEMS_CNT					= 100000;		// Make sure that this number is >= TP
 static const int DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
 static const int CUSTOMER_PER_DISTRICT		= 3000; 		// TPCC default is 3000;
 static const int STOCK_PER_WAREHOUSE		= ITEMS_CNT;
-static const int ORDER_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// The buffer size allocated to each client for storing orders/new orders/orderlines
-static const int HISTORY_BUFFER_PER_CLIENT	= TRANSACTION_CNT;	// the buffer size allocated to each client for storing history
+static const int ORDER_BUFFER_PER_CLIENT	= 1000;			// The buffer size allocated to each client for storing orders/new orders/orderlines. In the ideal case, this should be TRANSACTION_CNT.
+static const int HISTORY_BUFFER_PER_CLIENT	= 1000;			// the buffer size allocated to each client for storing history. In the ideal case, this should be TRANSACTION_CNT.
 static const double REMOTE_WAREHOUSE_PROB	= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
 static const int VERSION_NUM 				= 3;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
 }	// namespace tpcc_settings

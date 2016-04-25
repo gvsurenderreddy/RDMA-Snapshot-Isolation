@@ -174,17 +174,17 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		//	Check whether fetched items are from a consistent snapshot, and not locked
 		// ************************************************
 		bool abortFlag = false;
-		if (! isRecordAccessible(orderV->writeTimestamp)){
+		if (! isRecordAccessible(orderV->writeTimestamp) || orderV->order.O_ID != oldestUndeliveredOrderRes->oID){
 			abortFlag = true;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Order " << *orderV << " is not consistent (locked or from a later snapshot)");
 		}
-		else if (! isRecordAccessible(newOrderV->writeTimestamp)){
+		else if (! isRecordAccessible(newOrderV->writeTimestamp) || newOrderV->newOrder.NO_O_ID != oldestUndeliveredOrderRes->oID){
 			abortFlag = true;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": NewOrder " << *newOrderV << " is not consistent (locked or from a later snapshot)");
 		}
 
 		for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++) {
-			if (! isRecordAccessible(orderLinesV[olNumber].writeTimestamp)){
+			if (! isRecordAccessible(orderLinesV[olNumber].writeTimestamp) || orderLinesV[olNumber].orderLine.OL_O_ID != oldestUndeliveredOrderRes->oID){
 				abortFlag = true;
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << orderLinesV[olNumber] << " is not consistent (locked or from a later snapshot)");
 				break;
@@ -493,7 +493,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		executor_.insertIntoNewOrder(
 				clientID_,
-				nextNewOrderID_,
+				BaseTransaction::getNewOrderRID(),
 				cart.wID,
 				*localMemory_->getNewOrderHead(),
 				getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions,

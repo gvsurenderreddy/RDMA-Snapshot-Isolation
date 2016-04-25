@@ -33,10 +33,7 @@ protected:
 	RDMAContext *context_;
 	OracleContext *oracleContext_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
-	uint64_t nextOrderID_;
-	uint64_t nextNewOrderID_;
-	uint64_t nextOrderLineID_;
-	uint64_t nextHistoryID_;
+
 
 	ServerContext* getServerContext(uint16_t wID);
 	bool isRecordAccessible(const Timestamp &ts) const;
@@ -44,7 +41,21 @@ protected:
 	primitive::timestamp_t getNewCommitTimestamp();
 	std::string pointer_to_string(Timestamp* ts) const;
 	std::string readTimestampToString() const;
+	uint64_t getOrderRID() const;
+	uint64_t getNewOrderRID() const;
+	uint64_t getOrderLineRID() const;
+	uint64_t getHistoryRID() const;
+	void incrementOrderRID(size_t step);
+	void incrementNewOrderRID(size_t step);
+	void incrementOrderLineRID(size_t step);
+	void incrementHistoryRID(size_t step);
+	uint64_t reserveOrderLineRID(size_t orderLineCnt);
 
+private:
+	uint64_t nextOrderID_;
+	uint64_t nextNewOrderID_;
+	uint64_t nextOrderLineID_;
+	uint64_t nextHistoryID_;
 
 public:
 	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);

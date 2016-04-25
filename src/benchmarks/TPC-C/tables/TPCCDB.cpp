@@ -38,7 +38,11 @@ newOrderTable(os_, newOrderCnt, config::tpcc_settings::WAREHOUSE_PER_SERVER, dis
 historyTable(os_, historyCnt, versionNum, context, mrFlags_){
 
 	populate();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Tables populated successfully");
+
 	buildIndices();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Indices built successfully");
+
 }
 
 void TPCC::TPCCDB::populate() {
@@ -53,21 +57,28 @@ void TPCC::TPCCDB::populate() {
 
 	// first, populate the item table
 	itemTable.populate(initialTS, random_);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Item table populated successfully");
+
 
 	for (size_t warehouseOffset = 0; warehouseOffset < config::tpcc_settings::WAREHOUSE_PER_SERVER; warehouseOffset++){
 		uint16_t wID = warehouseIDs_.at(warehouseOffset);
 		// then populate the stock table for the given warehouse
 		stockTable.populate(warehouseOffset, wID, random_, itemCnt_, initialTS);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Stock table for warehouse " << wID << " populated successfully");
+
 
 		// insert the warehouse
 		warehouseTable.insert(warehouseOffset, wID, random_, initialTS);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Warehouse " << wID << " populated successfully");
+
 
 		for (unsigned char dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++dID) {
 			districtTable.insert(warehouseOffset, dID, wID, random_, initialTS);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] District table (wID: " << wID << ", dID: " << (int)dID << " populated successfully");
+
 
 			// Select 10% of the customers to have bad credit
-			std::set<int> selected_rows =
-					random_.selectUniqueIds(config::tpcc_settings::CUSTOMER_PER_DISTRICT/10, 1, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+			std::set<int> selected_rows = random_.selectUniqueIds(config::tpcc_settings::CUSTOMER_PER_DISTRICT/10, 1, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
 			for (unsigned short int cID = 0; cID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++cID) {
 				bool bad_credit = selected_rows.find(cID) != selected_rows.end();
 				customerTable.insert(warehouseOffset, cID, dID, wID, bad_credit, random_, now_, initialTS);
@@ -75,6 +86,8 @@ void TPCC::TPCCDB::populate() {
 				//			generateHistory(c_id, d_id, w_id, &h);
 				//			tables->insertHistory(h);
 			}
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Customers for wID: " << wID << ", dID: " << (int)dID << " populated successfully");
+
 
 			// TODO: TPC-C 4.3.3.1. says that this should be a permutation of [1, 3000]. But since it is
 			// for a c_id field, it seems to make sense to have it be a permutation of the customers.
@@ -100,7 +113,7 @@ void TPCC::TPCCDB::populate() {
 			//			delete[] permutation;
 		}
 	}
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] database populated successfully");
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] All database tables populated successfully");
 }
 
 void TPCC::TPCCDB::buildIndices() {

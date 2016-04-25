@@ -10,19 +10,15 @@
 #include <bitset>
 #include <climits>
 
-Timestamp::Timestamp(){
-	timestamp_ = 0;
-	clientID_ = 0;
-	lockStatus_ = 0;
-	versionOffset_ = 0;
+Timestamp::Timestamp(): Timestamp(true, false, 0, 0, 0){
+//	isLocked = false;
+//	isDeleted = true;
+//	clientID = 0;
+//	timestamp = 0;
+//	versionOffset = 0;
 }
 
 Timestamp::Timestamp(uint64_t ull) {
-//	timestamp_ = (primitive::timestamp_t) (ull >> 32);						// bits 1 - 32
-//	clientID_ = (primitive::client_id_t) ( (ull << 32) >> 48 );				// bits 33 - 48
-//	lockStatus_ = (primitive::lock_status_t) ( (ull << 48) >> 56);			// bits 49 - 56
-//	versionOffset_ = (primitive::version_offset_t) ( (ull << 56) >> 56); 	// bits 57 - 64
-
 	timestamp_ = (primitive::timestamp_t) ( (ull << 32 ) >> 32);						// bits 1 - 32
 	clientID_ = (primitive::client_id_t) ( (ull << 16) >> 48 );				// bits 33 - 48
 	lockStatus_ = (primitive::lock_status_t) ( (ull << 8) >> 56);			// bits 49 - 56
@@ -91,18 +87,6 @@ void Timestamp::setAll(const bool isDeleted, const bool isLocked, const primitiv
 	clientID_ = clientID;
 	timestamp_ = timestamp;
 }
-
-//const uint64_t Timestamp::toUUL() const {
-//	uint64_t uul;
-//	uul = (uint64_t)timestamp_;
-//	uul = uul << 32;
-//	uul += (uint64_t)clientID_;
-//	uul = uul << 16;
-//	uul += (uint64_t)lockStatus_;
-//	uul = uul << 8;
-//	uul += (uint64_t)versionOffset_;
-//	return uul;
-//}
 
 const uint64_t Timestamp::toUUL() const {
     std::string str = serializeAsBinary();

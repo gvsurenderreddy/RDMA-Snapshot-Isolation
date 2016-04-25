@@ -502,6 +502,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// update district (increment the next available order number D_NEXT_O_ID)
 	isLocked = false;
 	uint64_t old_D_NEXT_ID;
+	uint64_t orderRID = BaseTransaction::getOrderRID();
+	uint64_t newOrderRID = BaseTransaction::getNewOrderRID();
+	uint64_t orderLineRID = BaseTransaction::reserveOrderLineRID(cart.items.size());
+
 	if (config::APPLY_COMMUTATIVE_UPDATES){
 		executor_.retrieveAndIncrementDistrictNextOID(
 				cart.wID,
@@ -547,14 +551,14 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	executor_.insertIntoOrder(
 			clientID_,
-			nextOrderID_,
+			orderRID,
 			cart.wID,
 			*localMemory_->getOrderHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->orderTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
 
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order " << *ov << ". Table position: " << nextOrderID_);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order " << *ov << ". Table position: " << orderRID);
 
 
 	TPCC::NewOrderVersion *nov = localMemory_->getNewOrderHead()->getRegion();
@@ -566,13 +570,13 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	executor_.insertIntoNewOrder(
 			clientID_,
-			nextNewOrderID_,
+			newOrderRID,
 			cart.wID,
 			*localMemory_->getNewOrderHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->newOrderTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
 			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder " << *nov << ". Table position: " << nextNewOrderID_);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder " << *nov << ". Table position: " << newOrderRID);
 
 	// For each O_OL_CNT item on the order:
 	// |-- In Item table, I_PRICE, I_NAME and I_DATA are retrieved
@@ -634,7 +638,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 		executor_.insertIntoOrderLine(
 				clientID_,
-				(uint64_t)(nextOrderLineID_ + olNumber),
+				(uint64_t)(orderLineRID + olNumber),
 				olNumber,
 				cart.wID,
 				*localMemory_->getOrderLineHead(),
@@ -642,7 +646,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 				getServerContext(cart.wID)->getQP(),
 				signaled);
 
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine " << olv << ". Table position: " << nextOrderLineID_ + olNumber);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine " << olv << ". Table position: " << orderLineRID + olNumber);
 	}
 
 	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
@@ -661,16 +665,16 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			cart.dID,
 			cart.cID,
 			assignedOID,
-			nextOrderID_,
-			nextNewOrderID_,
-			nextOrderLineID_,
+			orderRID,
+			newOrderRID,
+			orderLineRID,
 			(uint8_t)cart.items.size(),
 			*serverCtx->getIndexRequestMessage(),
 			*serverCtx->getRegisterOrderIndexResponseMessage(),
 			serverCtx->getQP(),
 			true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Msg sent. Type: REGISTER_ORDER. Params: wID = " << (int)cart.wID
-			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << (int)nextOrderID_ << ", #orderlines: " << cart.items.size());
+			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << orderRID << ", #orderlines: " << cart.items.size());
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
@@ -707,9 +711,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
-	nextOrderID_++;
-	nextNewOrderID_++;
-	nextOrderLineID_ = (uint64_t)(nextOrderLineID_ + cart.items.size());
+	BaseTransaction::incrementOrderRID(1);
+	BaseTransaction::incrementNewOrderRID(1);
+	BaseTransaction::incrementOrderLineRID(cart.items.size());
 
 	clock_gettime(CLOCK_REALTIME, &afterCommitTime);
 

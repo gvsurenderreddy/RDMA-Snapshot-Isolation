@@ -348,7 +348,7 @@ int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channe
 	return 0;
 }
 
-int RDMACommon::build_connection(int ib_port, struct ibv_context** ib_ctx,
+int RDMACommon::build_connection(uint8_t ib_port, struct ibv_context** ib_ctx,
 		struct ibv_port_attr* port_attr, struct ibv_pd **pd, struct ibv_cq **send_cq, struct ibv_cq **recv_cq,
 		struct	ibv_comp_channel **send_comp_channel, struct ibv_comp_channel **recv_comp_channel, int cq_size)
 {

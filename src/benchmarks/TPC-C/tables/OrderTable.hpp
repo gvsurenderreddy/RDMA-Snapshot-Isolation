@@ -75,7 +75,6 @@ public:
 };
 
 class OrderTable{
-
 public:
 	RDMARegion<OrderVersion> 	*headVersions;
 	RDMARegion<Timestamp> 		*tsList;
@@ -91,17 +90,7 @@ public:
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<OrderVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 
-		bool isLocked = false;
-		bool isDeleted = true;
-		primitive::client_id_t clientID = 0;
-		primitive::timestamp_t timestamp = 0;
-		primitive::version_offset_t versionOffset = 0;
-		for (unsigned int  i = 0; i < size_; ++i) {
-			headVersions->getRegion()[i].writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			for (size_t j = 0; j < maxVersionsCnt_; j++){
-				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			}
-		}
+		DEBUG_WRITE(os_, "OrderTable", __func__, "[Info] Order table initialized");
 	}
 
 	//	void insert(uint32_t oID, uint32_t cID, uint8_t dID, uint16_t wID, bool newOrder,  TPCC::RandomGenerator& random, time_t now, Timestamp &ts){
@@ -175,7 +164,6 @@ public:
 		delete olderVersions;
 	}
 
-private:
 private:
 	struct OrderAddressIdentifier {
 	private:

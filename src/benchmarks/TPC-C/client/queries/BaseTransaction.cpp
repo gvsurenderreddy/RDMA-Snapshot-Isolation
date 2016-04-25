@@ -91,5 +91,46 @@ std::string BaseTransaction::readTimestampToString() const{
 	return ss.str();
 }
 
+uint64_t BaseTransaction::getOrderRID() const{
+	return nextOrderID_;
+}
+
+uint64_t BaseTransaction::getNewOrderRID() const{
+	return nextNewOrderID_;
+}
+
+uint64_t BaseTransaction::getOrderLineRID() const{
+	return nextOrderLineID_;
+}
+
+uint64_t BaseTransaction::getHistoryRID() const{
+	return nextHistoryID_;
+}
+
+void BaseTransaction::incrementOrderRID(size_t step){
+	nextOrderID_ = (uint64_t)( (nextOrderID_ + step) % config::tpcc_settings::ORDER_BUFFER_PER_CLIENT);
+}
+
+void BaseTransaction::incrementNewOrderRID(size_t step){
+	nextNewOrderID_ = (uint64_t)( (nextNewOrderID_ + step) % config::tpcc_settings::ORDER_BUFFER_PER_CLIENT);
+}
+
+void BaseTransaction::incrementOrderLineRID(size_t step){
+	nextOrderLineID_ = (uint64_t)( (nextOrderLineID_ + step) % (config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) );
+}
+
+void BaseTransaction::incrementHistoryRID(size_t step){
+	nextHistoryID_ = (uint64_t)( (nextHistoryID_ + step) % config::tpcc_settings::HISTORY_BUFFER_PER_CLIENT);
+}
+
+uint64_t BaseTransaction::reserveOrderLineRID(size_t orderLineCnt){
+	if ( (uint64_t)( (nextOrderLineID_ + orderLineCnt) < (config::tpcc_settings::ORDER_BUFFER_PER_CLIENT * tpcc_settings::ORDER_MAX_OL_CNT) ))
+		return nextOrderLineID_;
+	else {
+		// all the orderlines cannot fit into the table. so we start from the beginning.
+		nextOrderLineID_ = 0;
+		return nextOrderLineID_;
+	}
+}
 
 } /* namespace TPCC */

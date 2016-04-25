@@ -118,7 +118,6 @@ public:
 	RDMARegion<Timestamp> 	*tsList;
 	RDMARegion<CustomerVersion>	*olderVersions;
 
-
 	CustomerTable(std::ostream &os, size_t size, size_t warehouseCnt, size_t districtCnt, size_t maxVersionsCnt, RDMAContext &baseContext, int mrFlags)
 	: os_(os),
 	  size_(size),
@@ -128,16 +127,7 @@ public:
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<CustomerVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 
-		bool isLocked = false;
-		bool isDeleted = true;
-		primitive::client_id_t clientID = 0;
-		primitive::timestamp_t timestamp = 0;
-		primitive::version_offset_t versionOffset = 0;
-		for (unsigned int  i = 0; i < size_; ++i) {
-			for (size_t j = 0; j < maxVersionsCnt_; j++){
-				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			}
-		}
+		DEBUG_WRITE(os_, "CustomerTable", __func__, "[Info] Customer table initialized");
 	}
 
 	~CustomerTable(){

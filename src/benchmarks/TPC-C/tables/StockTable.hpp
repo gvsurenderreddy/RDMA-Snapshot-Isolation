@@ -84,8 +84,6 @@ public:
 };
 
 class StockTable{
-private:
-	std::ostream &os_;
 public:
 	RDMARegion<StockVersion> *headVersions;
 	RDMARegion<Timestamp> 	*tsList;
@@ -98,6 +96,8 @@ public:
 		headVersions 	= new RDMARegion<StockVersion>(size, baseContext, mrFlags);
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<StockVersion>(size * maxVersionsCnt, baseContext, mrFlags);
+
+		DEBUG_WRITE(os_, "StockTable", __func__, "[Info] Stock table initialized");
 	}
 
 	void populate(size_t warehouseOffset, uint16_t wID, TPCC::RandomGenerator& random, size_t itemsCnt, Timestamp& ts){
@@ -108,17 +108,6 @@ public:
 			bool is_original = selected_rows.find(i) != selected_rows.end();
 			headVersions->getRegion()[warehouseOffset * itemsCnt + i].stock.initialize(i, wID, is_original, random);
 			headVersions->getRegion()[warehouseOffset * itemsCnt + i].writeTimestamp.copy(ts);
-		}
-
-		bool isLocked = false;
-		bool isDeleted = true;
-		primitive::client_id_t clientID = 0;
-		primitive::timestamp_t timestamp = 0;
-		primitive::version_offset_t versionOffset = 0;
-		for (unsigned int  i = 0; i < size_; ++i) {
-			for (size_t j = 0; j < maxVersionsCnt_; j++){
-				tsList->getRegion()[i * maxVersionsCnt_ + j].setAll(isDeleted, isLocked, versionOffset, clientID, timestamp);
-			}
 		}
 	}
 
@@ -136,6 +125,7 @@ public:
 	}
 
 private:
+	std::ostream &os_;
 	size_t size_;
 	size_t maxVersionsCnt_;
 };
