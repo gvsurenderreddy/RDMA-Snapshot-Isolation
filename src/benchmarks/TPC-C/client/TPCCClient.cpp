@@ -162,7 +162,9 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		int r = random_.number(1, 100);
 		double d = (double) r / 100;
 		for (size_t i = 0; i < config::tpcc_settings::TRANSACTION_MIX_RATIOS.size(); i++){
-			if (d <= config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i)){
+			if (d <= config::tpcc_settings::TRANSACTION_MIX_RATIOS.at(i)
+					|| i == (config::tpcc_settings::TRANSACTION_MIX_RATIOS.size() - 1)	// this line is for dealing with double precision issues
+			){
 				trx = trxs[i].get();
 				break;
 			}

@@ -323,50 +323,53 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		// checks if locks are successful
 		abortFlag = false;
-		bool isNewOrderChanged = false;
-		bool isCustomerChanged = false;
-		bool isLineOrderChanged = false;
-		size_t largestChangedLineOrder = 0;
+		bool successfulOrderLock = false;
+		bool successfulNewOrderLock = false;
+		bool successfulCustomerLock = false;
+		std::vector<bool> successfulOrderLineLocks (oldestUndeliveredOrderRes->numOfOrderlines, false);
+		bool isAnyOrderLineSuccessful = false;
+		size_t largestSuccessfulOrderLineLock = 0;
 
 		if (! orderExistingLock.isEqual(orderV->writeTimestamp)) {
 			abortFlag = true;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock Order " << orderV->order << " was NOT successful "
 					<< "(expected: " << orderV->writeTimestamp << ", existing: " << orderExistingLock << ")");
 		}
+		else successfulOrderLock = true;
 
 		if (! newOrderExistingLock.isEqual(newOrderV->writeTimestamp)) {
 			abortFlag = true;
-			isNewOrderChanged = true;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock NewOrder " << newOrderV->newOrder << " was NOT successful "
 					<< "(expected: " << newOrderV->writeTimestamp << ", existing: " << newOrderExistingLock << ")");
 		}
+		else successfulNewOrderLock = true;
 
 		for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++){
 			if (! orderlineExistingLocks[olNumber].isEqual(orderLinesV[olNumber].writeTimestamp)) {
 				abortFlag = true;
-				isLineOrderChanged = true;
-				largestChangedLineOrder = olNumber;
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock OrderLine " << orderV->order << " was NOT successful "
 						<< "(expected: " << orderLinesV[olNumber].writeTimestamp << ", existing: " << orderlineExistingLocks[olNumber] << ")");
+			}
+			else {
+				successfulOrderLineLocks[olNumber] = true;
+				isAnyOrderLineSuccessful = true;
+				largestSuccessfulOrderLineLock = olNumber;
 			}
 		}
 
 		if (! customerExistingLock.isEqual(customerV->writeTimestamp)) {
 			abortFlag = true;
-			isCustomerChanged = true;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock Customer " << customerV->customer << " was NOT successful "
 					<< "(expected: " << customerV->writeTimestamp << ", existing: " << customerExistingLock << ")");
 		}
+		else successfulCustomerLock = true;
 
 		if (abortFlag){
 			// some locks couldn't get acquired. must first release the successful ones, then abort
-			size_t successfulLocks = 0;
 			bool signaled;
-			if (orderExistingLock.isEqual(orderV->writeTimestamp)) {
-				successfulLocks++;
-
+			if (successfulOrderLock) {
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
-				if (isNewOrderChanged || isLineOrderChanged || isCustomerChanged) signaled = false;
+				if (successfulNewOrderLock || isAnyOrderLineSuccessful || successfulCustomerLock) signaled = false;
 				else signaled = true;
 				executor_.revertOrderLock(
 						oldestUndeliveredOrderRes->clientWhoOrdered,
@@ -378,11 +381,9 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 						signaled);
 			}
 
-			if (newOrderExistingLock.isEqual(newOrderV->writeTimestamp)) {
-				successfulLocks++;
-
+			if (successfulNewOrderLock) {
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
-				if (isLineOrderChanged || isCustomerChanged) signaled = false;
+				if (isAnyOrderLineSuccessful || successfulCustomerLock) signaled = false;
 				else signaled = true;
 				executor_.revertNewOrderLock(
 						oldestUndeliveredOrderRes->clientWhoOrdered,
@@ -395,10 +396,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			}
 
 			for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++){
-				if (orderlineExistingLocks[olNumber].isEqual(orderLinesV[olNumber].writeTimestamp)) {
-					successfulLocks++;
-
-					if (olNumber != largestChangedLineOrder || isCustomerChanged) signaled = false;
+				if (successfulOrderLineLocks[olNumber]) {
+					if (olNumber != largestSuccessfulOrderLineLock || successfulCustomerLock) signaled = false;
 					else signaled = true;
 					executor_.revertOrderLineLock(
 							olNumber,
@@ -412,8 +411,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				}
 			}
 
-			if (customerExistingLock.isEqual(customerV->writeTimestamp)) {
-				successfulLocks++;
+			if (successfulCustomerLock) {
 				executor_.revertCustomerLock(
 						*localMemory_->getCustomerHead(),
 						serverCtx->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
@@ -421,7 +419,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 						true);
 			}
 
-			if (successfulLocks > 0) {
+			if (successfulOrderLock || successfulNewOrderLock || isAnyOrderLineSuccessful || successfulCustomerLock) {
 				TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
 			}
