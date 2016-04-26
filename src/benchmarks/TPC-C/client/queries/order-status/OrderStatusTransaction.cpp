@@ -138,7 +138,28 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved " << (int)largestOrderRes->numOfOrderlines << " lineitems for order with oID = " << (int)largestOrderRes->oID);
 
 
-	trxResult.result = TransactionResult::Result::COMMITTED;
+	// ************************************************
+	//	Check whether fetched items are from a consistent snapshot, and not locked
+	// ************************************************
+
+	bool abortFlag = false;
+	for (uint8_t olNumber = 0; olNumber < largestOrderRes->numOfOrderlines; olNumber++){
+		if (! isRecordAccessible(localMemory_->getOrderLineHead()->getRegion()[olNumber].writeTimestamp)){
+			// TODO: fetch older versions if the head version is inconsistent.
+			abortFlag = true;
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": OrderLine #" << (int)olNumber << ": "
+					<< localMemory_->getOrderLineHead()->getRegion()[olNumber] << " is not consistent (locked or from a later snapshot) --> ** ABORT **");
+			break;
+		}
+	}
+	// ************************************************
+	//	Submit the result to the oracle
+	// ************************************************
+	if (abortFlag) {
+		trxResult.result = TransactionResult::Result::ABORTED;
+		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
+	}
+	else trxResult.result = TransactionResult::Result::COMMITTED;
 	return trxResult;
 }
 

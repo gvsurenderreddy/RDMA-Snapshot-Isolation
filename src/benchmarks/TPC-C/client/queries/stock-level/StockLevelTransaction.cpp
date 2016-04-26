@@ -199,7 +199,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		}
 	}
 
-	for (int i = 0; i < retrieveOlderVersionCnt; i++)
+	for (unsigned i = 0; i < retrieveOlderVersionCnt; i++)
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each retrieval of an older version
 
 	if (abortFlag){
