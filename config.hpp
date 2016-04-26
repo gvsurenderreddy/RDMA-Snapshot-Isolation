@@ -17,17 +17,17 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (true)
-#define DEBUG_OUTPUT config::Output::FILE
+#define DEBUG_ENABLED (false)
+#define DEBUG_OUTPUT config::Output::SCREEN
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
 /* Server settings */
-static const int						SERVER_CNT	= 2;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.2.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680};
-static const std::vector<uint8_t>		IB_PORT		= {1, 1};
+static const int						SERVER_CNT	= 3;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.2.1", "192.168.3.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680, 45680};
+static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};
 static const size_t						SERVER_THREADS_CNT = 40;				// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
@@ -52,7 +52,7 @@ static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 10000;					// This is __per client__. For the experiments, we will use 100,000
+static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment

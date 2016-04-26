@@ -261,7 +261,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 					getServerContext(cart.wID)->getQP(),
 					true);
 			retrieveOlderVersionCnt++;
-
 		}
 	}
 	if (!abortFlag && ! isRecordAccessible(customerV->writeTimestamp)){

@@ -1082,6 +1082,31 @@ void DBExecutor::retrieveStock(size_t offsetInLocalRegion, uint32_t iID, uint16_
 			signaled));
 }
 
+void DBExecutor::retrieveStockOlderVersion(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, size_t versionOffset, RDMARegion<StockVersion> &localRegion, MemoryHandler<TPCC::StockVersion> &remoteMH, ibv_qp *qp, bool signaled){
+	// The remote address to read the warehouse tax
+	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t tableOffset = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID) * config::tpcc_settings::VERSION_NUM * sizeof(TPCC::StockVersion));	// offset of StockVersion in StockTable
+	size_t circularBufferOffset = (size_t) versionOffset * sizeof(TPCC::StockVersion);
+	TPCC::StockVersion *lookupAddress =  (StockVersion*)(tableOffset + circularBufferOffset + ((uint64_t)remoteMH.rdmaHandler_.addr));
+
+	// Size to be read from the remote side
+	uint32_t size = (uint32_t) sizeof(StockVersion);
+
+	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", versionOffset: " << (int)versionOffset);
+		exit(-1);
+	}
+
+	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(IBV_WR_RDMA_READ,
+			qp,
+			localRegion.getRDMAHandler(),
+			(uintptr_t)&localRegion.getRegion()[offsetInLocalRegion],
+			&remoteMH.rdmaHandler_,
+			(uintptr_t)lookupAddress,
+			size,
+			signaled));
+}
+
 void DBExecutor::retrieveStockPointerList(size_t offsetInLocalRegion, uint32_t iID, uint16_t wID, RDMARegion<Timestamp> &localRegion, MemoryHandler<Timestamp> &remoteMH, ibv_qp *qp, bool signaled){
 	// The remote address to read the item info
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);

@@ -67,19 +67,41 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 			*localMemory_->getDistrictHead(),
 			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
 			getServerContext(cart.wID)->getQP(),
+			false);
+
+	executor_.retrieveDistrictPointerList(
+			cart.wID,
+			cart.dID,
+			*localMemory_->getDistrictTS(),
+			serverCtx->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
+			serverCtx->getQP(),
 			true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	districtV = localMemory_->getDistrictHead()->getRegion();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District: " << districtV->district << " with D_NEXT_OID = " << (int)districtV->district.D_NEXT_O_ID);
-	if (! isRecordAccessible(districtV->writeTimestamp)){
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << districtV->district
-				<< " (" << districtV->writeTimestamp << ") is not consistent (locked or from a later snapshot) --> ** ABORT **");
 
-		// TODO: IMPORTANT: Instead of aborting, the client should fetch the older versions of district
-		trxResult.result = TransactionResult::Result::ABORTED;
-		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
-		return trxResult;;
+	if (! isRecordAccessible(districtV->writeTimestamp)){
+		int ind = findValidVersion(localMemory_->getDistrictTS()->getRegion(), config::tpcc_settings::VERSION_NUM);
+		if (ind < 0) {
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << *districtV << " and none of its versions are not consistent (locked or from a later snapshot) --> ** ABORT **");
+			trxResult.result = TransactionResult::Result::ABORTED;
+			trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
+			return trxResult;;
+		}
+		else{
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << *districtV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getDistrictTS()->getRegion()[ind] << ")");
+			executor_.retrieveDistrictOlderVersion(
+					cart.wID,
+					cart.dID,
+					(size_t)ind,
+					*localMemory_->getDistrictHead(),
+					serverCtx->getRemoteMemoryKeys()->getRegion()->districtTableOlderVersions,
+					serverCtx->getQP(),
+					true);
+			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveDistrictOlderVersion()
+			// note that districtV is not updated with a consistent version
+		}
 	}
 
 	executor_.getDistinctItemsForLastTwentyOrders(
@@ -127,8 +149,17 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 				itemIDs[i],
 				cart.wID,
 				*localMemory_->getStockHead(),
-				getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions,
-				getServerContext(cart.wID)->getQP(),
+				serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions,
+				serverCtx->getQP(),
+				false);
+
+		executor_.retrieveStockPointerList(
+				i,
+				itemIDs[i],
+				cart.wID,
+				*localMemory_->getStockTS(),
+				serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableTimestampList,
+				serverCtx->getQP(),
 				signaled);
 	}
 
@@ -139,14 +170,37 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	//	Check whether fetched items are from a consistent snapshot, and not locked
 	// ************************************************
 	bool abortFlag = false;
+	unsigned retrieveOlderVersionCnt = 0;
 	for (size_t i=0; i < orderlinesCnt; i++){
 		if (! isRecordAccessible(localMemory_->getStockHead()->getRegion()[i].writeTimestamp)){
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Stock " << localMemory_->getStockHead()->getRegion()[i].stock
-					<< " (" << localMemory_->getStockHead()->getRegion()[i].writeTimestamp << ") is not consistent (locked or from a later snapshot)");
-			abortFlag = true;
-			break;
+			int ind = findValidVersion(localMemory_->getStockTS()->getRegion(), config::tpcc_settings::VERSION_NUM);
+			if (ind < 0) {
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Stock " << localMemory_->getStockHead()->getRegion()[i] << " and none of its versions are not consistent (locked or from a later snapshot)");
+				abortFlag = true;
+				break;
+
+			}
+			else{
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Stock " << localMemory_->getStockHead()->getRegion()[i] << " is not consistent"
+						<< ", but its " << ind << "'s version is consistent (" << localMemory_->getStockTS()->getRegion()[ind] << ")");
+
+				executor_.retrieveStockOlderVersion(
+						i,
+						itemIDs[i],
+						cart.wID,
+						(size_t)ind,
+						*localMemory_->getStockHead(),
+						serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableOlderVersions,
+						serverCtx->getQP(),
+						true);
+
+				retrieveOlderVersionCnt++;
+			}
 		}
 	}
+
+	for (int i = 0; i < retrieveOlderVersionCnt; i++)
+		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each retrieval of an older version
 
 	if (abortFlag){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
