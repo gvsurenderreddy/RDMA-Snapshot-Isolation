@@ -12,7 +12,7 @@
 namespace TPCC {
 
 
-NewOrderTransaction::NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient)
+NewOrderTransaction::NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
 : BaseTransaction(os, "New Order", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
 	localMemory_ 	= new NewOrderLocalMemory(os_, *context_);
 }
@@ -311,8 +311,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
 
 		// write to log
-		recoveryClient_.writeResultToLog('A');
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+		if (config::recovery_settings::RECOVERY_ENABLED){
+			recoveryClient_->writeResultToLog('A');
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+		}
 
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
@@ -332,11 +334,12 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	//	Write the command to logs
 	// ************************************************
-	char command[config::recovery_settings::COMMAND_LOG_SIZE];
-	size_t messageSize = cart.logMessage(command);
-	recoveryClient_.writeCommandToLog(*localTimestampVector_, command, messageSize);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
-
+	if (config::recovery_settings::RECOVERY_ENABLED){
+		char command[config::recovery_settings::COMMAND_LOG_SIZE];
+		size_t messageSize = cart.logMessage(command);
+		recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
+	}
 
 	// ************************************************
 	// Acquire locks for records in write-set
@@ -460,8 +463,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 
-		recoveryClient_.writeResultToLog('A');
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+		if (config::recovery_settings::RECOVERY_ENABLED){
+			recoveryClient_->writeResultToLog('A');
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+		}
 
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
@@ -720,9 +725,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	//	Write the transaction result to log before committing
 	// ************************************************
-	recoveryClient_.writeResultToLog('C');
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
-
+	if (config::recovery_settings::RECOVERY_ENABLED){
+		recoveryClient_->writeResultToLog('C');
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+	}
 
 	// ************************************************
 	//	Submit the result to the oracle

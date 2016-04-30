@@ -34,7 +34,7 @@ protected:
 	RDMAContext *context_;
 	OracleContext *oracleContext_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
-	RecoveryClient &recoveryClient_;
+	RecoveryClient *recoveryClient_;
 
 
 	ServerContext* getServerContext(uint16_t wID);
@@ -62,7 +62,7 @@ private:
 public:
 	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt,
 			std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext,
-			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient);
+			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
 	std::string getTransactionName() const;
 	virtual TransactionResult doOne() = 0;
 	virtual ~BaseTransaction();

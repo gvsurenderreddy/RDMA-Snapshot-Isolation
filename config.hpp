@@ -17,7 +17,7 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (true)
+#define DEBUG_ENABLED (false)
 #define DEBUG_OUTPUT config::Output::SCREEN
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
@@ -50,14 +50,15 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
 
 namespace recovery_settings {
-static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);;
+static const bool		RECOVERY_ENABLED		= true;
+static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);
 static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;
 static const size_t 	COMMAND_LOG_SIZE 		= 200;
 }
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 100;				// This is __per client__. For the experiments, we will use 100,000
+static const unsigned				TRANSACTION_CNT 		= 100000;				// This is __per client__. For the experiments, we will use 100,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment

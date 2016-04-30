@@ -70,7 +70,8 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	// **********************************************
 	// Set up the Recovery Manager
 	// **********************************************
-	recoveryServer_ = new RecoveryServer(*os_, clientsCnt, *context_);
+	if (config::recovery_settings::RECOVERY_ENABLED)
+		recoveryServer_ = new RecoveryServer(*os_, clientsCnt, *context_);
 
 
 	// **********************************************
@@ -133,7 +134,9 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 				sizeof(IndexRequestMessage)));
 
 		// send memory locations using SEND
-		memoryKeysMessage_->getRegion()->logBuffer = recoveryServer_->getMemoryHandler((primitive::client_id_t)c);
+		if (config::recovery_settings::RECOVERY_ENABLED)
+			memoryKeysMessage_->getRegion()->logBuffer = recoveryServer_->getMemoryHandler((primitive::client_id_t)c);
+
 		TEST_NZ (RDMACommon::post_SEND (clientCtxs[c]->getQP(), memoryKeysMessage_->getRDMAHandler(), (uintptr_t)memoryKeysMessage_->getRegion(), sizeof(struct ServerMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
@@ -159,12 +162,6 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		delete clientCtxs[c];
 	}
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
-
-	for (size_t i = 0; i < config::recovery_settings::ENTRY_PER_LOG_JOURNAL; i++){
-		for (size_t j = 0; j < LogBuffer::getEntrySize(clientsCnt_); j++)
-			std::cout << recoveryServer_->logBuffers[0]->journal->getRegion()[i * LogBuffer::getEntrySize(clientsCnt_) + j];
-		std::cout << std::endl;
-	}
 }
 
 void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
@@ -276,7 +273,7 @@ TPCC::TPCCServer::~TPCCServer() {
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete memoryKeysMessage_;
 	delete db;
-	delete recoveryServer_;
+	if (config::recovery_settings::RECOVERY_ENABLED) delete recoveryServer_;
 	delete context_;
 
 	// if os_ == &std::cout, deleting os_ will result in core dumped

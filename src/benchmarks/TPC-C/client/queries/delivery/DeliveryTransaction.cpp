@@ -11,7 +11,7 @@
 #define CLASS_NAME "DeliveryTrx"
 
 namespace TPCC {
-DeliveryTransaction::DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient)
+DeliveryTransaction::DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
 : BaseTransaction(os, "Delivery", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
 	localMemory_ 	= new DeliveryLocalMemory(os_, *context_);
 }
@@ -240,11 +240,12 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		//	Write the command to logs
 		// ************************************************
-		char command[config::recovery_settings::COMMAND_LOG_SIZE];
-		size_t messageSize = cart.logMessage(dID, command);
-		recoveryClient_.writeCommandToLog(*localTimestampVector_, command, messageSize);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
-
+		if (config::recovery_settings::RECOVERY_ENABLED){
+			char command[config::recovery_settings::COMMAND_LOG_SIZE];
+			size_t messageSize = cart.logMessage(dID, command);
+			recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
+		}
 
 		// ************************************************
 		// Acquire locks for records in write-set
@@ -436,8 +437,10 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 
-			recoveryClient_.writeResultToLog('A');
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+			if (config::recovery_settings::RECOVERY_ENABLED){
+				recoveryClient_->writeResultToLog('A');
+				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+			}
 
 			trxResult.result = TransactionResult::Result::ABORTED;
 			trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
@@ -583,9 +586,10 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		//	Write the transaction result to log before committing
 		// ************************************************
-		recoveryClient_.writeResultToLog('C');
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
-
+		if (config::recovery_settings::RECOVERY_ENABLED){
+			recoveryClient_->writeResultToLog('C');
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+		}
 
 		// ************************************************
 		//	Submit the result to the oracle
