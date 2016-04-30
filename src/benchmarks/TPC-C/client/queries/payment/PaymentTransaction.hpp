@@ -13,6 +13,7 @@
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
+#include <sstream>
 
 namespace TPCC {
 
@@ -33,6 +34,16 @@ struct PaymentCart{
 		c.customerSelectionMode == LAST_NAME ? (os << " | LAST_NAME: " << c.cLastName) :  (os << " | cID: " << c.cID);
 		os << " | hAmount: " << c.hAmount;
 		return os;
+	}
+
+	size_t logMessage(char *destintionBuffer){
+		std::stringstream ss;
+		ss << "PaymentTrx:" << "w" << (int)wID << "|d" << (int)dID << "|rwID" << (int)residentWarehouseID << "|";
+		(customerSelectionMode == LAST_NAME) ? (ss << "LN:" << std::string(cLastName)) : (ss << "ID:" << cID);
+		ss << "|hAmount" << std::setprecision(5) << hAmount << "|";
+		std::string str = ss.str();
+		str.copy(destintionBuffer, str.size());
+		return str.size();
 	}
 };
 

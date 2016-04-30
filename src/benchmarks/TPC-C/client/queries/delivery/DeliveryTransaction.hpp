@@ -13,6 +13,7 @@
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
+#include <sstream>
 
 namespace TPCC {
 
@@ -24,6 +25,14 @@ struct DeliveryCart{
 	friend std::ostream& operator<<(std::ostream& os, const DeliveryCart& c) {
 		os << "wID:" << (int)c.wID << " | oCarrierID:" << (int)c.oCarrierID;
 		return os;
+	}
+
+	size_t logMessage(uint8_t dID, char *destintionBuffer){
+		std::stringstream ss;
+		ss << "DeliveryTrx:" << "w" << (int)wID << "|d" << (int)dID << "|oCarrierID" << (int)oCarrierID << "|olDeliveryID" << olDeliveryD << "|";
+		std::string str = ss.str();
+		str.copy(destintionBuffer, str.size());
+		return str.size();
 	}
 };
 

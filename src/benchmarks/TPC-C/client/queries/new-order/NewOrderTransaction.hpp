@@ -13,6 +13,7 @@
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
+#include <sstream>
 
 
 namespace TPCC {
@@ -33,6 +34,17 @@ struct NewOrderCart{
 		for(auto const& value: c.items)
 			os << " {i:" << value.I_ID << " | W:" << value.OL_SUPPLY_W_ID << "},";
 		return os;
+	}
+
+	size_t logMessage(char *destintionBuffer){
+		std::stringstream ss;
+		ss << "NewOrderTrx:" << "w" << (int)wID << "|d" << (int)dID << "|c" << (int)cID << "|n" << items.size() << "|";
+		for(auto const& value: items)
+			ss << value.I_ID << "," << value.OL_SUPPLY_W_ID << "|";
+
+		std::string str = ss.str();
+		str.copy(destintionBuffer, str.size());
+		return str.size();
 	}
 };
 

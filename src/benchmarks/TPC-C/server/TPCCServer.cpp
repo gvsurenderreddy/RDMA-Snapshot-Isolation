@@ -159,6 +159,12 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 		delete clientCtxs[c];
 	}
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
+
+	for (size_t i = 0; i < config::recovery_settings::ENTRY_PER_LOG_JOURNAL; i++){
+		for (size_t j = 0; j < LogBuffer::getEntrySize(clientsCnt_); j++)
+			std::cout << recoveryServer_->logBuffers[0]->journal->getRegion()[i * LogBuffer::getEntrySize(clientsCnt_) + j];
+		std::cout << std::endl;
+	}
 }
 
 void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {

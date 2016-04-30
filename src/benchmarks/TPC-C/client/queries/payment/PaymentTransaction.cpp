@@ -145,6 +145,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		if (serverCtx->getCustomerNameIndexResponseMessage()->getRegion()->isSuccessful == false){
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
+
+			// write to log
+			recoveryClient_.writeResultToLog('C');
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+
 			trxResult.result = TransactionResult::Result::COMMITTED;
 			return trxResult;
 		}
@@ -206,6 +211,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 	if (abortFlag == true) {
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+
+		// write to log
+		recoveryClient_.writeResultToLog('A');
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;
@@ -218,6 +228,15 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// ************************************************
 	primitive::timestamp_t cts = getNewCommitTimestamp();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
+
+
+	// ************************************************
+	//	Write the command to logs
+	// ************************************************
+	char command[config::recovery_settings::COMMAND_LOG_SIZE];
+	size_t messageSize = cart.logMessage(command);
+	recoveryClient_.writeCommandToLog(*localTimestampVector_, command, messageSize);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 
 
 	// ************************************************
@@ -340,6 +359,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		}
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
+
+		// write to log
+		recoveryClient_.writeResultToLog('A');
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;
@@ -494,6 +518,14 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)BaseTransaction::getHistoryRID());
 	BaseTransaction::incrementHistoryRID(1);
+
+
+	// ************************************************
+	//	Write the transaction result to log before committing
+	// ************************************************
+	recoveryClient_.writeResultToLog('C');
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+
 
 	// ************************************************
 	//	Submit the result to the oracle

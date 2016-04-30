@@ -220,6 +220,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		if (abortFlag == true) {
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
+
 			trxResult.result = TransactionResult::Result::ABORTED;
 			trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 			continue;
@@ -234,6 +235,15 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		primitive::timestamp_t cts = getNewCommitTimestamp();
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
+
+
+		// ************************************************
+		//	Write the command to logs
+		// ************************************************
+		char command[config::recovery_settings::COMMAND_LOG_SIZE];
+		size_t messageSize = cart.logMessage(dID, command);
+		recoveryClient_.writeCommandToLog(*localTimestampVector_, command, messageSize);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 
 
 		// ************************************************
@@ -425,8 +435,13 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			}
 
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
+
+			recoveryClient_.writeResultToLog('A');
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
+
 			trxResult.result = TransactionResult::Result::ABORTED;
 			trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
+
 			//return trxResult;
 			continue;
 		}
@@ -563,6 +578,13 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_DELIVERY");
 
 		clock_gettime(CLOCK_REALTIME, &afterUpdateTime);
+
+
+		// ************************************************
+		//	Write the transaction result to log before committing
+		// ************************************************
+		recoveryClient_.writeResultToLog('C');
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
 
 
 		// ************************************************

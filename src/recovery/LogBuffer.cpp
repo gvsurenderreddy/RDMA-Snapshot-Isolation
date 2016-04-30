@@ -8,6 +8,8 @@
 #include "LogBuffer.hpp"
 #include "../basic-types/PrimitiveTypes.hpp"
 #include "../../config.hpp"
+#include <cstring>
+
 
 #define CLASS_NAME "LogBuffer"
 
@@ -18,6 +20,7 @@ const size_t LogBuffer::serializedTimestampCharCnt = sizeof(primitive::timestamp
 LogBuffer::LogBuffer(std::ostream &os, size_t clientsCnt, RDMAContext &context)
 : os_(os){
 	journal = new RDMARegion<char>(config::recovery_settings::ENTRY_PER_LOG_JOURNAL * getEntrySize(clientsCnt), context, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+	std::memset(journal->getRegion(), 0, journal->getRegionSizeInByte());
 }
 
 LogBuffer::~LogBuffer(){
@@ -33,6 +36,12 @@ void LogBuffer::serializeUnsignedINT32_t(char buff[serializedTimestampCharCnt], 
 }
 
 size_t LogBuffer::getEntrySize(size_t clientsCnt){
+	size_t snapshotSize = clientsCnt * serializedTimestampCharCnt;
+	size_t trxOutcomeSize = 1;	// either C (for committed), or A (for aborted)
+	return snapshotSize + config::recovery_settings::COMMAND_LOG_SIZE + trxOutcomeSize;
+}
+
+size_t LogBuffer::getOffsetOfTrxOutcome(size_t clientsCnt){
 	size_t snapshotSize = clientsCnt * serializedTimestampCharCnt;
 	return snapshotSize + config::recovery_settings::COMMAND_LOG_SIZE;
 }

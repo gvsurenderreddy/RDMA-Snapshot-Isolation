@@ -25,6 +25,7 @@ public:
 
 	static void serializeUnsignedINT32_t(char *buff, uint32_t number);
 	static size_t getEntrySize(size_t clientsCnt);
+	static size_t getOffsetOfTrxOutcome(size_t clientsCnt);
 
 	LogBuffer& operator=(const LogBuffer&) = delete;	// Disallow copying
 	LogBuffer(const LogBuffer&) = delete;				// Disallow copying

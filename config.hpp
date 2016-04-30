@@ -17,17 +17,17 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (false)
+#define DEBUG_ENABLED (true)
 #define DEBUG_OUTPUT config::Output::SCREEN
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
 /* Server settings */
-static const size_t						SERVER_CNT	= 2;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.1.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681};
-static const std::vector<uint8_t>		IB_PORT		= {1, 1};
+static const size_t						SERVER_CNT	= 1;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680};
+static const std::vector<uint8_t>		IB_PORT		= {1};
 static const size_t						SERVER_THREADS_CNT = 40;				// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
@@ -50,20 +50,20 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
 
 namespace recovery_settings {
-static const size_t 	LOG_REPLICATION_DEGREE	= 2;
-static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 10;
-static const size_t 	COMMAND_LOG_SIZE 		= 100;
+static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);;
+static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;
+static const size_t 	COMMAND_LOG_SIZE 		= 200;
 }
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 10000;				// This is __per client__. For the experiments, we will use 100,000
+static const unsigned				TRANSACTION_CNT 		= 100;				// This is __per client__. For the experiments, we will use 100,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
-		1.0, // 0.45,	// Ratio of New Order
-		0.0, // 0.43,	// Ratio of Payment
-		0.0, // 0.04,	// Ratio of Order-Status
-		0.0, // 0.04,	// Ratio of Delivery
-		0.0}; //0.04};	// Ratio of Stock-Level.
+		0.45,	// Ratio of New Order
+		0.43,	// Ratio of Payment
+		0.04,	// Ratio of Order-Status
+		0.04,	// Ratio of Delivery
+		0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
 static const size_t WAREHOUSE_PER_SERVER		= 1;
