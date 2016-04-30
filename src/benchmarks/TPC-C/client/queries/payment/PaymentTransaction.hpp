@@ -12,6 +12,7 @@
 #include "PaymentLocalMemory.hpp"
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
+#include "../../../../../recovery/RecoveryClient.hpp"
 
 namespace TPCC {
 
@@ -53,7 +54,7 @@ private:
 	PaymentCart buildCart();
 
 public:
-	PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient);
 	virtual ~PaymentTransaction();
 	PaymentTransaction& operator=(const PaymentTransaction&) = delete;	// Disallow copying
 	PaymentTransaction(const PaymentTransaction&) = delete;				// Disallow copying

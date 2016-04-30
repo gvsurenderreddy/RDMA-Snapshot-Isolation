@@ -11,8 +11,8 @@
 #define CLASS_NAME "DeliveryTrx"
 
 namespace TPCC {
-DeliveryTransaction::DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction(os, "Delivery", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+DeliveryTransaction::DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient)
+: BaseTransaction(os, "Delivery", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
 	localMemory_ 	= new DeliveryLocalMemory(os_, *context_);
 }
 

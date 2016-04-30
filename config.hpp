@@ -24,14 +24,14 @@ static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you 
 
 
 /* Server settings */
-static const int						SERVER_CNT	= 3;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.2.1", "192.168.3.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680, 45680};
-static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};
+static const size_t						SERVER_CNT	= 2;
+static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1", "192.168.1.1"};
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681};
+static const std::vector<uint8_t>		IB_PORT		= {1, 1};
 static const size_t						SERVER_THREADS_CNT = 40;				// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
-static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.4.1";	// only relevant for Tranditional-SI
+static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
 static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;			// only relevant for Tranditional-SI
 static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;				// only relevant for Tranditional-SI
 
@@ -49,28 +49,33 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 
 static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
 
+namespace recovery_settings {
+static const size_t 	LOG_REPLICATION_DEGREE	= 2;
+static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 10;
+static const size_t 	COMMAND_LOG_SIZE 		= 100;
+}
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const int					TRANSACTION_CNT 		= 100000;					// This is __per client__. For the experiments, we will use 100,000
+static const unsigned				TRANSACTION_CNT 		= 10000;				// This is __per client__. For the experiments, we will use 100,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
-		0.45,	// Ratio of New Order
-		0.43,	// Ratio of Payment
-		0.04,	// Ratio of Order-Status
-		0.04,	// Ratio of Delivery
-		0.04};	// Ratio of Stock-Level.
+		1.0, // 0.45,	// Ratio of New Order
+		0.0, // 0.43,	// Ratio of Payment
+		0.0, // 0.04,	// Ratio of Order-Status
+		0.0, // 0.04,	// Ratio of Delivery
+		0.0}; //0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
-static const int WAREHOUSE_PER_SERVER		= 1;
-static const int WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
-static const int ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
-static const int DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
-static const int CUSTOMER_PER_DISTRICT		= 3000; 		// TPCC default is 3000;
-static const int STOCK_PER_WAREHOUSE		= ITEMS_CNT;
-static const int ORDER_BUFFER_PER_CLIENT	= 1000;			// The buffer size allocated to each client for storing orders/new orders/orderlines. In the ideal case, this should be TRANSACTION_CNT.
-static const int HISTORY_BUFFER_PER_CLIENT	= 1000;			// the buffer size allocated to each client for storing history. In the ideal case, this should be TRANSACTION_CNT.
-static const double REMOTE_WAREHOUSE_PROB	= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
-static const int VERSION_NUM 				= 3;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
+static const size_t WAREHOUSE_PER_SERVER		= 1;
+static const size_t WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
+static const size_t ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
+static const size_t DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
+static const size_t CUSTOMER_PER_DISTRICT		= 3000; 		// TPCC default is 3000;
+static const size_t STOCK_PER_WAREHOUSE			= ITEMS_CNT;
+static const size_t ORDER_BUFFER_PER_CLIENT		= 1000;			// The buffer size allocated to each client for storing orders/new orders/orderlines. In the ideal case, this should be TRANSACTION_CNT.
+static const size_t HISTORY_BUFFER_PER_CLIENT	= 1000;			// the buffer size allocated to each client for storing history. In the ideal case, this should be TRANSACTION_CNT.
+static const double REMOTE_WAREHOUSE_PROB		= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
+static const size_t VERSION_NUM 				= 3;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
 }	// namespace tpcc_settings
 
 

@@ -24,16 +24,6 @@ DBExecutor::DBExecutor(std::ostream &os)
 
 }
 
-template <typename T>
-bool DBExecutor::isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH) {
-	if ((lookupAddress < (uintptr_t) remoteMH.rdmaHandler_.addr) || (lookupAddress >= (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_)){
-		PRINT_CERR(CLASS_NAME, __func__, "Accessing outside the region: " << lookupAddress << " NOT IN ["
-				<< (uintptr_t) remoteMH.rdmaHandler_.addr << ", " << (uintptr_t)remoteMH.rdmaHandler_.addr + remoteMH.regionSizeInBytes_ << ") range. Region size: " << (int)remoteMH.regionSize_);
-		return false;
-	}
-	else return true;
-}
-
 void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
 
@@ -201,7 +191,7 @@ void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegio
 	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
 
-	if(isAddressInRange<primitive::timestamp_t>((uintptr_t)lookupAddress, remoteMH) == false){
+	if(remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Error in timestamp acquisition");
 		exit(-1);
 	}
@@ -226,7 +216,7 @@ void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primit
 
 	uint32_t size = (uint32_t) sizeof(primitive::timestamp_t);
 
-	if (isAddressInRange<primitive::timestamp_t>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: clientID_ = " << clientID);
 		exit(-1);
 	}
@@ -251,7 +241,7 @@ void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &l
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(WarehouseVersion);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID );
 		exit(-1);
 	}
@@ -276,7 +266,7 @@ void DBExecutor::retrieveWarehouseOlderVersion(uint16_t wID, size_t versionOffse
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(WarehouseVersion);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", versionOffset: " << (int)versionOffset);
 		exit(-1);
 	}
@@ -302,7 +292,7 @@ void DBExecutor::retrieveWarehouseTax(uint16_t wID, RDMARegion<TPCC::WarehouseVe
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(float);	// Warehouse::W_TAX is of type float
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID );
 		exit(-1);
 	}
@@ -326,7 +316,7 @@ void DBExecutor::retrieveWarehousePointerList(uint16_t wID, RDMARegion<Timestamp
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -354,7 +344,7 @@ void DBExecutor::lockWarehouse(TPCC::WarehouseVersion &warehouseV, Timestamp &ne
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -383,7 +373,7 @@ void DBExecutor::revertWarehouseLock(RDMARegion<TPCC::WarehouseVersion> &localRe
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -418,7 +408,7 @@ void DBExecutor::updateWarehousePointers(TPCC::WarehouseVersion &oldHead, RDMARe
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -447,7 +437,7 @@ void DBExecutor::updateWarehouseOlderVersions(RDMARegion<TPCC::WarehouseVersion>
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -473,7 +463,7 @@ void DBExecutor::updateWarehouse(RDMARegion<TPCC::WarehouseVersion> &localRegion
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
 
-	if (isAddressInRange<TPCC::WarehouseVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -510,7 +500,7 @@ void DBExecutor::retrieveDistrict(uint16_t wID, uint8_t dID, RDMARegion<District
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -535,7 +525,7 @@ void DBExecutor::retrieveDistrictOlderVersion(uint16_t wID, uint8_t dID, size_t 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(DistrictVersion);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", versionOffset: " << (int)versionOffset);
 		exit(-1);
 	}
@@ -561,7 +551,7 @@ void DBExecutor::retrieveDistrictTax(uint16_t wID, uint8_t dID, RDMARegion<Distr
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(float);	// District::D_TAX is of type float
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -585,7 +575,7 @@ void DBExecutor::retrieveDistrictPointerList(uint16_t wID, uint8_t dID, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -612,7 +602,7 @@ void DBExecutor::retrieveAndIncrementDistrictNextOID(uint16_t wID, uint8_t dID, 
 	size_t size = sizeof(localRegion.getRegion()->district.D_NEXT_O_ID);
 	assert(size == sizeof(uint64_t));
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -643,7 +633,7 @@ void DBExecutor::lockDistrict(TPCC::DistrictVersion &districtV, Timestamp &newTS
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -672,7 +662,7 @@ void DBExecutor::revertDistrictLock(RDMARegion<TPCC::DistrictVersion> &localRegi
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -709,7 +699,7 @@ void DBExecutor::updateDistrictPointers(TPCC::DistrictVersion &oldHead, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -740,7 +730,7 @@ void DBExecutor::updateDistrictOlderVersions(RDMARegion<TPCC::DistrictVersion> &
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -767,7 +757,7 @@ void DBExecutor::updateDistrict(RDMARegion<TPCC::DistrictVersion> &localRegion, 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (isAddressInRange<TPCC::DistrictVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID);
 		exit(-1);
 	}
@@ -796,7 +786,7 @@ void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMAR
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
 		exit(-1);
 	}
@@ -824,7 +814,7 @@ void DBExecutor::retrieveCustomerOlderVersion(uint16_t wID, uint8_t dID, uint32_
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(CustomerVersion);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID << ", versionOffset: " << (int)versionOffset);
 		exit(-1);
 	}
@@ -852,7 +842,7 @@ void DBExecutor::retrieveCustomerPointerList(uint16_t wID, uint8_t dID, uint32_t
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -884,7 +874,7 @@ void DBExecutor::lockCustomer(TPCC::CustomerVersion &customerV, Timestamp &newTS
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << cID);
 		exit(-1);
 	}
@@ -915,7 +905,7 @@ void DBExecutor::revertCustomerLock(RDMARegion<TPCC::CustomerVersion> &localRegi
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
 		exit(-1);
 	}
@@ -954,7 +944,7 @@ void DBExecutor::updateCustomerPointers(TPCC::CustomerVersion &oldHead, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
 		exit(-1);
 	}
@@ -987,7 +977,7 @@ void DBExecutor::updateCustomerOlderVersions(RDMARegion<TPCC::CustomerVersion> &
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
 		exit(-1);
 	}
@@ -1017,7 +1007,7 @@ void DBExecutor::updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (isAddressInRange<TPCC::CustomerVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", dID = " << (int)dID << ", cID = " << (int)cID);
 		exit(-1);
 	}
@@ -1043,7 +1033,7 @@ void DBExecutor::retrieveItem(size_t offsetInLocalRegion, uint32_t iID, uint16_t
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::ItemVersion);
 
-	if (isAddressInRange<TPCC::ItemVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: wID = " << (int)wID << ", iID = " << (int)iID);
 		exit(-1);
 	}
@@ -1067,7 +1057,7 @@ void DBExecutor::retrieveStock(size_t offsetInLocalRegion, uint32_t iID, uint16_
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID);
 		exit(-1);
 	}
@@ -1092,7 +1082,7 @@ void DBExecutor::retrieveStockOlderVersion(size_t offsetInLocalRegion, uint32_t 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(StockVersion);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", versionOffset: " << (int)versionOffset);
 		exit(-1);
 	}
@@ -1117,7 +1107,7 @@ void DBExecutor::retrieveStockPointerList(size_t offsetInLocalRegion, uint32_t i
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 	size_t offset = (size_t) offsetInLocalRegion * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
-	if (isAddressInRange<Timestamp>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1141,7 +1131,7 @@ void DBExecutor::lockStock(size_t offsetInLocalRegion, uint32_t iID, uint16_t wI
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1170,7 +1160,7 @@ void DBExecutor::revertStockLock(size_t offsetInLocalRegion, uint32_t iID, uint1
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)iID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1205,7 +1195,7 @@ void DBExecutor::updateStockPointers(size_t offsetInLocalRegion, StockVersion *o
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (isAddressInRange<Timestamp>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1235,7 +1225,7 @@ void DBExecutor::updateStockOlderVersions(size_t offsetInLocalRegion, StockVersi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(StockVersion);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		std::cout << "timestamp: " << oldHead->writeTimestamp << std::endl;
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)oldHead->stock.S_I_ID
 				<< ", versionOffset: " << (int)versionOffset << ", tableOffset: " << (int)tableOffset << ", circularBufferOffset: " << (int)circularBufferOffset);
@@ -1261,7 +1251,7 @@ void DBExecutor::retrieveOrder(primitive::client_id_t clientID, size_t clientReg
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
 
-	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1285,7 +1275,7 @@ void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, size_t clientR
 	// Size to be written to the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
 
-	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -1309,7 +1299,7 @@ void DBExecutor::lockOrder(TPCC::OrderVersion &orderV, primitive::client_id_t cl
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1338,7 +1328,7 @@ void DBExecutor::revertOrderLock(primitive::client_id_t clientID, size_t clientR
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::OrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1364,7 +1354,7 @@ void DBExecutor::retrieveNewOrder(primitive::client_id_t clientID, size_t client
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
 
-	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1388,7 +1378,7 @@ void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t cl
 	// Size to be written tothe remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
 
-	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID);
 		exit(-1);
 	}
@@ -1412,7 +1402,7 @@ void DBExecutor::lockNewOrder(TPCC::NewOrderVersion &orderV, primitive::client_i
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1441,7 +1431,7 @@ void DBExecutor::revertNewOrderLock(primitive::client_id_t clientID, size_t clie
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::NewOrderVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", clientRegionOffset = " << (int)clientRegionOffset);
 		exit(-1);
 	}
@@ -1466,7 +1456,7 @@ void DBExecutor::updateStock(size_t offsetInLocalRegion, TPCC::StockVersion *sto
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
 
-	if (isAddressInRange<TPCC::StockVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: warehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID << ", iID = " << (int)stockV->stock.S_I_ID << ", olNumber = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1490,7 +1480,7 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t c
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
 
-	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1514,7 +1504,7 @@ void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wI
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (sizeof(TPCC::OrderLineVersion) * numOfOrderlines);
 
-	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)lookupAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", #orderlines = " << (int)numOfOrderlines);
 		exit(-1);
 	}
@@ -1538,7 +1528,7 @@ void DBExecutor::lockOrderLine(size_t offsetInLocalRegion, TPCC::OrderLineVersio
 
 	uint32_t size = (uint32_t) sizeof(uint64_t);
 
-	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1567,7 +1557,7 @@ void DBExecutor::revertOrderLineLock(size_t offsetInLocalRegion, primitive::clie
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (isAddressInRange<TPCC::OrderLineVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: ClientID: " << (int)clientID << ", WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", offsetInLocalRegion = " << (int)offsetInLocalRegion);
 		exit(-1);
 	}
@@ -1593,7 +1583,7 @@ void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::HistoryVersion);
 
-	if (isAddressInRange<TPCC::HistoryVersion>((uintptr_t)writeAddress, remoteMH) == false){
+	if (remoteMH.isAddressInRange((uintptr_t)writeAddress) == false){
 		PRINT_CERR(CLASS_NAME, __func__, "Parameters causing the error: WarehouseOffset = " << (int)warehouseOffset << ", wID = " << (int)wID  << ", hID = " << (int)hID);
 		exit(-1);
 	}

@@ -24,6 +24,9 @@
 namespace TPCC{
 struct ServerMemoryKeys{
 public:
+	unsigned serverInstanceNum;
+	MemoryHandler<char>						logBuffer;
+
 	MemoryHandler<TPCC::CustomerVersion>	customerTableHeadVersions;
 	MemoryHandler<Timestamp>				customerTableTimestampList;
 	MemoryHandler<TPCC::CustomerVersion>	customerTableOlderVersions;
@@ -59,10 +62,6 @@ public:
 	MemoryHandler<TPCC::WarehouseVersion>	warehouseTableHeadVersions;
 	MemoryHandler<Timestamp>				warehouseTableTimestampList;
 	MemoryHandler<TPCC::WarehouseVersion>	warehouseTableOlderVersions;
-
-
-
-	unsigned serverInstanceNum;
 };
 }	// namespace TPCC
 

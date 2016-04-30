@@ -35,8 +35,6 @@ namespace TPCC {
 class DBExecutor {
 private:
 	std::ostream &os_;
-	template <typename T>
-	bool isAddressInRange(uintptr_t lookupAddress, MemoryHandler<T> remoteMH);
 
 public:
 	virtual ~DBExecutor();

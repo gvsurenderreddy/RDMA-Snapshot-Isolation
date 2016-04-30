@@ -14,8 +14,8 @@
 namespace TPCC {
 
 
-PaymentTransaction::PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction(os, "Payment", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+PaymentTransaction::PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient)
+: BaseTransaction(os, "Payment", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
 	localMemory_ 	= new PaymentLocalMemory(os_, *context_);
 }
 

@@ -85,7 +85,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	// ************************************************
 	//	Connect to Servers
 	// ************************************************
-	for (int i = 0; i < config::SERVER_CNT; i++){
+	for (size_t i = 0; i < config::SERVER_CNT; i++){
 		TEST_NZ (utils::establish_tcp_connection(config::SERVER_ADDR[i], config::TCP_PORT[i], &sockfd));
 
 		// build server context
@@ -111,15 +111,26 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	TPCC::DBExecutor executor_(*os_);
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
+	// ************************************************
+	//	Setup the ReplicationClient
+	// ************************************************
+	std::vector<std::pair<MemoryHandler<char>, ibv_qp*> > logServers;
+	for (unsigned i = 0; i < config::recovery_settings::LOG_REPLICATION_DEGREE; i++){
+		size_t serverID = (size_t)((clientID_ % config::SERVER_CNT + i) % config::SERVER_CNT);
+		logServers.push_back(std::make_pair(dsCtx_[serverID]->getRemoteMemoryKeys()->getRegion()->logBuffer, dsCtx_[serverID]->getQP()));
+	}
+	recoveryClient_ = new RecoveryClient(*os_, clientID_, clientCnt_, logServers, *context_);
+
+
 
 	// ************************************************
 	//	Preparing the transactions
 	// ************************************************
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_, *recoveryClient_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_, *recoveryClient_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_, *recoveryClient_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_, *recoveryClient_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*os_, executor_, clientID_, clientCnt_, dsCtx_, sessionState_, &random_, context_, oracleContext_, localTimestampVector_, *recoveryClient_)));
 
 
 	struct timespec trxBeginTime, trxFinishTime;
@@ -155,7 +166,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	//	Running the transactions
 	// ************************************************
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Starting transactions ");
-	for (int t = 0; t < config::tpcc_settings::TRANSACTION_CNT; t++){
+	for (unsigned t = 0; t < config::tpcc_settings::TRANSACTION_CNT; t++){
 		// decided which transaction to execute
 		BaseTransaction *trx;
 
@@ -226,7 +237,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	}
 
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << " is done, and is ready to destroy its resources!");
-	for (int i = 0; i < config::SERVER_CNT; i++){
+	for (size_t i = 0; i < config::SERVER_CNT; i++){
 		TPCC::IndexRequestMessage *req = dsCtx_[i]->getIndexRequestMessage()->getRegion();
 		req->clientID = clientID_;
 		req->operationType = TPCC::IndexRequestMessage::OperationType::TERMINATE;
@@ -254,6 +265,7 @@ TPCC::TPCCClient::~TPCCClient(){
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Destructor called");
 	delete localTimestampVector_;
 	delete oracleContext_;
+	delete recoveryClient_;
 	delete context_;
 	delete sessionState_;
 

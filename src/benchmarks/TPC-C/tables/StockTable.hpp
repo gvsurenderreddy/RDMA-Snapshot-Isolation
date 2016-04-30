@@ -42,7 +42,7 @@ public:
 		S_YTD = 0;
 		S_ORDER_CNT = 0;
 		S_REMOTE_CNT = 0;
-		for (int i = 0; i < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++i) {
+		for (size_t i = 0; i < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++i) {
 			random.astring(S_DIST[i], sizeof(S_DIST[i]), sizeof(S_DIST[i]));
 		}
 		random.astring(S_DATA, STOCK_MIN_DATA, STOCK_MAX_DATA);

@@ -14,6 +14,7 @@
 #include "../SessionState.hpp"
 #include "../../../../oracle/OracleContext.hpp"
 #include "../../../../basic-types/PrimitiveTypes.hpp"
+#include "../../../../recovery/RecoveryClient.hpp"
 #include <vector>
 #include <string>
 
@@ -33,6 +34,7 @@ protected:
 	RDMAContext *context_;
 	OracleContext *oracleContext_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
+	RecoveryClient &recoveryClient_;
 
 
 	ServerContext* getServerContext(uint16_t wID);
@@ -58,7 +60,9 @@ private:
 	uint64_t nextHistoryID_;
 
 public:
-	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt,
+			std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext,
+			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient);
 	std::string getTransactionName() const;
 	virtual TransactionResult doOne() = 0;
 	virtual ~BaseTransaction();

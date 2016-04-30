@@ -12,6 +12,8 @@
 #include "NewOrderLocalMemory.hpp"
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
+#include "../../../../../recovery/RecoveryClient.hpp"
+
 
 namespace TPCC {
 struct NewOrderItem {
@@ -52,7 +54,7 @@ private:
 	NewOrderCart buildCart();
 
 public:
-	NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector);
+	NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient);
 	virtual ~NewOrderTransaction();
 	TPCC::TransactionResult doOne();
 

@@ -11,7 +11,7 @@ QUERIES		:= $(TPC)/client/queries
 CLIENT_MODULES	:= $(TPC)/client $(QUERIES) $(QUERIES)/new-order $(QUERIES)/payment $(QUERIES)/order-status $(QUERIES)/delivery $(QUERIES)/stock-level
 SERVER_MODULES	:= $(TPC)/server 
 INDEX_MODULES	:= index/hash $(TPC)/index-messages
-EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
+EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle recovery $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
 
 TEST_MODULES	:= unit-tests unit-tests/index unit-tests/TPCC unit-tests/basic-types
 UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 

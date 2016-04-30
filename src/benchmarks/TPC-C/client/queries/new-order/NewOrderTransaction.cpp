@@ -12,8 +12,8 @@
 namespace TPCC {
 
 
-NewOrderTransaction::NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector)
-: BaseTransaction(os, "New Order", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector){
+NewOrderTransaction::NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient &recoveryClient)
+: BaseTransaction(os, "New Order", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
 	localMemory_ 	= new NewOrderLocalMemory(os_, *context_);
 }
 
@@ -322,6 +322,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// ************************************************
 	primitive::timestamp_t cts = getNewCommitTimestamp();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
+
+	char command[config::recovery_settings::COMMAND_LOG_SIZE] = "NewOrderTrx";
+	recoveryClient_.writeToLog(*localTimestampVector_, command);
 
 
 	// ************************************************

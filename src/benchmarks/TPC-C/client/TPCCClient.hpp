@@ -17,6 +17,7 @@
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../random/randomgenerator.hpp"
 #include "queries/BaseTransaction.hpp"
+#include "../../../recovery/RecoveryClient.hpp"
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
@@ -37,6 +38,7 @@ private:
 	SessionState *sessionState_;
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
 	std::ostream *os_;
+	RecoveryClient *recoveryClient_;
 
 public:
 	TPCCClient(unsigned instance_num, uint8_t ibPort);

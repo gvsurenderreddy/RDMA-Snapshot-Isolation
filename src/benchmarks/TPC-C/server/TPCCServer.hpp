@@ -14,14 +14,13 @@
 #include "../../../rdma-region/RDMARegion.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../../../rdma-region/RDMACommon.hpp"
-
+#include "../../../recovery/RecoveryServer.hpp"
 #include <unistd.h>	// for close()
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <vector>	// for std::vector
 #include <unordered_map>
 #include <thread>	// for std::thread
 #include <mutex>		// for std::lock_guard
-
 
 
 namespace TPCC{
@@ -39,6 +38,7 @@ private:
 	uint16_t	tcp_port_;
 	uint8_t	ib_port_;
 	TPCC::TPCCDB	*db;
+	RecoveryServer *recoveryServer_;
 	RDMAContext *context_;
 	std::vector<ClientContext*> clientCtxs;
 	RDMARegion<ServerMemoryKeys> *memoryKeysMessage_;
