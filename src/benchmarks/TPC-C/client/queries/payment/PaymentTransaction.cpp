@@ -85,57 +85,31 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	//	Read records in read-set
 	// ************************************************
 	// From Warehouse table, retrieve the row with matching W_ID.
-	executor_.retrieveWarehouse(
-			cart.wID,
-			*localMemory_->getWarehouseHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
-
-	executor_.retrieveWarehousePointerList(
-			cart.wID,
-			*localMemory_->getWarehouseTS(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableTimestampList,
-			getServerContext(cart.wID)->getQP(),
-			false);
+	executor_.retrieveWarehouse(cart.wID, *localMemory_->getWarehouseHead(), false);
+	executor_.retrieveWarehousePointerList(cart.wID, *localMemory_->getWarehouseTS(), false);
 	TPCC::WarehouseVersion *warehouseV = localMemory_->getWarehouseHead()->getRegion();
 
-
 	// From District table, retrieve the row with matching D_W_ID and D_ID.
-	executor_.retrieveDistrict(
-			cart.wID,
-			cart.dID,
-			*localMemory_->getDistrictHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
-
-	executor_.retrieveDistrictPointerList(
-			cart.wID,
-			cart.dID,
-			*localMemory_->getDistrictTS(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
-			getServerContext(cart.wID)->getQP(),
-			true);
+	executor_.retrieveDistrict(cart.wID, cart.dID, *localMemory_->getDistrictHead(), false);
+	executor_.retrieveDistrictPointerList(cart.wID, cart.dID, *localMemory_->getDistrictTS(), true);
 	TPCC::DistrictVersion *districtV = localMemory_->getDistrictHead()->getRegion();
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveDistrictPointerList()
 
 
-
 	if (cart.customerSelectionMode == PaymentCart::LAST_NAME) {
 		// First, use the index on the server to find the cID for the given last name
-		TPCC::ServerContext *serverCtx = getServerContext(cart.residentWarehouseID);
+		size_t serverNum = Warehouse::getServerNum(cart.wID);
 
 		executor_.lookupCustomerByLastName(
 				clientID_,
 				cart.residentWarehouseID,
 				cart.dID,
 				cart.cLastName,
-				*serverCtx->getIndexRequestMessage(),
-				*serverCtx->getCustomerNameIndexResponseMessage(),
-				serverCtx->getQP(),
+				*dsCtx_[serverNum]->getIndexRequestMessage(),
+				*dsCtx_[serverNum]->getCustomerNameIndexResponseMessage(),
+				dsCtx_[serverNum]->getQP(),
 				true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
@@ -143,7 +117,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
-		if (serverCtx->getCustomerNameIndexResponseMessage()->getRegion()->isSuccessful == false){
+		if (dsCtx_[serverNum]->getCustomerNameIndexResponseMessage()->getRegion()->isSuccessful == false){
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 
 			// write to log
@@ -155,35 +129,16 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			trxResult.result = TransactionResult::Result::COMMITTED;
 			return trxResult;
 		}
-		cart.cID = serverCtx->getCustomerNameIndexResponseMessage()->getRegion()->cID;
+		cart.cID = dsCtx_[serverNum]->getCustomerNameIndexResponseMessage()->getRegion()->cID;
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
 	}
 
 	// From Customer table, retrieve the row with matching C_W_ID (customer resident warehouse), C_D_ID and C_ID
-	executor_.retrieveCustomer(
-			cart.residentWarehouseID ,
-			cart.dID,
-			cart.cID,
-			*localMemory_->getCustomerHead(),
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			false);
-
-	executor_.retrieveCustomerPointerList(
-			cart.residentWarehouseID,
-			cart.dID,
-			cart.cID,
-			*localMemory_->getDistrictTS(),
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			true);
+	executor_.retrieveCustomer(cart.residentWarehouseID, cart.dID, cart.cID, *localMemory_->getCustomerHead(), false);
+	executor_.retrieveCustomerPointerList(cart.residentWarehouseID, cart.dID, cart.cID, *localMemory_->getDistrictTS(), true);
 
 	TPCC::CustomerVersion *customerV = localMemory_->getCustomerHead()->getRegion();
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-
-
-	// wait for all outstanding RDMA requests to finish
-	//TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
 	// printing for debugging purposes
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << warehouseV->warehouse);
@@ -252,40 +207,17 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	primitive::version_offset_t	versionOffset = warehouseV->writeTimestamp.getVersionOffset();
 	primitive::client_id_t		clientID = clientID_;
 	Timestamp warehouseLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
-
-	executor_.lockWarehouse(
-			*warehouseV,
-			warehouseLockTS,
-			*localMemory_->getWarehouseLockRegion(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
+	executor_.lockWarehouse(*warehouseV, warehouseLockTS, *localMemory_->getWarehouseLockRegion(), false);
 
 	versionOffset = districtV->writeTimestamp.getVersionOffset();
 	clientID = clientID_;
 	Timestamp districtLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
-
-	executor_.lockDistrict(
-			*districtV,
-			districtLockTS,
-			*localMemory_->getDistrictLockRegion(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			true);
-
+	executor_.lockDistrict(*districtV, districtLockTS, *localMemory_->getDistrictLockRegion(), true);
 
 	versionOffset = customerV->writeTimestamp.getVersionOffset();
 	clientID = clientID_;
 	Timestamp customerLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
-
-	executor_.lockCustomer(
-			*customerV,
-			customerLockTS,
-			*localMemory_->getCustomerLockRegion(),
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			true);
-
+	executor_.lockCustomer(*customerV, customerLockTS, *localMemory_->getCustomerLockRegion(), true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for warehouse and district lock
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for customer lock
@@ -322,11 +254,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					<< "(expected: " << warehouseExpectedLock << ", existing: " << warehouseExistingLock << ")");
 		}
 		else{
-			executor_.revertWarehouseLock(
-					*localMemory_->getWarehouseHead(),
-					getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
-					getServerContext(cart.wID)->getQP(),
-					true);
+			executor_.revertWarehouseLock(*localMemory_->getWarehouseHead(), true);
 			successfulLockCnt++;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on warehouse " << warehouseV->warehouse);
 		}
@@ -335,11 +263,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					<< "(expected: " << districtExpectedLock << ", existing: " << districtExistingLock << ")");
 		}
 		else{
-			executor_.revertDistrictLock(
-					*localMemory_->getDistrictHead(),
-					getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-					getServerContext(cart.wID)->getQP(),
-					true);
+			executor_.revertDistrictLock(*localMemory_->getDistrictHead(), true);
 			successfulLockCnt++;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on district " << districtV->district);
 		}
@@ -349,11 +273,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 					<< "(expected: " << customerExpectedLock << ", existing: " << customerExistingLock << ")");
 		}
 		else{
-			executor_.revertCustomerLock(
-					*localMemory_->getCustomerHead(),
-					getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-					getServerContext(cart.residentWarehouseID)->getQP(),
-					true);
+			executor_.revertCustomerLock(*localMemory_->getCustomerHead(), true);
 			successfulLockCnt++;
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on customer " << customerV->customer);
 		}
@@ -382,92 +302,36 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	// ************************************************
 	//	Append old version to the versions list, and update the pointers list
 	// ************************************************
+	executor_.updateWarehousePointers(*warehouseV, *localMemory_->getWarehouseTS(), false);
+	executor_.updateWarehouseOlderVersions(*localMemory_->getWarehouseHead(), false);	// using WarehouseHead instead of WarehouseOlderVersions avoids redundant copying
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers and older versions for warehouse " << warehouseV->warehouse);
 
-	executor_.updateWarehousePointers(
-			*warehouseV,
-			*localMemory_->getWarehouseTS(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableTimestampList,
-			getServerContext(cart.wID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for warehouse " << warehouseV->warehouse);
+	executor_.updateDistrictPointers(*districtV, *localMemory_->getDistrictTS(), false);
+	executor_.updateDistrictOlderVersions(*localMemory_->getDistrictHead(),	 false);	// using DistrictHead instead of DistrictOlderVersions avoids redundant copying
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers and older versions for district " << districtV->district);
 
-	executor_.updateWarehouseOlderVersions(
-			//*localMemory_->getWarehouseOlderVersions(),
-			*localMemory_->getWarehouseHead(),	// using WarehouseHead instead of WarehouseOlderVersions avoids redundant copying
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableOlderVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for warehouse " << warehouseV->warehouse);
-
-
-	executor_.updateDistrictPointers(
-			*districtV,
-			*localMemory_->getDistrictTS(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
-			getServerContext(cart.wID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for district " << districtV->district);
-
-
-	executor_.updateDistrictOlderVersions(
-			//*localMemory_->getDistrictOlderVersions(),
-			*localMemory_->getDistrictHead(),	// using DistrictHead instead of DistrictOlderVersions avoids redundant copying
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableOlderVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for district " << districtV->district);
-
-
-	executor_.updateCustomerPointers(
-			*customerV,
-			*localMemory_->getCustomerTS(),
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableTimestampList,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers for customer" << customerV->customer);
-
-
-	executor_.updateCustomerOlderVersions(
-			//*localMemory_->getCustomerOlderVersions(),
-			*localMemory_->getCustomerHead(),	// using CustomerHead instead of CustomerOlderVersions avoids redundant copying
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableOlderVersions,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			false);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated older versions for customer" << customerV->customer);
-
-
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older versions");
-
+	executor_.updateCustomerPointers(*customerV, *localMemory_->getCustomerTS(), false);
+	executor_.updateCustomerOlderVersions(*localMemory_->getCustomerHead(),	false);	// using CustomerHead instead of CustomerOlderVersions avoids redundant copying
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers and older versions for customer" << customerV->customer);
 
 
 	// ************************************************
 	// Insert and unlock new records in write-set
 	// ************************************************
-
 	// update warehouse
 	isLocked = false;
 	versionOffset = (primitive::version_offset_t)(warehouseV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
 	warehouseV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	warehouseV->warehouse.W_YTD += cart.hAmount;
-	executor_.updateWarehouse(
-			*localMemory_->getWarehouseHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
+	executor_.updateWarehouse(*localMemory_->getWarehouseHead(), false);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated warehouse with wID: " << cart.wID );
-
 
 	// update district
 	versionOffset = (primitive::version_offset_t)(districtV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
 	districtV->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	districtV->district.D_YTD += cart.hAmount;
-	executor_.updateDistrict(
-			*localMemory_->getDistrictHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
+	executor_.updateDistrict(*localMemory_->getDistrictHead(), false);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated district " << districtV->district);
-
 
 	// update customer
 	versionOffset = (primitive::version_offset_t)(customerV->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
@@ -493,11 +357,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		customerV->customer.C_DATA[characters + current_keep] = '\0';
 		assert(strlen(customerV->customer.C_DATA) == (size_t)(characters + current_keep));
 	}
-	executor_.updateCustomer(
-			*localMemory_->getCustomerHead(),
-			getServerContext(cart.residentWarehouseID)->getRemoteMemoryKeys()->getRegion()->customerTableHeadVersions,
-			getServerContext(cart.residentWarehouseID)->getQP(),
-			false);
+	executor_.updateCustomer(*localMemory_->getCustomerHead(), false);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated customer " << customerV->customer);
 
 
@@ -515,13 +375,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	strcpy(historyV->history.H_DATA, warehouseV->warehouse.W_NAME);
 	strcat(historyV->history.H_DATA, "    ");
 	strcat(historyV->history.H_DATA, districtV->district.D_NAME);
-	executor_.insertIntoHistory(
-			clientID_,
-			BaseTransaction::getHistoryRID(),
-			*localMemory_->getHistoryHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->historyTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			true);
+	executor_.insertIntoHistory(clientID_, BaseTransaction::getHistoryRID(), *localMemory_->getHistoryHead(), true);
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)BaseTransaction::getHistoryRID());
 	BaseTransaction::incrementHistoryRID(1);

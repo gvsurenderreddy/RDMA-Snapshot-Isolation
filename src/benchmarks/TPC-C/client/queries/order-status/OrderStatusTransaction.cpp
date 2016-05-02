@@ -70,7 +70,8 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	// ************************************************
 	//	Read records in read-set
 	// ************************************************
-	TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
+	size_t serverNum = Warehouse::getServerNum(cart.wID);
+
 
 	if (cart.customerSelectionMode == OrderStatusCart::LAST_NAME) {
 		// First, use the index on the server to find the cID for the given last name
@@ -79,9 +80,9 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 				cart.wID,
 				cart.dID,
 				cart.cLastName,
-				*serverCtx->getIndexRequestMessage(),
-				*serverCtx->getCustomerNameIndexResponseMessage(),
-				serverCtx->getQP(),
+				*dsCtx_[serverNum]->getIndexRequestMessage(),
+				*dsCtx_[serverNum]->getCustomerNameIndexResponseMessage(),
+				dsCtx_[serverNum]->getQP(),
 				true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
@@ -90,7 +91,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 
-		TPCC::CustomerNameIndexRespMsg *customerLastNameRes = serverCtx->getCustomerNameIndexResponseMessage()->getRegion();
+		TPCC::CustomerNameIndexRespMsg *customerLastNameRes = dsCtx_[serverNum]->getCustomerNameIndexResponseMessage()->getRegion();
 		assert(customerLastNameRes->isSuccessful == true);
 		cart.cID = customerLastNameRes->cID;
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
@@ -102,9 +103,9 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			cart.wID,
 			cart.dID,
 			cart.cID,
-			*serverCtx->getIndexRequestMessage(),
-			*serverCtx->getLargestOrderForCustomerIndexResponseMessage(),
-			serverCtx->getQP(),
+			*dsCtx_[serverNum]->getIndexRequestMessage(),
+			*dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage(),
+			dsCtx_[serverNum]->getQP(),
 			true);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", cID = " << cart.cID);
@@ -112,7 +113,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 
-	TPCC::LargestOrderForCustomerIndexRespMsg *largestOrderRes = serverCtx->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
+	TPCC::LargestOrderForCustomerIndexRespMsg *largestOrderRes = dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
 	if (largestOrderRes->isSuccessful == false){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 		trxResult.result = TransactionResult::Result::COMMITTED;
@@ -122,7 +123,6 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Index Response Message received. oID = " << (int)largestOrderRes->oID << ", client_who_ordered: " << (int)largestOrderRes->clientWhoOrdered
 			<< ", order_region_offset: " << (int)largestOrderRes->orderRegionOffset << ", orderLine_region_offset: " << (int)largestOrderRes->orderLineRegionOffset << ", #orderlines: " << (int)largestOrderRes->numOfOrderlines);
 
-
 	// retrieve the orderlines
 	executor_.retrieveOrderLines(
 			largestOrderRes->clientWhoOrdered,
@@ -130,8 +130,6 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			largestOrderRes->orderRegionOffset,
 			largestOrderRes->numOfOrderlines,
 			*localMemory_->getOrderLineHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->orderLineTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
 			true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));

@@ -59,6 +59,10 @@ public:
 		size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
 		return (uint16_t)(wID - (serverNum * config::tpcc_settings::WAREHOUSE_PER_SERVER));
 	}
+
+	static size_t getServerNum(uint16_t wID){
+		return (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
+	}
 };
 
 

@@ -59,23 +59,10 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	// ************************************************
 	//	Read records in read-set
 	// ************************************************
-	TPCC::ServerContext *serverCtx = getServerContext(cart.wID);
+	size_t serverNum = Warehouse::getServerNum(cart.wID);
 
-	executor_.retrieveDistrict(
-			cart.wID,
-			cart.dID,
-			*localMemory_->getDistrictHead(),
-			getServerContext(cart.wID)->getRemoteMemoryKeys()->getRegion()->districtTableHeadVersions,
-			getServerContext(cart.wID)->getQP(),
-			false);
-
-	executor_.retrieveDistrictPointerList(
-			cart.wID,
-			cart.dID,
-			*localMemory_->getDistrictTS(),
-			serverCtx->getRemoteMemoryKeys()->getRegion()->districtTableTimestampList,
-			serverCtx->getQP(),
-			true);
+	executor_.retrieveDistrict(cart.wID, cart.dID, *localMemory_->getDistrictHead(), false);
+	executor_.retrieveDistrictPointerList(cart.wID, cart.dID, *localMemory_->getDistrictTS(), true);
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 	districtV = localMemory_->getDistrictHead()->getRegion();
@@ -91,14 +78,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		}
 		else{
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << *districtV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getDistrictTS()->getRegion()[ind] << ")");
-			executor_.retrieveDistrictOlderVersion(
-					cart.wID,
-					cart.dID,
-					(size_t)ind,
-					*localMemory_->getDistrictHead(),
-					serverCtx->getRemoteMemoryKeys()->getRegion()->districtTableOlderVersions,
-					serverCtx->getQP(),
-					true);
+			executor_.retrieveDistrictOlderVersion(cart.wID, cart.dID, (size_t)ind, *localMemory_->getDistrictHead(), true);
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveDistrictOlderVersion()
 			// note that districtV is not updated with a consistent version
 		}
@@ -109,9 +89,9 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 			cart.wID,
 			cart.dID,
 			(uint32_t)districtV->district.D_NEXT_O_ID,
-			*serverCtx->getIndexRequestMessage(),
-			*serverCtx->getLast20OrdersIndexResponseMessage(),
-			serverCtx->getQP(),
+			*dsCtx_[serverNum]->getIndexRequestMessage(),
+			*dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage(),
+			dsCtx_[serverNum]->getQP(),
 			true);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: ITEMS_FOR_LAST_20_ORDERS. Parameters: wID = " << (int)cart.wID
@@ -121,15 +101,15 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 
 	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));	// for executor_.getDistinctItemsForLastTwentyOrders()
 
-	if (serverCtx->getLast20OrdersIndexResponseMessage()->getRegion()->isSuccessful == false){
+	if (dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage()->getRegion()->isSuccessful == false){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Unsuccessful --> ** Abort **");
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;;
 	}
 
-	size_t orderlinesCnt = serverCtx->getLast20OrdersIndexResponseMessage()->getRegion()->orderlinesCnt;
-	uint32_t *itemIDs = serverCtx->getLast20OrdersIndexResponseMessage()->getRegion()->itemIDs;
+	size_t orderlinesCnt = dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage()->getRegion()->orderlinesCnt;
+	uint32_t *itemIDs = dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage()->getRegion()->itemIDs;
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. # distinct items = " << orderlinesCnt);
 
@@ -139,30 +119,12 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		return trxResult;
 	}
 
-
 	bool signaled = false;
 	for (size_t i=0; i < orderlinesCnt; i++){
-		if (i == orderlinesCnt - 1)
-			signaled = true;
-		executor_.retrieveStock(
-				i,
-				itemIDs[i],
-				cart.wID,
-				*localMemory_->getStockHead(),
-				serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableHeadVersions,
-				serverCtx->getQP(),
-				false);
-
-		executor_.retrieveStockPointerList(
-				i,
-				itemIDs[i],
-				cart.wID,
-				*localMemory_->getStockTS(),
-				serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableTimestampList,
-				serverCtx->getQP(),
-				signaled);
+		if (i == orderlinesCnt - 1) signaled = true;
+		executor_.retrieveStock(i, itemIDs[i], cart.wID, *localMemory_->getStockHead(), false);
+		executor_.retrieveStockPointerList(i, itemIDs[i], cart.wID, *localMemory_->getStockTS(), signaled);
 	}
-
 	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveStock()
 
 
@@ -184,16 +146,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Stock " << localMemory_->getStockHead()->getRegion()[i] << " is not consistent"
 						<< ", but its " << ind << "'s version is consistent (" << localMemory_->getStockTS()->getRegion()[ind] << ")");
 
-				executor_.retrieveStockOlderVersion(
-						i,
-						itemIDs[i],
-						cart.wID,
-						(size_t)ind,
-						*localMemory_->getStockHead(),
-						serverCtx->getRemoteMemoryKeys()->getRegion()->stockTableOlderVersions,
-						serverCtx->getQP(),
-						true);
-
+				executor_.retrieveStockOlderVersion(i, itemIDs[i], cart.wID, (size_t)ind, *localMemory_->getStockHead(), true);
 				retrieveOlderVersionCnt++;
 			}
 		}

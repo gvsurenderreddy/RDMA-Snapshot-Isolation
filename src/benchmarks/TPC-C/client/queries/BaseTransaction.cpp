@@ -64,12 +64,6 @@ int BaseTransaction::findValidVersion(const Timestamp *timestampList, const size
 	return -1;
 }
 
-
-TPCC::ServerContext* BaseTransaction::getServerContext(uint16_t wID){
-	size_t serverNum = (int) (wID / config::tpcc_settings::WAREHOUSE_PER_SERVER);
-	return dsCtx_[serverNum];
-}
-
 primitive::timestamp_t BaseTransaction::getNewCommitTimestamp() {
 	primitive::timestamp_t output;
 	output = (primitive::timestamp_t)(sessionState_->getNextEpoch() * clientCnt_ + clientID_);

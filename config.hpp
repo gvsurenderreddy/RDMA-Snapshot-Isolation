@@ -58,7 +58,7 @@ static const size_t 	COMMAND_LOG_SIZE 		= 200;
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 100000;				// This is __per client__. For the experiments, we will use 100,000
+static const unsigned				TRANSACTION_CNT 		= 1000;				// This is __per client__. For the experiments, we will use 100,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment

@@ -33,6 +33,8 @@ void print_usage(std::string executable_filename);
 void print_error_client(std::string executable_filename);
 void print_error_server(std::string executable_filename);
 void print_error_oracle(std::string executable_filename);
+void print_error_instance(std::string executable_filename);
+
 
 int main (int argc, char *argv[]) {
 	if (argc < 2 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -81,130 +83,47 @@ int main (int argc, char *argv[]) {
 			return 1;
 		}
 	}
-//	else if(argParser.hasOption("instance")){
-//		try{
-//			assert(argParser.getArgumentForOption("-b") == "TPCC");
-//			unsigned instanceID = (uint32_t)std::stoi(argParser.getArgumentForOption("-i"));
-//			size_t serverID = (size_t)std::stoi(argParser.getArgumentForOption("-s"));
-//			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
-//			size_t portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
-//
-//			// running server
-//			TPCC::TPCCServer server(serverID, instanceID, clientsCnt);
-//			std::thread serverThread(&TPCC::TPCCServer::start, &server);
-//
-//			// running clients
-//			std::vector<TPCC::TPCCClient *> clients(clientsCnt);
-//			std::vector<std::thread> clientsThreads;
-//			for (uint32_t i = 0; i < clientsCnt; i++) {
-//				uint8_t ibPort = (uint8_t)(i % portsCnt);
-//				clients[i] = new TPCC::TPCCClient(instanceID, ibPort);
-//				clientsThreads.push_back(std::thread(&TPCC::TPCCClient::start, std::ref(*clients[i])));
-//			}
-//
-//			// waiting for threads to finish and join
-//			for (auto& th : clientsThreads) th.join();
-//			serverThread.join();
-//
-//			// cleanup
-//			for (auto& c : clients) delete c;
-//
-//			std::cout << "All clients and server threads are finished." << std::endl;
-//
-//		}
-//		catch(const std::exception& e){
-//			print_error_oracle(std::string(argv[0]));
-//			return 1;
-//		}
-//	}
+	else if(argParser.hasOption("instance")){
+		try{
+			assert(argParser.getArgumentForOption("-b") == "TPCC");
+			unsigned instanceID = (uint32_t)std::stoi(argParser.getArgumentForOption("-i"));
+			uint32_t serverID = (size_t)std::stoi(argParser.getArgumentForOption("-s"));
+			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
+			size_t portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
+
+			// running server
+			TPCC::TPCCServer server(serverID, instanceID, clientsCnt);
+			std::thread serverThread(&TPCC::TPCCServer::start, &server);
+
+			sleep(10);	// sleep for some seconds so that (all other) servers become ready
+
+			// running clients
+			std::vector<TPCC::TPCCClient *> clients(clientsCnt);
+			std::vector<std::thread> clientsThreads;
+			for (uint32_t i = 0; i < clientsCnt; i++) {
+				uint8_t ibPort = (uint8_t)(i % portsCnt + 1);
+				clients[i] = new TPCC::TPCCClient(instanceID, ibPort);
+				clientsThreads.push_back(std::thread(&TPCC::TPCCClient::start, std::ref(*clients[i])));
+			}
+
+			// waiting for threads to finish and join
+			for (auto& th : clientsThreads) th.join();
+			serverThread.join();
+
+			// cleanup
+			for (auto& c : clients) delete c;
+
+			std::cout << "All clients and server threads are finished." << std::endl;
+
+		}
+		catch(const std::exception& e){
+			print_error_instance(std::string(argv[0]));
+			return 1;
+		}
+	}
 	else{
 		print_usage(std::string(argv[0]));
 	}
-
-	/*
-	if (strcmp(argv[1], "client")  == 0) {
-		if (argc != 4 || strcmp(argv[2], "-i") != 0 ) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " client -i INSTANCE_NUM" << std::endl;
-			std::cerr << "connects to server(s) specified in the config file" << std::endl;
-			return 1;
-		}
-		unsigned instance_num = atoi(argv[3]);
-		RDMAClient client(instance_num);
-		client.start_client();
-	}
-	else if(strcmp(argv[1], "server") == 0) {
-		if (argc != 7 || strcmp(argv[3], "-i") != 0 || strcmp(argv[5], "-n") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " server <s = server_num> -i INTANCE_NUM -n NUM_OF_CLIENTS" << std::endl;
-			std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s]" << std::endl;
-			std::cerr << "(valid range of s: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
-			return 1;
-		}
-		unsigned instance_num = atoi(argv[4]);
-		uint32_t cients_cnt = atoi(argv[6]);
-		RDMAServer server(atoi(argv[2]), instance_num, cients_cnt);
-		server.start_server();
-	}
-	else if(strcmp(argv[1], "timestamp") == 0) {
-		if (argc != 4 || strcmp(argv[2], "-n") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " timestamp  -n NUM_OF_CLIENTS" << std::endl;
-			std::cerr << "connects to the timestamp server specified in the config file" << std::endl;
-			return 1;
-		}
-		uint32_t cients_cnt = atoi(argv[3]);
-		TimestampServer tsServer(cients_cnt);
-		tsServer.start_server();
-	}
-	else if(strcmp(argv[1], "instance") == 0) {
-		if (argc != 7 || strcmp(argv[3], "-n") != 0 || strcmp(argv[5], "-s") != 0) {
-			std::cerr << "Usage:" << std::endl;
-			std::cerr << argv[0] << " instance <i = instance_num> -n NUM_OF_CLIENTS -s NUM_OF_SERVERS" << std::endl;
-			std::cerr << "runs an RSI instance with the specified number of clients and servers." << std::endl;
-			return 1;
-		}
-		unsigned instance_num = atoi(argv[2]);
-		uint32_t clients_cnt = atoi(argv[4]);
-		uint32_t servers_cnt = atoi(argv[6]);
-
-		std::cout << "Running instance #" << (int)instance_num
-				<< " with " << (int)clients_cnt << " clients and " << (int)servers_cnt<< " servers." << std::endl;
-
-
-		std::vector<RDMAClient*> clients;
-		std::vector<RDMAServer*> servers;
-
-		std::vector<std::thread> client_threads;
-		std::vector<std::thread> server_threads;
-
-		for (unsigned i=0; i < servers_cnt; i++){
-			RDMAServer *server = new RDMAServer(i, instance_num, clients_cnt);
-			servers.push_back(server);
-			server_threads.push_back(std::thread(&RDMAServer::start_server, std::ref(*server)));
-		}
-
-		for (unsigned i=0; i < clients_cnt; i++) {
-			RDMAClient *client = new RDMAClient(instance_num);
-			clients.push_back(client);
-			client_threads.push_back(std::thread(&RDMAClient::start_client, std::ref(*client)));
-		}
-
-		std::cout << "synchronizing client threads...\n";
-		for (auto& th : client_threads) th.join();
-
-		std::cout << "synchronizing server threads...\n";
-		for (auto& th : server_threads) th.join();
-
-		for (auto& s : servers) delete s;
-		for (auto& c : clients) delete c;
-		std::cout << "FINISH" << std::endl;
-	}
-	else {
-		std::cerr << "Error in arguments" << std::endl;
-		return 1;
-	}
-	 */
 	return 0;
 }
 
@@ -248,4 +167,15 @@ void print_error_oracle(std::string executable_filename) {
 	std::cerr << "Usage:" << std::endl;
 	std::cerr << executable_filename << " oracle -n #NUM_OF_CLIENTS" << std::endl;
 	std::cerr << "connects to the oracle, specified in the config file" << std::endl;
+}
+
+void print_error_instance(std::string executable_filename) {
+	std::cerr << "Usage:" << std::endl;
+	std::cerr << executable_filename << " instance -i #INSTANCE_NUM -b #BENCHMARK_NAME -s #SERVER_NUM -n #NUM_OF_CLIENTS -pc #NUM_OF_IB_PORTS" << std::endl;
+	std::cerr << "creates an instance with one server and clients" << std::endl;
+	std::cerr << '\t' << "#INSTANCE_NUM:" << '\t' << "unique identifier of the instance" << std::endl;
+	std::cerr << '\t' << "#BENCHMARK_NAME:" << '\t' << "e.g. TPCC" << std::endl;
+	std::cerr << '\t' << "#SERVER_NUM:" << '\t' << "index of the server in the config file" << std::endl;
+	std::cerr << '\t' << "#NUM_OF_CLIENTS:" << '\t' << "number of clients in the instance" << std::endl;
+	std::cerr << '\t' << "#NUM_OF_IB_PORTS:" << '\t' << "number of IB ports" << std::endl;
 }

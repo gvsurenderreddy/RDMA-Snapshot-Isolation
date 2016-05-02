@@ -109,7 +109,7 @@ void TPCCClient::start(){
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Buffers info from server " << i);
 	}
 
-	TPCC::DBExecutor executor_(*os_);
+	TPCC::DBExecutor executor_(*os_, dsCtx_);
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
 	// ************************************************
