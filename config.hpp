@@ -50,7 +50,7 @@ static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
 static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
 
 namespace recovery_settings {
-static const bool		RECOVERY_ENABLED		= true;
+static const bool		RECOVERY_ENABLED		= false;
 static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);
 static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;
 static const size_t 	COMMAND_LOG_SIZE 		= 200;

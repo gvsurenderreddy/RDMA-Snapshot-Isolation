@@ -12,6 +12,7 @@
 #include "../benchmarks/TPC-C/server/TPCCServer.hpp"
 #include "../oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/client/TPCCClient.hpp"
+#include "../util/argumentParser.hpp"
 #include <iostream>
 #include <cstring>
 #include <unistd.h>		// getopt()
@@ -20,6 +21,9 @@
 #include <chrono>         // std::chrono::seconds
 #include <string>
 #include <cmath>		// std::abs
+#include <exception>
+#include <cassert>
+#include <functional>
 
 
 #define CLASS_NAME "executor"
@@ -38,36 +42,81 @@ int main (int argc, char *argv[]) {
 
 	checkConfigFile();
 
-	if (strcmp(argv[1], "client")  == 0) {
-		if (argc != 8 || strcmp(argv[2], "-b") != 0 || strcmp(argv[3], "TPCC") != 0 || strcmp(argv[4], "-p") != 0 || strcmp(argv[6], "-i") != 0) {
+	SimpleArgumentParser argParser(argc, argv);
+
+	if (argParser.hasOption("client")){
+		try{
+			assert(argParser.getArgumentForOption("-b") == "TPCC");
+			uint8_t ibPort = (uint8_t)std::stoi(argParser.getArgumentForOption("-p"));
+			unsigned instanceID = std::stoi(argParser.getArgumentForOption("-i"));
+			TPCC::TPCCClient client(instanceID, ibPort);
+			client.start();
+		}
+		catch(const std::exception& e){
 			print_error_client(std::string(argv[0]));
 			return 1;
 		}
-
-
-		uint8_t ibPort = (uint8_t)atoi(argv[5]);
-		unsigned instanceNum = atoi(argv[7]);
-		TPCC::TPCCClient client(instanceNum, ibPort);
 	}
-	else if(strcmp(argv[1], "server") == 0) {
-		if (argc != 7 || strcmp(argv[3], "-b") != 0 || strcmp(argv[4], "TPCC") != 0 || strcmp(argv[5], "-n") != 0) {
+	else if (argParser.hasOption("server")){
+		try{
+			assert(argParser.getArgumentForOption("-b") == "TPCC");
+			unsigned instanceID = 1;
+			uint32_t serverID = atoi(argv[2]);
+			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
+			TPCC::TPCCServer server(serverID, instanceID, clientsCnt);
+			server.start();
+		}
+		catch(const std::exception& e){
 			print_error_server(std::string(argv[0]));
 			return 1;
 		}
-		unsigned instance_num = 1;
-		uint32_t serverNum = atoi(argv[2]);
-		uint32_t clients_cnt = atoi(argv[6]);
-
-		TPCC::TPCCServer server(serverNum, instance_num, clients_cnt);
 	}
-	else if(strcmp(argv[1], "oracle") == 0) {
-		if (argc != 4 || strcmp(argv[2], "-n") != 0) {
+	else if (argParser.hasOption("oracle")){
+		try{
+			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
+			Oracle ts(clientsCnt);
+		}
+		catch(const std::exception& e){
 			print_error_oracle(std::string(argv[0]));
 			return 1;
 		}
-		uint32_t clients_cnt = atoi(argv[3]);
-		Oracle ts(clients_cnt);
 	}
+//	else if(argParser.hasOption("instance")){
+//		try{
+//			assert(argParser.getArgumentForOption("-b") == "TPCC");
+//			unsigned instanceID = (uint32_t)std::stoi(argParser.getArgumentForOption("-i"));
+//			size_t serverID = (size_t)std::stoi(argParser.getArgumentForOption("-s"));
+//			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
+//			size_t portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
+//
+//			// running server
+//			TPCC::TPCCServer server(serverID, instanceID, clientsCnt);
+//			std::thread serverThread(&TPCC::TPCCServer::start, &server);
+//
+//			// running clients
+//			std::vector<TPCC::TPCCClient *> clients(clientsCnt);
+//			std::vector<std::thread> clientsThreads;
+//			for (uint32_t i = 0; i < clientsCnt; i++) {
+//				uint8_t ibPort = (uint8_t)(i % portsCnt);
+//				clients[i] = new TPCC::TPCCClient(instanceID, ibPort);
+//				clientsThreads.push_back(std::thread(&TPCC::TPCCClient::start, std::ref(*clients[i])));
+//			}
+//
+//			// waiting for threads to finish and join
+//			for (auto& th : clientsThreads) th.join();
+//			serverThread.join();
+//
+//			// cleanup
+//			for (auto& c : clients) delete c;
+//
+//			std::cout << "All clients and server threads are finished." << std::endl;
+//
+//		}
+//		catch(const std::exception& e){
+//			print_error_oracle(std::string(argv[0]));
+//			return 1;
+//		}
+//	}
 	else{
 		print_usage(std::string(argv[0]));
 	}

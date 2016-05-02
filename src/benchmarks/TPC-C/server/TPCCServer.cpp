@@ -24,7 +24,8 @@ using namespace config::tpcc_settings;
 
 bool TPCC::TPCCServer::threadsActiveStateFlag[config::SERVER_THREADS_CNT];
 
-TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt)
+namespace TPCC {
+TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt)
 : serverNum_(serverNum),
   instanceNum_(instanceNum),
   clientsCnt_(clientsCnt),
@@ -72,8 +73,9 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	// **********************************************
 	if (config::recovery_settings::RECOVERY_ENABLED)
 		recoveryServer_ = new RecoveryServer(*os_, clientsCnt, *context_);
+}
 
-
+void TPCCServer::start() {
 	// **********************************************
 	// Put the memory keys into the message that is to be sent to clients
 	// **********************************************
@@ -164,7 +166,7 @@ TPCC::TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t 
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server's ready to gracefully get destroyed");
 }
 
-void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
+void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 	int ret;
 	while (liveClientCnt_ > 0 && *isThreadInActiveState){
 		uint32_t qpNum = -1;
@@ -269,7 +271,7 @@ void TPCC::TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 	}
 }
 
-TPCC::TPCCServer::~TPCCServer() {
+TPCCServer::~TPCCServer() {
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete memoryKeysMessage_;
 	delete db;
@@ -280,3 +282,4 @@ TPCC::TPCCServer::~TPCCServer() {
 	if (os_ != &std::cout)
 		delete os_;
 }
+}	// namespace TPCC

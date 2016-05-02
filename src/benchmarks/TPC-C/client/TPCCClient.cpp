@@ -27,14 +27,13 @@
 
 #define CLASS_NAME "TPCCClient"
 
-TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
+namespace TPCC {
+
+TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 : instanceNum_(instanceNum),
   ibPort_(ibPort){
 
 	srand ((unsigned int)utils::generate_random_seed());		// initialize random seed
-	//zipf_initialize(config::SKEWNESS_IN_ITEM_ACCESS, config::ITEM_PER_SERVER);
-	// nextEpoch_ = (primitive::timestamp_t) 1ULL;
-
 	TPCC::NURandC cLoad = TPCC::NURandC::makeRandom(random_);
 	random_.setC(cLoad);
 
@@ -43,7 +42,9 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	uint8_t homeDistrictID = (uint8_t)random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	sessionState_ 	= new SessionState(homeWarehouseID, homeDistrictID, (primitive::timestamp_t) 1ULL);
+}
 
+void TPCCClient::start(){
 	// ************************************************
 	//	Connect to Oracle
 	// ************************************************
@@ -89,7 +90,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 		TEST_NZ (utils::establish_tcp_connection(config::SERVER_ADDR[i], config::TCP_PORT[i], &sockfd));
 
 		// build server context
-		dsCtx_.push_back(new ServerContext(*os_, sockfd, config::SERVER_ADDR[i], config::TCP_PORT[i], config::IB_PORT[i], instanceNum, *context_));
+		dsCtx_.push_back(new ServerContext(*os_, sockfd, config::SERVER_ADDR[i], config::TCP_PORT[i], config::IB_PORT[i], instanceNum_, *context_));
 
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Connection established to server " << i);
 
@@ -262,7 +263,7 @@ TPCC::TPCCClient::TPCCClient(unsigned instanceNum, uint8_t ibPort)
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Client " << (int)clientID_ << " notified Oracle it's done");
 }
 
-TPCC::TPCCClient::~TPCCClient(){
+TPCCClient::~TPCCClient(){
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Destructor called");
 	delete localTimestampVector_;
 	delete oracleContext_;
@@ -274,3 +275,5 @@ TPCC::TPCCClient::~TPCCClient(){
 	if (os_ != &std::cout)
 		delete os_;
 }
+
+}	// namespace TPCC

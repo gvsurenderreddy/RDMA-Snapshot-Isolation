@@ -27,8 +27,11 @@ namespace TPCC{
 class TPCCServer {
 public:
 	TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t clientsCnt);
-	void handleIndexRequests(bool *isAlive);
 	virtual ~TPCCServer();
+	void start();
+
+	TPCCServer& operator=(const TPCCServer&) = delete;	// Disallow copying
+	TPCCServer(const TPCCServer&) = delete;				// Disallow copying
 
 private:
 	const uint32_t serverNum_;
@@ -48,6 +51,7 @@ private:
 	static bool threadsActiveStateFlag[config::SERVER_THREADS_CNT];
 	size_t liveClientCnt_;
 	std::mutex liveClientCntLock_;
+	void handleIndexRequests(bool *isAlive);
 
 };
 }

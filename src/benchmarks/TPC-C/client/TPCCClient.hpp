@@ -43,6 +43,7 @@ private:
 public:
 	TPCCClient(unsigned instance_num, uint8_t ibPort);
 	~TPCCClient();
+	void start();
 
 	TPCCClient& operator=(const TPCCClient&) = delete;	// Disallow copying
 	TPCCClient(const TPCCClient&) = delete;				// Disallow copying
