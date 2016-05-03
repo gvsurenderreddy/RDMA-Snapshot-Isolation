@@ -94,8 +94,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	executor_.retrieveDistrictPointerList(cart.wID, cart.dID, *localMemory_->getDistrictTS(), true);
 	TPCC::DistrictVersion *districtV = localMemory_->getDistrictHead()->getRegion();
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveDistrictPointerList()
+	executor_.synchronizeSendEvents();
 
 
 	if (cart.customerSelectionMode == PaymentCart::LAST_NAME) {
@@ -113,10 +112,9 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 				true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.residentWarehouseID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
 
+		executor_.synchronizeNetworkEvents();
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		if (dsCtx_[serverNum]->getCustomerNameIndexResponseMessage()->getRegion()->isSuccessful == false){
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. Customer has no register order. Therefore, COMMITs without any further action.");
 
@@ -138,7 +136,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	executor_.retrieveCustomerPointerList(cart.residentWarehouseID, cart.dID, cart.cID, *localMemory_->getDistrictTS(), true);
 
 	TPCC::CustomerVersion *customerV = localMemory_->getCustomerHead()->getRegion();
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	executor_.synchronizeSendEvents();
 
 	// printing for debugging purposes
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << warehouseV->warehouse);
@@ -219,9 +217,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	Timestamp customerLockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 	executor_.lockCustomer(*customerV, customerLockTS, *localMemory_->getCustomerLockRegion(), true);
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for warehouse and district lock
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for customer lock
-
+	executor_.synchronizeSendEvents();
 
 	// Byte swapping, since values read by atomic operations are in Big Endian order
 	*localMemory_->getWarehouseLockRegion()->getRegion() = utils::bigEndianToHost(*localMemory_->getWarehouseLockRegion()->getRegion());
@@ -278,10 +274,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted the successful lock on customer " << customerV->customer);
 		}
 
-		for (unsigned i = 0; i < successfulLockCnt; i++){
-			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
-		}
+		executor_.synchronizeSendEvents();
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 
@@ -376,7 +369,8 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	strcat(historyV->history.H_DATA, "    ");
 	strcat(historyV->history.H_DATA, districtV->district.D_NAME);
 	executor_.insertIntoHistory(clientID_, BaseTransaction::getHistoryRID(), *localMemory_->getHistoryHead(), true);
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	executor_.synchronizeSendEvents();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted history with hID = " << (int)BaseTransaction::getHistoryRID());
 	BaseTransaction::incrementHistoryRID(1);
 
@@ -397,11 +391,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	trxResult.cts = cts;
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	executor_.synchronizeSendEvents();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
 	return trxResult;
-
 }
 
 } /* namespace TPCC */

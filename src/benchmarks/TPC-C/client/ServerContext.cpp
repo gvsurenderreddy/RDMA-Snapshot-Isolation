@@ -15,13 +15,14 @@
 
 #define CLASS_NAME	"ServerContext"
 
-TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context)
+namespace TPCC {
+ServerContext::ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context)
 : os_(os),
   sockfd_(sockfd),
   serverAddress_(serverAddress),
   tcpPort_(tcpPort),
-  ibPort_(ibPort),
-  instanceNum_(instanceNum){
+  ibPort_(ibPort){
+	instanceNum_ = -1;
 	peerMemoryKeys_							= new RDMARegion<ServerMemoryKeys>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	indexRequestMessage_ 					= new RDMARegion<TPCC::IndexRequestMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
 	indexResponseMessage_ 					= new RDMARegion<TPCC::IndexResponseMessage>(1, context, IBV_ACCESS_LOCAL_WRITE);
@@ -33,59 +34,67 @@ TPCC::ServerContext::ServerContext(std::ostream &os, const int sockfd, const std
 	TEST_NZ (RDMACommon::create_queuepair(context.getIbCtx(), context.getPd(), context.getSendCq(), context.getRecvCq(), &qp_));
 }
 
-std::string TPCC::ServerContext::getServerAddress() const{
+std::string ServerContext::getServerAddress() const{
 	return serverAddress_;
 }
 
-uint16_t TPCC::ServerContext::getTcpPort() const{
+uint16_t ServerContext::getTcpPort() const{
 	return tcpPort_;
 }
 
-int TPCC::ServerContext::getSockFd() const{
+int ServerContext::getSockFd() const{
 	return sockfd_;
 }
 
-ibv_qp* TPCC::ServerContext::getQP() const{
+unsigned ServerContext::getInstanceNum() const{
+	return instanceNum_;
+}
+
+ibv_qp* ServerContext::getQP() const{
 	return qp_;
 }
 
-RDMARegion<TPCC::ServerMemoryKeys>* TPCC::ServerContext::getRemoteMemoryKeys(){
+RDMARegion<TPCC::ServerMemoryKeys>* ServerContext::getRemoteMemoryKeys(){
 	return peerMemoryKeys_;
 }
 
-RDMARegion<TPCC::IndexRequestMessage>* TPCC::ServerContext::getIndexRequestMessage(){
+RDMARegion<TPCC::IndexRequestMessage>* ServerContext::getIndexRequestMessage(){
 	return indexRequestMessage_;
 }
 
-RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getRegisterOrderIndexResponseMessage(){
+RDMARegion<TPCC::IndexResponseMessage>* ServerContext::getRegisterOrderIndexResponseMessage(){
 	return indexResponseMessage_;
 }
 
-RDMARegion<TPCC::CustomerNameIndexRespMsg>* TPCC::ServerContext::getCustomerNameIndexResponseMessage(){
+RDMARegion<TPCC::CustomerNameIndexRespMsg>* ServerContext::getCustomerNameIndexResponseMessage(){
 	return customerNameIndexRespMsg_;
 }
 
-RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* TPCC::ServerContext::getLargestOrderForCustomerIndexResponseMessage(){
+RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg>* ServerContext::getLargestOrderForCustomerIndexResponseMessage(){
 	return largestOrderForCustomerIndexRespMsg_;
 }
 
-RDMARegion<TPCC::Last20OrdersIndexResMsg>* TPCC::ServerContext::getLast20OrdersIndexResponseMessage(){
+RDMARegion<TPCC::Last20OrdersIndexResMsg>* ServerContext::getLast20OrdersIndexResponseMessage(){
 	return last20OrdersIndexRespMsg_;
 }
 
-RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* TPCC::ServerContext::getOldestUndeliveredOrderIndexResponseMessage(){
+RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* ServerContext::getOldestUndeliveredOrderIndexResponseMessage(){
 	return oldestUndeliveredOrderIndexRespMsg_;
 }
 
-RDMARegion<TPCC::IndexResponseMessage>* TPCC::ServerContext::getRegisterDeliveryIndexResponseMessage(){
+RDMARegion<TPCC::IndexResponseMessage>* ServerContext::getRegisterDeliveryIndexResponseMessage(){
 	return indexResponseMessage_;
 }
 
-void TPCC::ServerContext::activateQueuePair(RDMAContext &context){
+void ServerContext::setInstanceNum(unsigned instanceNum) {
+	instanceNum_ = instanceNum;
+}
+
+void ServerContext::activateQueuePair(RDMAContext &context){
 	TEST_NZ (RDMACommon::connect_qp (&qp_, context.getIbPort(), context.getPortAttr().lid, sockfd_));
 }
 
-TPCC::ServerContext::~ServerContext(){
+ServerContext::~ServerContext(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Deconstructor called ");
 
 	if (qp_) TEST_NZ(ibv_destroy_qp (qp_));
@@ -99,3 +108,5 @@ TPCC::ServerContext::~ServerContext(){
 
 	if (sockfd_ >= 0) TEST_NZ (close (sockfd_));
 }
+
+}	// namespace TPCC

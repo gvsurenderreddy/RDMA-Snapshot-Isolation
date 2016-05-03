@@ -90,7 +90,7 @@ void TPCCClient::start(){
 		TEST_NZ (utils::establish_tcp_connection(config::SERVER_ADDR[i], config::TCP_PORT[i], &sockfd));
 
 		// build server context
-		dsCtx_.push_back(new ServerContext(*os_, sockfd, config::SERVER_ADDR[i], config::TCP_PORT[i], config::IB_PORT[i], instanceNum_, *context_));
+		dsCtx_.push_back(new ServerContext(*os_, sockfd, config::SERVER_ADDR[i], config::TCP_PORT[i], config::IB_PORT[i], *context_));
 
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] Connection established to server " << i);
 
@@ -106,10 +106,12 @@ void TPCCClient::start(){
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] QPed to server " << i);
 
 		TEST_NZ(RDMACommon::poll_completion(context_->getRecvCq()));
+
+		dsCtx_[i]->setInstanceNum(dsCtx_[i]->getRemoteMemoryKeys()->getRegion()->serverInstanceNum);
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Buffers info from server " << i);
 	}
 
-	TPCC::DBExecutor executor_(*os_, dsCtx_);
+	TPCC::DBExecutor executor_(*os_, dsCtx_, instanceNum_, context_->getSendCq(), context_->getRecvCq());
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
 	// ************************************************

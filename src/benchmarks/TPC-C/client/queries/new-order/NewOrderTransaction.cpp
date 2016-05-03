@@ -128,10 +128,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	}
 
 	// wait for all outstanding RDMA requests to finish
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveItem()
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each executor_.retrieveStockPointerList()
+	executor_.synchronizeSendEvents();
 
 	// printing for debugging purposes
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
@@ -207,8 +204,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 	}
 
-	for (int i = 0; i < retrieveOlderVersionCnt; i++)
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each retrieval of an older version
+	executor_.synchronizeSendEvents();
 
 	// double check if newly read records are accessible
 	if (! isRecordAccessible(warehouseV->writeTimestamp) || ! isRecordAccessible(districtV->writeTimestamp) || ! isRecordAccessible(customerV->writeTimestamp)) {
@@ -280,8 +276,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		numberOfLocks++;
 	}
 
-	for (unsigned i = 0; i < numberOfLocks; i++)
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for stocks and possibly district
+	executor_.synchronizeSendEvents();
 
 	// Byte swapping, since values read by atomic operations are in Big Endian order
 	Timestamp districtExistingLock, districtExpectedLock;
@@ -339,10 +334,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			successfulLocksCnt++;
 			executor_.revertStockLock((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), true);
 		}
-		for (unsigned i = 0; i < successfulLocksCnt; i++){
-			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
-		}
+
+		executor_.synchronizeSendEvents();
+
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 
 		if (config::recovery_settings::RECOVERY_ENABLED){
@@ -385,7 +379,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	if (config::APPLY_COMMUTATIVE_UPDATES){
 		executor_.retrieveAndIncrementDistrictNextOID(cart.wID, cart.dID, *localMemory_->getDistrictHead(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+		executor_.synchronizeSendEvents();
+
 		localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID = utils::bigEndianToHost(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
 		old_D_NEXT_ID = localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID;
 	}
@@ -484,10 +479,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine " << olv << ". Table position: " << orderLineRID + olNumber);
 	}
 
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for each executor_.updateStock()
-
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// executor_.insertIntoOrderLine()
+	executor_.synchronizeSendEvents();
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
@@ -511,10 +503,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Msg sent. Type: REGISTER_ORDER. Params: wID = " << (int)cart.wID
 			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << orderRID << ", #orderlines: " << cart.items.size());
 
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+	executor_.synchronizeNetworkEvents();
 
-	// receive the acknowledgement of the index update request
-	TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 	assert(dsCtx_[serverNum]->getRegisterOrderIndexResponseMessage()->getRegion()->isSuccessful == true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_ORDER");
 
@@ -551,7 +541,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.cts = cts;
 	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-	TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+	executor_.synchronizeSendEvents();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
 	BaseTransaction::incrementOrderRID(1);

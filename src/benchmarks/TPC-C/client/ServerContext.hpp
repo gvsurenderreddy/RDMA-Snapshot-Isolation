@@ -42,15 +42,13 @@ private:
 	RDMARegion<TPCC::Last20OrdersIndexResMsg>	*last20OrdersIndexRespMsg_;
 	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>	*oldestUndeliveredOrderIndexRespMsg_;
 
-
-
-
 public:
-	ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, const unsigned instanceNum, RDMAContext &context);
+	ServerContext(std::ostream &os, const int sockfd, const std::string &serverAddress, const uint16_t tcpPort, const uint8_t ibPort, RDMAContext &context);
 	~ServerContext();
 	std::string getServerAddress() const;
 	uint16_t getTcpPort() const;
 	int getSockFd() const;
+	unsigned getInstanceNum() const;
 	ibv_qp* getQP() const;
 	RDMARegion<ServerMemoryKeys>* getRemoteMemoryKeys();
 	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessage();
@@ -61,9 +59,8 @@ public:
 	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg>* getOldestUndeliveredOrderIndexResponseMessage();
 	RDMARegion<TPCC::IndexResponseMessage>* getRegisterDeliveryIndexResponseMessage();
 
-
+	void setInstanceNum(unsigned instanceNum);
 	void activateQueuePair(RDMAContext &context);
-
 	ServerContext& operator=(const ServerContext&) = delete;	// Disallow copying
 	ServerContext(const ServerContext&) = delete;				// Disallow copying
 };

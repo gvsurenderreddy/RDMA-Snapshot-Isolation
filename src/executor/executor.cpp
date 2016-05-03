@@ -159,9 +159,9 @@ void print_error_client(std::string executable_filename) {
 }
 void print_error_server(std::string executable_filename){
 	std::cerr << "Usage:" << std::endl;
-	std::cerr << executable_filename << " #SERVER_NUM -b #BENCHMARK_NAME -n #NUM_OF_CLIENTS" << std::endl;
+	std::cerr << executable_filename << " #SERVER_ID -b #BENCHMARK_NAME -n #NUM_OF_CLIENTS" << std::endl;
 	std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s] to run the BENCHMARK (e.g. TPCC) " << std::endl;
-	std::cerr << "(valid range of SERVER_NUM: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+	std::cerr << "(valid range of SERVER_ID: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
 }
 void print_error_oracle(std::string executable_filename) {
 	std::cerr << "Usage:" << std::endl;
@@ -171,11 +171,11 @@ void print_error_oracle(std::string executable_filename) {
 
 void print_error_instance(std::string executable_filename) {
 	std::cerr << "Usage:" << std::endl;
-	std::cerr << executable_filename << " instance -i #INSTANCE_NUM -b #BENCHMARK_NAME -s #SERVER_NUM -n #NUM_OF_CLIENTS -pc #NUM_OF_IB_PORTS" << std::endl;
+	std::cerr << executable_filename << " instance -i #INSTANCE_NUM -b #BENCHMARK_NAME -s #SERVER_ID -n #NUM_OF_CLIENTS -pc #NUM_OF_IB_PORTS" << std::endl;
 	std::cerr << "creates an instance with one server and clients" << std::endl;
 	std::cerr << '\t' << "#INSTANCE_NUM:" << '\t' << "unique identifier of the instance" << std::endl;
 	std::cerr << '\t' << "#BENCHMARK_NAME:" << '\t' << "e.g. TPCC" << std::endl;
-	std::cerr << '\t' << "#SERVER_NUM:" << '\t' << "index of the server in the config file" << std::endl;
+	std::cerr << '\t' << "#SERVER_ID:" << '\t' << "index of the server in the config file" << std::endl;
 	std::cerr << '\t' << "#NUM_OF_CLIENTS:" << '\t' << "number of clients in the instance" << std::endl;
 	std::cerr << '\t' << "#NUM_OF_IB_PORTS:" << '\t' << "number of IB ports" << std::endl;
 }

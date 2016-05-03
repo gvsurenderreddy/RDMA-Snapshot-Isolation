@@ -62,8 +62,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// ************************************************
 		clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
 		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getReadTimestamp()
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle: " << readTimestampToString());
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 
 		// ************************************************
@@ -84,10 +83,10 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				dsCtx_[serverNum]->getQP(),
 				true);
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.getOldestUndeliveredOrder()
+		executor_.synchronizeNetworkEvents();
+
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: Oldest_Undelivered_Order. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)dID);
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));	// for executor_.getOldestUndeliveredOrder()
 		clock_gettime(CLOCK_REALTIME, &afterIndexTime1);
 
 		// check if there is an undelivered order in this district
@@ -110,8 +109,10 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		// From OrderLine table, retrieve the row with matching OL_W_ID, OL_D_ID and OL_ID.
 		executor_.retrieveOrderLines(oldestUndeliveredOrderRes->clientWhoOrdered, cart.wID, oldestUndeliveredOrderRes->orderLineRegionOffset, oldestUndeliveredOrderRes->numOfOrderlines, *localMemory_->getOrderLineHead(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveOrderLines()
+
 		orderLinesV = localMemory_->getOrderLineHead()->getRegion();
+
+		executor_.synchronizeSendEvents();
 
 		// From Customer table, retrieve the customer with matching wID, dID and cID
 		uint32_t cID = localMemory_->getOrderHead()->getRegion()->order.O_C_ID;
@@ -119,7 +120,9 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		customerV = localMemory_->getCustomerHead()->getRegion();
 
 		executor_.retrieveCustomerPointerList(cart.wID, dID, cID, *localMemory_->getCustomerTS(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveCustomer()
+
+		executor_.synchronizeSendEvents();
+
 
 		clock_gettime(CLOCK_REALTIME, &afterExecutionTime);
 
@@ -162,7 +165,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << *customerV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getCustomerTS()->getRegion()[ind] << ")");
 
 				executor_.retrieveCustomerOlderVersion(cart.wID, dID, cID, (size_t)ind, *localMemory_->getCustomerHead(), true);
-				TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.retrieveCustomerOlderVersion()
+
+				executor_.synchronizeSendEvents();
 
 				if (! isRecordAccessible(customerV->writeTimestamp)) {
 					DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": the newly read version is also inconsistent (customer: " << customerV->writeTimestamp << ")");
@@ -248,8 +252,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		versionOffset = customerV->writeTimestamp.getVersionOffset();
 		Timestamp customerLockTS (deletedStatus, lockStatus, versionOffset, clientID_, cts);
 		executor_.lockCustomer(*customerV, customerLockTS, *localMemory_->getCustomerLockRegion(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// for executor_.lockCustomer()
 
+		executor_.synchronizeSendEvents();
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
 
 
@@ -346,10 +350,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				executor_.revertCustomerLock(*localMemory_->getCustomerHead(), true);
 			}
 
-			if (successfulOrderLock || successfulNewOrderLock || isAnyOrderLineSuccessful || successfulCustomerLock) {
-				TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
-				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
-			}
+			executor_.synchronizeSendEvents();
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": reverted lock");
 
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
 
@@ -423,7 +425,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		executor_.updateCustomer(*localMemory_->getCustomerHead(), true);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated Customer" << customerV->customer);
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));	// executor_.insertIntoOrderLine()
+		executor_.synchronizeSendEvents();
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": successfully installed and unlocked all records");
 
 		// update the index
@@ -440,10 +442,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_DELIVERY. Parameters: wID = " << (int)cart.wID
 				<< ", dID = " << (int)dID << ", OID = " << (int)orderV->order.O_ID);
 
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+		executor_.synchronizeNetworkEvents();
 
-		// receive the acknowledgement of the index update request
-		TEST_NZ (RDMACommon::poll_completion(context_->getRecvCq()));
 		assert(dsCtx_[serverNum]->getRegisterOrderIndexResponseMessage()->getRegion()->isSuccessful == true);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received for message . Type = REGISTER_DELIVERY");
 
@@ -466,7 +466,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		trxResult.cts = cts;
 		localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 		executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+
+		executor_.synchronizeSendEvents();
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
 
 		clock_gettime(CLOCK_REALTIME, &afterCommitTime);

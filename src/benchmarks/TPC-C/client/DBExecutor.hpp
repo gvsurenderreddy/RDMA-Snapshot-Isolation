@@ -36,12 +36,21 @@ class DBExecutor {
 private:
 	std::ostream &os_;
 	std::vector<ServerContext*> dsCtx_;
+	const unsigned instanceNum_;
+	ibv_cq *sendCQ_;
+	ibv_cq *recvCQ_;
+	size_t outstandingSendCompletionCnt_;
+	size_t outstandingRecvCompletionCnt_;
 
 public:
-	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx);
+	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
 	virtual ~DBExecutor();
 	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
 	DBExecutor(const DBExecutor&) = delete;				// Disallow copying
+
+	void synchronizeSendEvents();
+	void synchronizeRecvEvents();
+	void synchronizeNetworkEvents();
 
 	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
 	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
