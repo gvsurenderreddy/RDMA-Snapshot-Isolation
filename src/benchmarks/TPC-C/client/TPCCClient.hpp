@@ -41,7 +41,7 @@ private:
 	RecoveryClient *recoveryClient_;
 
 public:
-	TPCCClient(unsigned instance_num, uint8_t ibPort);
+	TPCCClient(unsigned instance_num, uint16_t homeWarehouseID, uint8_t homeDistrictID, uint8_t ibPort);
 	~TPCCClient();
 	void start();
 

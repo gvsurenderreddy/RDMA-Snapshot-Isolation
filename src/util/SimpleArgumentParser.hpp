@@ -1,12 +1,12 @@
 /*
- * argumentParser.hpp
+ * SimpleArgumentParser.hpp
  *
  *  Created on: May 1, 2016
  *      Author: erfanz
  */
 
-#ifndef SRC_UTIL_ARGUMENTPARSER_HPP_
-#define SRC_UTIL_ARGUMENTPARSER_HPP_
+#ifndef SRC_UTIL_SIMPLEARGUMENTPARSER_HPP_
+#define SRC_UTIL_SIMPLEARGUMENTPARSER_HPP_
 
 
 #include <unordered_map>
@@ -42,4 +42,4 @@ public:
 		return options_.at(option);
 	}
 };
-#endif /* SRC_UTIL_ARGUMENTPARSER_HPP_ */
+#endif /* SRC_UTIL_SIMPLEARGUMENTPARSER_HPP_ */

@@ -18,7 +18,7 @@
 namespace config {
 /* Logging			*/
 #define DEBUG_ENABLED (false)
-#define DEBUG_OUTPUT config::Output::FILE
+#define DEBUG_OUTPUT config::Output::SCREEN
 enum Output{FILE, SCREEN};							// Don't change this
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
@@ -28,10 +28,10 @@ static const size_t						SERVER_CNT	= 1;
 static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
 static const std::vector<uint16_t>		TCP_PORT	= {45680};
 static const std::vector<uint8_t>		IB_PORT		= {1};
-static const size_t						SERVER_THREADS_CNT = 40;				// Ideally should be set to the number of CPU on each server machine
+static const size_t						SERVER_THREADS_CNT = 20;				// Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
-static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";	// only relevant for Tranditional-SI
+static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.2.1";	// only relevant for Tranditional-SI
 static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;			// only relevant for Tranditional-SI
 static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;				// only relevant for Tranditional-SI
 
