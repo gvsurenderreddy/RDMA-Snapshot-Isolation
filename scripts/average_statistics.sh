@@ -9,6 +9,8 @@ output_file=$1
 # cat $output_file | grep  'Avg elapsed time in updating' | awk -F $'\t' '{ sum += $2; n++ } END { if (n > 0) print "NewOrder avg updating:\t" sum / n; }'
 # cat $output_file | grep  'Avg elapsed time in committing' | awk -F $'\t' '{ sum += $2; n++ } END { if (n > 0) print "NewOrder avg commit:\t" sum / n; }'    
 
+cat $output_file | grep  '(Trx: New Order) committed:' | awk -F $'\t' '{ n++ } END { if (n > 0) printf "Total Number of Client logs:\t%.3d\n", n; }'
+
 cat $output_file | grep  '(Trx: New Order) committed:' | awk -F $'\t' '{ sum += $2; n++ } END { if (n > 0) printf "NewOrder abort:\t%.3f\n", sum / n; }'
 cat $output_file | grep  '(Trx: New Order) Committed Transactions/sec' | awk -F $'\t' '{ sum += $2; n++ } END { if (n > 0) printf  "NewOrder Trx/sec:\t%.1f\n", sum / n; }'
 cat $output_file | grep  '(Trx: Payment) committed:' | awk -F $'\t' '{ sum += $2; n++ } END { if (n > 0) printf "Payment abort:\t%.3f\n", sum / n; }'
