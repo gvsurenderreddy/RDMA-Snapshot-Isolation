@@ -560,6 +560,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.statistics.updatePhaseMicroSec = ( (double)( afterUpdateTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.indexElapsedMicroSec = ( (double)( afterUpdateTime.tv_sec - beforeIndexTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - beforeIndexTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.commitSnapshotMicroSec = ( (double)( afterCommitTime.tv_sec - afterUpdateTime.tv_sec ) * 1E9 + (double)( afterCommitTime.tv_nsec - afterUpdateTime.tv_nsec ) ) / 1000;
+
 	return trxResult;
 }
 

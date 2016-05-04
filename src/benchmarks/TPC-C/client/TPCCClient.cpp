@@ -146,6 +146,7 @@ void TPCCClient::start(){
 	std::unordered_map<std::string, double> elapsedMicroSecInLocking;
 	std::unordered_map<std::string, double> elapsedMicroSecInUpdatingRecords;
 	std::unordered_map<std::string, double> elapsedMicroSecInCommitingSnapshot;
+	double totalElapsedMicroSec = 0, elapsed = 0;
 
 	for (auto& trx: trxs){
 		std::string s = trx->getTransactionName();
@@ -196,7 +197,9 @@ void TPCCClient::start(){
 		elapsedMicroSecInLocking[trxName] = trxResult.statistics.lockPhaseMicroSec;
 		elapsedMicroSecInUpdatingRecords[trxName] = trxResult.statistics.updatePhaseMicroSec;
 		elapsedMicroSecInCommitingSnapshot[trxName] = trxResult.statistics.commitSnapshotMicroSec;
-		elapsedMicroSec[trxName] +=  ( (double)( trxFinishTime.tv_sec - trxBeginTime.tv_sec ) * 1E9 + (double)( trxFinishTime.tv_nsec - trxBeginTime.tv_nsec ) ) / 1000;
+		elapsed = ( (double)( trxFinishTime.tv_sec - trxBeginTime.tv_sec ) * 1E9 + (double)( trxFinishTime.tv_nsec - trxBeginTime.tv_nsec ) ) / 1000;
+		elapsedMicroSec[trxName] +=  elapsed;
+		totalElapsedMicroSec += elapsed;
 
 		if (trxResult.result == TransactionResult::Result::ABORTED){
 			abortCnt[trxName]++;
@@ -211,6 +214,7 @@ void TPCCClient::start(){
 	//	Printing the statistics
 	// ************************************************
 	std::cout << std::endl;
+	std::cout << "[Stat] Total elapsed time (sec):	" << (double)(totalElapsedMicroSec / (1000 * 1000)) << std::endl;
 	for (auto& trx: trxs){
 		std::string n = trx->getTransactionName();
 		if (executedTrxCnt[n] == 0)
@@ -225,6 +229,7 @@ void TPCCClient::start(){
 		std::cout << "[Stat] (Trx: " << n << ") Avg abort type I (stale snapshot) ratio	" << inconsistentSnapshotRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Avg abort type II (failed locks) ratio	" << unsuccessfulLockRatio << std::endl;
 		std::cout << "[Stat] (Trx: " << n << ") Committed Transactions/sec:	" <<  trxsPerSec << std::endl;
+		std::cout << "[Stat] (Trx: " << n << ") Avg total elapsed time (usec):	" << elapsedMicroSec[n] << std::endl;
 
 		if (n == trxs[0]->getTransactionName()) {
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in execution (usec):	" << elapsedMicroSecInExecution[n] << std::endl;
