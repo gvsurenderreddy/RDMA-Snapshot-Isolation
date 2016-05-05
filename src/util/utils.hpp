@@ -199,11 +199,7 @@ int sock_connect (std::string servername, uint16_t port);
  ******************************************************************************/
 int establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *sockfd);
 
-int server_socket_setup(int *server_sockfd, int backlog);
-
 void die(const char *reason, const char* filename, int lineNumber);
-
-// int load_tables_from_files(ItemVersion* items_region);
 
 } // namespace util
 

@@ -68,8 +68,8 @@ int main (int argc, char *argv[]) {
 	else if (argParser.hasOption("server")){
 		try{
 			assert(argParser.getArgumentForOption("-b") == "TPCC");
-			unsigned instanceID = 1;
 			uint32_t serverID = atoi(argv[2]);
+			unsigned instanceID = (unsigned)serverID;
 			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
 			TPCC::TPCCServer server(serverID, instanceID, clientsCnt);
 			server.start();

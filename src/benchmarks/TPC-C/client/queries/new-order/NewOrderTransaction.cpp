@@ -216,13 +216,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	if (abortFlag == true) {
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "Client " << clientID_ << ": NOT all received versions are consistent with READ snapshot or some are locked --> ** ABORT **");
-
-		// write to log
-		if (config::recovery_settings::RECOVERY_ENABLED){
-			recoveryClient_->writeResultToLog('A');
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
-		}
-
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::INCONSISTENT_SNAPSHOT;
 		return trxResult;
@@ -237,16 +230,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	primitive::timestamp_t cts = getNewCommitTimestamp();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": acquired commit timestamp " << cts);
 
-
-	// ************************************************
-	//	Write the command to logs
-	// ************************************************
-	if (config::recovery_settings::RECOVERY_ENABLED){
-		char command[config::recovery_settings::COMMAND_LOG_SIZE];
-		size_t messageSize = cart.logMessage(command);
-		recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
-	}
 
 	// ************************************************
 	// Acquire locks for records in write-set
@@ -338,18 +321,23 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		executor_.synchronizeSendEvents();
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": could not acquire lock on all items --> ** ABORT **");
-
-		if (config::recovery_settings::RECOVERY_ENABLED){
-			recoveryClient_->writeResultToLog('A');
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
-		}
-
 		trxResult.result = TransactionResult::Result::ABORTED;
 		trxResult.reason = TransactionResult::Reason::UNSUCCESSFUL_LOCK;
 		return trxResult;
 	}
 	clock_gettime(CLOCK_REALTIME, &afterLockTime);
 
+
+	// ************************************************
+	//	Write the command to logs
+	// ************************************************
+	// At this point, it is determined that the transaction can successfully commit
+	if (config::recovery_settings::RECOVERY_ENABLED){
+		char command[config::recovery_settings::COMMAND_LOG_SIZE];
+		size_t messageSize = cart.logMessage(command);
+		recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
+	}
 
 	// ************************************************
 	//	Append old version to the versions list, and update the pointers list
@@ -524,14 +512,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	clock_gettime(CLOCK_REALTIME, &afterUpdateTime);
 
-
-	// ************************************************
-	//	Write the transaction result to log before committing
-	// ************************************************
-	if (config::recovery_settings::RECOVERY_ENABLED){
-		recoveryClient_->writeResultToLog('C');
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Transaction result written to log");
-	}
 
 	// ************************************************
 	//	Submit the result to the oracle

@@ -154,90 +154,9 @@ int utils::establish_tcp_connection(std::string remote_ip, uint16_t remote_port,
 	return 0;
 }
 
-int utils::server_socket_setup(int *server_sockfd, int backlog) {
-	struct sockaddr_in serv_addr;
-	
-	// Open Socket
-	*server_sockfd = socket (AF_INET, SOCK_STREAM, 0);
-	if (*server_sockfd < 0) {
-		std::cerr << "Error opening socket" << std::endl;
-		return -1;
-	}
-	
-	// Bind
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(config::TRX_MANAGER_TCP_PORT);
-	TEST_NZ(bind(*server_sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
-	
-	// listen				  
-	TEST_NZ(listen (*server_sockfd, backlog));
-	return 0;
-}
-
 void utils::die(const char *reason, const char* filename, int lineNumber)
 {
 	std::cerr << reason << ", at Line: " << lineNumber << " in file: " << filename << std::endl ;
 	std::cerr << "Errno: " << strerror(errno) << std::endl;
 	exit(EXIT_FAILURE);
 }
-
-/*
-int load_tables_from_files(ItemVersion* items_region) {
-	FILE * fp;
-	char * line = NULL;
-	size_t len = 0;
-	ssize_t read;
-
-	// First load ITEM file
-	try {
-		fp = fopen(config::tpcw_settings::ITEM_FILENAME, "r");
-		if (fp == NULL){
-			std::cerr << "Cannot open file: " << config::tpcw_settings::ITEM_FILENAME << std::endl;
-			exit(EXIT_FAILURE);
-		}
-		int i = 0;
-
-		while ((read = getline(&line, &len, fp)) != -1) {
-			if (i >= config::tpcw_settings::ITEM_CNT)
-				// we don't want to read more data from file.
-				break;
-
-			items_region[i].item.I_ID = atoi(strtok(line,  "\t")) - 1;		// because we want to start IDs from zero
-			strcpy(items_region[i].item.I_TITLE,strtok(NULL, "\t"));
-			items_region[i].item.I_A_ID = atoi(strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_PUB_DATE, strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_PUBLISHER, strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_SUBJECT, strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_DESC, strtok(NULL, "\t"));
-			items_region[i].item.I_RELATED1 = atoi(strtok(NULL, "\t"));
-			items_region[i].item.I_RELATED2 = atoi(strtok(NULL, "\t"));
-			items_region[i].item.I_RELATED3 = atoi(strtok(NULL, "\t"));
-			items_region[i].item.I_RELATED4 = atoi(strtok(NULL, "\t"));
-			items_region[i].item.I_RELATED5 = atoi(strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_THUMBNAIL, strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_IMAGE, strtok(NULL, "\t"));
-			items_region[i].item.I_SRP = atof(strtok(NULL, "\t"));
-			items_region[i].item.I_COST = atof(strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_AVAIL, strtok(NULL, "\t"));
-			items_region[i].item.I_STOCK = atoi(strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_ISBN, strtok(NULL, "\t"));
-			items_region[i].item.I_PAGE = atoi(strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_BACKING, strtok(NULL, "\t"));
-			strcpy(items_region[i].item.I_DIMENSION, strtok(NULL, "\t"));
-
-			items_region[i].write_timestamp.setAll(0,0,0,0);
-			i++;
-		}
-		fclose(fp);
-	}
-	catch (std::exception& e){
-	    std::cerr << "exception caught: " << e.what() << std::endl;
-	}
-	if (line)
-		free(line);
-
-	return 0;
-}
-*/

@@ -52,7 +52,7 @@ void DBExecutor::synchronizeNetworkEvents(){
 }
 
 bool DBExecutor::isServerLocal(size_t serverNum) const {
-	return (config::LOCALITY_EXPLOITAION && isServerLocal(serverNum));
+	return (config::LOCALITY_EXPLOITAION && dsCtx_[serverNum]->getInstanceNum());
 }
 
 void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
@@ -294,7 +294,6 @@ void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &l
 	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
-		std::cout << "salam" << std::endl;
 	}
 	else {
 		// the data sits at a remote server
