@@ -17,49 +17,43 @@
 
 namespace config {
 /* Logging			*/
-#define DEBUG_ENABLED (false)
-#define DEBUG_OUTPUT config::Output::SCREEN
-enum Output{FILE, SCREEN};							// Don't change this
+#define DEBUG_ENABLED (true)
+#define DEBUG_OUTPUT config::Output::SCREEN			// Where to write the logs (possible options are specified in Output enum.
+enum Output{FILE, SCREEN};							// Don't change this. Possible options for logging.
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
 /* Server settings */
-static const size_t						SERVER_CNT	= 1;
-static const std::vector<std::string>	SERVER_ADDR	= {"192.168.1.1"};
-static const std::vector<uint16_t>		TCP_PORT	= {45680};
-static const std::vector<uint8_t>		IB_PORT		= {1};
-static const size_t						SERVER_THREADS_CNT = 20;				// Ideally should be set to the number of CPU on each server machine
+static const size_t						SERVER_CNT	= 3;
+static const std::vector<std::string>	SERVER_ADDR = {"192.168.1.1","192.168.1.1", "192.168.1.1"};		// IP address of the servers
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681, 45683};							// TCP port of the servers
+static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};										// InfiniBand port of the servers
+static const size_t						SERVER_THREADS_CNT = 40;										// Number of threads running on each server for handling index requests. Ideally should be set to the number of CPU on each server machine
+static const bool						LOCALITY_EXPLOITAION = false;									// Whether or not co-located servers and clients could exchange data through memcpy instead of over the wire
 
 /* Oracle settings */
-static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.2.1";	// only relevant for Tranditional-SI
-static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;			// only relevant for Tranditional-SI
-static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;				// only relevant for Tranditional-SI
+static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.2.1";						// IP address of the oracle
+static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;								// TCP port of the oracle
+static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;									// IB port of the oracle
 
 
 /* Client setting */
-static const bool			ADAPTIVE_ABORT_RATE 	= false;
-static const double 		MAX_ABORT_RATE			= 0.1;
-static const unsigned		ADAPTIVE_WINDOW_SIZE	= 100;
-
-
-/* Traditional-SI-specific settings */
-static const std::string	TRX_MANAGER_ADDR		= "192.168.0.1";	// only relevant for Trad-SI
-static const uint16_t		TRX_MANAGER_TCP_PORT	= 45677;			// only relevant for Trad-SI
-static const uint8_t		TRX_MANAGER_IB_PORT		= 1;				// only relevant for Trad-SI
-
-static const bool			APPLY_COMMUTATIVE_UPDATES = true;			// the flag for applying commutative updates: those updates which can be implemented using RDMA atomic operations instead of locking.
+static const bool			ADAPTIVE_ABORT_RATE 		= false;
+static const double 		MAX_ABORT_RATE				= 0.1;
+static const unsigned		ADAPTIVE_WINDOW_SIZE		= 100;
+static const bool			APPLY_COMMUTATIVE_UPDATES 	= true;			// whether or not commutative updates should be applied for record updates which can be implemented using RDMA atomic operations instead of locking.
 
 namespace recovery_settings {
-static const bool		RECOVERY_ENABLED		= false;
-static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);
-static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;
-static const size_t 	COMMAND_LOG_SIZE 		= 200;
+static const bool		RECOVERY_ENABLED		= false;				// whether or not logging should be enabled
+static const size_t 	LOG_REPLICATION_DEGREE	= MIN(SERVER_CNT, 2);	// how many machines the logs should be written to
+static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;					// the size of each client's log
+static const size_t 	COMMAND_LOG_SIZE 		= 200;					// the maximum size of command in bytes
 }
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 10000;				// This is __per client__. For the experiments, we will use 100,000
-static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must add up to 1
+static const unsigned				TRANSACTION_CNT 		= 10;		// This is __per client__. For the experiments, we will use 100,000
+static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {			// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment
 		0.04,	// Ratio of Order-Status
@@ -67,7 +61,7 @@ static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {						// Numbers must
 		0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
-static const size_t WAREHOUSE_PER_SERVER		= 1;
+static const size_t WAREHOUSE_PER_SERVER		= 1;			// Number of warehouses per server
 static const size_t WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
 static const size_t ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
 static const size_t DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
@@ -94,7 +88,7 @@ static const int	ITEM_PER_SERVER			= ITEM_CNT / SERVER_CNT;
 static const int	ORDERLINE_PER_ORDER		= MIN(SERVER_CNT, 3);
 static const int	MAX_ORDERS_CNT			= TRANSACTION_CNT; // TODO TRANSACTION_CNT * CLIENTS_CNT;	// Number of Orders
 static const int	MAX_CCXACTS_CNT			= MAX_ORDERS_CNT;	// Number of CCXacts
-static const int	MAX_ITEM_VERSIONS	= 3;		// Maximum number of versions per data item
+static const int	MAX_ITEM_VERSIONS		= 3;		// Maximum number of versions per data item
 }	// namespace tpcw_settings
 
 

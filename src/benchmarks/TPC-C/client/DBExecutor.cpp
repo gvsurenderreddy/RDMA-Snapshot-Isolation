@@ -51,6 +51,10 @@ void DBExecutor::synchronizeNetworkEvents(){
 	synchronizeRecvEvents();
 }
 
+bool DBExecutor::isServerLocal(size_t serverNum) const {
+	return (config::LOCALITY_EXPLOITAION && isServerLocal(serverNum));
+}
+
 void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
 
@@ -277,9 +281,6 @@ void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primit
 }
 
 
-
-
-
 void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &localRegion, bool signaled){
 	size_t serverNum = Warehouse::getServerNum(wID);
 	MemoryHandler<TPCC::WarehouseVersion> &remoteMH = dsCtx_[serverNum]->getRemoteMemoryKeys()->getRegion()->warehouseTableHeadVersions;
@@ -290,9 +291,10 @@ void DBExecutor::retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &l
 
 	uint32_t size = (uint32_t) sizeof(WarehouseVersion);	// Size to be read from the remote side
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
+		std::cout << "salam" << std::endl;
 	}
 	else {
 		// the data sits at a remote server
@@ -327,7 +329,7 @@ void DBExecutor::retrieveWarehouseOlderVersion(uint16_t wID, size_t versionOffse
 
 	uint32_t size = (uint32_t) sizeof(WarehouseVersion);	// Size to be read from the remote side
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[index], size);
 	}
@@ -363,7 +365,7 @@ void DBExecutor::retrieveWarehousePointerList(uint16_t wID, RDMARegion<Timestamp
 
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));	// Size to be read from the remote side
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -435,7 +437,7 @@ void DBExecutor::revertWarehouseLock(RDMARegion<TPCC::WarehouseVersion> &localRe
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()->writeTimestamp);
 	}
@@ -483,7 +485,7 @@ void DBExecutor::updateWarehousePointers(TPCC::WarehouseVersion &oldHead, RDMARe
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -525,7 +527,7 @@ void DBExecutor::updateWarehouseOlderVersions(RDMARegion<TPCC::WarehouseVersion>
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[index], localRegion.getRegion(), size);
 	}
@@ -562,7 +564,7 @@ void DBExecutor::updateWarehouse(RDMARegion<TPCC::WarehouseVersion> &localRegion
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::WarehouseVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -603,7 +605,7 @@ void DBExecutor::retrieveDistrict(uint16_t wID, uint8_t dID, RDMARegion<District
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -641,7 +643,7 @@ void DBExecutor::retrieveDistrictOlderVersion(uint16_t wID, uint8_t dID, size_t 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(DistrictVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[index], size);
 	}
@@ -677,7 +679,7 @@ void DBExecutor::retrieveDistrictPointerList(uint16_t wID, uint8_t dID, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -786,7 +788,7 @@ void DBExecutor::revertDistrictLock(RDMARegion<TPCC::DistrictVersion> &localRegi
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()->writeTimestamp);
 	}
@@ -836,7 +838,7 @@ void DBExecutor::updateDistrictPointers(TPCC::DistrictVersion &oldHead, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -880,7 +882,7 @@ void DBExecutor::updateDistrictOlderVersions(RDMARegion<TPCC::DistrictVersion> &
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[index], localRegion.getRegion(), size);
 	}
@@ -919,7 +921,7 @@ void DBExecutor::updateDistrict(RDMARegion<TPCC::DistrictVersion> &localRegion, 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::DistrictVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -958,7 +960,7 @@ void DBExecutor::retrieveCustomer(uint16_t wID, uint8_t dID, uint32_t cID, RDMAR
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -998,7 +1000,7 @@ void DBExecutor::retrieveCustomerOlderVersion(uint16_t wID, uint8_t dID, uint32_
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(CustomerVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[index], size);
 	}
@@ -1037,7 +1039,7 @@ void DBExecutor::retrieveCustomerPointerList(uint16_t wID, uint8_t dID, uint32_t
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -1115,7 +1117,7 @@ void DBExecutor::revertCustomerLock(RDMARegion<TPCC::CustomerVersion> &localRegi
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()->writeTimestamp);
 	}
@@ -1168,7 +1170,7 @@ void DBExecutor::updateCustomerPointers(TPCC::CustomerVersion &oldHead, RDMARegi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -1213,7 +1215,7 @@ void DBExecutor::updateCustomerOlderVersions(RDMARegion<TPCC::CustomerVersion> &
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[index], localRegion.getRegion(), size);
 	}
@@ -1253,7 +1255,7 @@ void DBExecutor::updateCustomer(RDMARegion<TPCC::CustomerVersion> &localRegion, 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::CustomerVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -1291,7 +1293,7 @@ void DBExecutor::retrieveItem(size_t offsetInLocalRegion, uint32_t iID, uint16_t
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::ItemVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&localRegion.getRegion()[offsetInLocalRegion], &remoteMH.region_[tableIndex], size);
 	}
@@ -1327,7 +1329,7 @@ void DBExecutor::retrieveStock(size_t offsetInLocalRegion, uint32_t iID, uint16_
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&localRegion.getRegion()[offsetInLocalRegion], &remoteMH.region_[tableIndex], size);
 	}
@@ -1366,7 +1368,7 @@ void DBExecutor::retrieveStockOlderVersion(size_t offsetInLocalRegion, uint32_t 
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(StockVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&localRegion.getRegion()[offsetInLocalRegion], &remoteMH.region_[index], size);
 	}
@@ -1404,7 +1406,7 @@ void DBExecutor::retrieveStockPointerList(size_t offsetInLocalRegion, uint32_t i
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 	size_t offset = (size_t) offsetInLocalRegion * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&localRegion.getRegion()[offset], &remoteMH.region_[tableIndex], size);
 	}
@@ -1473,7 +1475,7 @@ void DBExecutor::revertStockLock(size_t offsetInLocalRegion, uint32_t iID, uint1
 	size_t tableIndex = (size_t)(warehouseOffset * config::tpcc_settings::ITEMS_CNT + iID);		// offset of StockVersion in StockTable
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()[offsetInLocalRegion].writeTimestamp);
 	}
@@ -1520,7 +1522,7 @@ void DBExecutor::updateStockPointers(size_t offsetInLocalRegion, StockVersion *o
 	size_t tableIndex = (size_t)((warehouseOffset * config::tpcc_settings::ITEMS_CNT + oldHead->stock.S_I_ID) * config::tpcc_settings::VERSION_NUM);
 	uint32_t size = (uint32_t) (config::tpcc_settings::VERSION_NUM * sizeof(Timestamp));
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], &localRegion.getRegion()[offset], size);
 	}
@@ -1564,7 +1566,7 @@ void DBExecutor::updateStockOlderVersions(size_t offsetInLocalRegion, StockVersi
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(StockVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[index], localBuffer, size);
 	}
@@ -1602,7 +1604,7 @@ void DBExecutor::retrieveOrder(primitive::client_id_t clientID, size_t clientReg
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -1639,7 +1641,7 @@ void DBExecutor::insertIntoOrder(primitive::client_id_t clientID, size_t clientR
 	// Size to be written to the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -1709,7 +1711,7 @@ void DBExecutor::revertOrderLock(primitive::client_id_t clientID, size_t clientR
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()->writeTimestamp);
 	}
@@ -1749,7 +1751,7 @@ void DBExecutor::retrieveNewOrder(primitive::client_id_t clientID, size_t client
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(localRegion.getRegion(), &remoteMH.region_[tableIndex], size);
 	}
@@ -1785,7 +1787,7 @@ void DBExecutor::insertIntoNewOrder(primitive::client_id_t clientID, uint64_t cl
 	// Size to be written tothe remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::NewOrderVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -1854,7 +1856,7 @@ void DBExecutor::revertNewOrderLock(primitive::client_id_t clientID, size_t clie
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()->writeTimestamp);
 	}
@@ -1893,7 +1895,7 @@ void DBExecutor::updateStock(size_t offsetInLocalRegion, TPCC::StockVersion *sto
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::StockVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], &localRegion.getRegion()[offsetInLocalRegion], size);
 	}
@@ -1930,7 +1932,7 @@ void DBExecutor::insertIntoOrderLine(primitive::client_id_t clientID, uint64_t c
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::OrderLineVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], &localRegion.getRegion()[offsetInLocalRegion], size);
 	}
@@ -1966,7 +1968,7 @@ void DBExecutor::retrieveOrderLines(primitive::client_id_t clientID, uint16_t wI
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) (sizeof(TPCC::OrderLineVersion) * numOfOrderlines);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}
@@ -2035,7 +2037,7 @@ void DBExecutor::revertOrderLineLock(size_t offsetInLocalRegion, primitive::clie
 
 	uint32_t size = (uint32_t) sizeof(Timestamp);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		remoteMH.region_[tableIndex].writeTimestamp.copy(localRegion.getRegion()[offsetInLocalRegion].writeTimestamp);
 	}
@@ -2075,7 +2077,7 @@ void DBExecutor::insertIntoHistory(primitive::client_id_t clientID, uint64_t hID
 	// Size to be read from the remote side
 	uint32_t size = (uint32_t) sizeof(TPCC::HistoryVersion);
 
-	if (instanceNum_ == dsCtx_[serverNum]->getInstanceNum()) {
+	if (isServerLocal(serverNum)) {
 		// the data sits at a co-located server
 		std::memcpy(&remoteMH.region_[tableIndex], localRegion.getRegion(), size);
 	}

@@ -42,6 +42,8 @@ private:
 	size_t outstandingSendCompletionCnt_;
 	size_t outstandingRecvCompletionCnt_;
 
+	bool isServerLocal(size_t serverNum) const;
+
 public:
 	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
 	virtual ~DBExecutor();
