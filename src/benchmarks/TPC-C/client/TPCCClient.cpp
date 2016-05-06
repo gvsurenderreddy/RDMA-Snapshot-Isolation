@@ -187,6 +187,7 @@ void TPCCClient::start(){
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] --------------- Transaction " << t << " (" << trx->getTransactionName() << ") --------------");
 		clock_gettime(CLOCK_REALTIME, &trxBeginTime);
 		TransactionResult trxResult = trx->doOne();
+		trx->cleanupAfterCommit();
 		clock_gettime(CLOCK_REALTIME, &trxFinishTime);
 
 		std::string trxName = trx->getTransactionName();

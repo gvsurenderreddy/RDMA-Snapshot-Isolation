@@ -34,6 +34,18 @@ ibv_qp* OracleContext::getQP() const{
 	return qp_;
 }
 
+std::set<primitive::client_id_t> OracleContext::getClientIDsInSnapshot() const{
+	return clientIDsInSnapshot_;
+}
+void OracleContext::insertClientIDIntoSnapshot(primitive::client_id_t clientID){
+	clientIDsInSnapshot_.insert(clientID);
+}
+
+void OracleContext::clearSnapshot(){
+	clientIDsInSnapshot_.clear();
+}
+
+
 RDMARegion<OracleMemoryKeys>* OracleContext::getRemoteMemoryKeys(){
 	return peerMemoryKeys_;
 }

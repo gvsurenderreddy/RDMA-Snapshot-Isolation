@@ -29,6 +29,7 @@
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
 #include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
 #include "ServerContext.hpp"
+#include <set>
 
 namespace TPCC {
 
@@ -63,6 +64,8 @@ public:
 	void registerDelivery(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t oID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled);
 
 	void getReadTimestamp(RDMARegion<primitive::timestamp_t> &, MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
+	void getPartialSnapshot(RDMARegion<primitive::timestamp_t> &, const std::set<primitive::client_id_t> &clientsInSnapshot, MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
+
 	void submitResult(primitive::client_id_t, RDMARegion<primitive::timestamp_t> &,  MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
 
 	void retrieveWarehouse(uint16_t wID, RDMARegion<WarehouseVersion> &, bool signaled);

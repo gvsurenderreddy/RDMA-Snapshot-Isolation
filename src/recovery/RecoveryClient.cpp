@@ -28,8 +28,11 @@ RecoveryClient::RecoveryClient(std::ostream &os, primitive::client_id_t clientID
 	localRegion_ = new RDMARegion<char>(entrySize_, context, IBV_ACCESS_LOCAL_WRITE);
 }
 
-void RecoveryClient::writeCommandToLog(RDMARegion<primitive::timestamp_t> &timestampVector, const char *command, size_t commandSize){
+void RecoveryClient::writeCommandToLog(RDMARegion<primitive::timestamp_t> &timestampVector, const std::set<primitive::client_id_t> &clientsInSnapshot, const char *command, size_t commandSize){
 	assert(commandSize < config::recovery_settings::COMMAND_LOG_SIZE);
+
+	// TODO: for config::SNAPSHOT_ACQUISITION_TYPE = ONLY_READ_SET, adjust the logging
+	(void)clientsInSnapshot;
 
 	char *buff = localRegion_->getRegion();
 	for (size_t i = 0; i < timestampVector.getRegionSize(); i++)

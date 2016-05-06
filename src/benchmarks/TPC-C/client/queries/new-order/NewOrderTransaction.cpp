@@ -88,12 +88,13 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 
 
-	// ************************************************
-	//	Acquire read timestamp
-	// ************************************************
-	clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
-	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-
+	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
+		// ************************************************
+		//	Acquire read timestamp
+		// ************************************************
+		clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
+		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+	}
 
 	// ************************************************
 	//	Read records in read-set
@@ -130,6 +131,47 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// wait for all outstanding RDMA requests to finish
 	executor_.synchronizeSendEvents();
 
+
+	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::ONLY_READ_SET){
+		// ************************************************
+		//	Acquire Partial read timestamp
+		// ************************************************
+
+		// First find which clients are needed to put in the snapshot
+		oracleContext_->insertClientIDIntoSnapshot(warehouseV->writeTimestamp.getClientID());
+		oracleContext_->insertClientIDIntoSnapshot(districtV->writeTimestamp.getClientID());
+		oracleContext_->insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
+
+		for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++){
+			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getWarehouseTS()->getRegion()[i].getClientID());
+			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getDistrictTS()->getRegion()[i].getClientID());
+			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
+		}
+
+		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+			oracleContext_->insertClientIDIntoSnapshot(items[olNumber]->writeTimestamp.getClientID());
+			oracleContext_->insertClientIDIntoSnapshot(stocks[olNumber]->writeTimestamp.getClientID());
+		}
+
+
+		// then, construct the snapshot, only limited to those clients
+		// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
+		if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+			// get the entire snapshot
+			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		}
+		else{
+			executor_.getPartialSnapshot(
+					*localTimestampVector_,
+					oracleContext_->getClientIDsInSnapshot(),
+					oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+					oracleContext_->getQP(),
+					true);
+		}
+	}
+
+	executor_.synchronizeSendEvents();
+
 	// printing for debugging purposes
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << *warehouseV);
@@ -144,6 +186,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 		(void) offset; // to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 	}
+
 
 	clock_gettime(CLOCK_REALTIME, &afterExecutionTime);
 
@@ -206,7 +249,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	executor_.synchronizeSendEvents();
 
-	// double check if newly read records are accessible
+	// check if newly read records are accessible
 	if (! isRecordAccessible(warehouseV->writeTimestamp) || ! isRecordAccessible(districtV->writeTimestamp) || ! isRecordAccessible(customerV->writeTimestamp)) {
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": the newly read records are also inconsistent"
 				"(warehouse: " << warehouseV->writeTimestamp << ", district: " << districtV->writeTimestamp << ", customer: " << customerV->writeTimestamp << ")");
@@ -332,10 +375,11 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	//	Write the command to logs
 	// ************************************************
 	// At this point, it is determined that the transaction can successfully commit
+	localTimestampVector_->getRegion()[clientID_] = cts;
 	if (config::recovery_settings::RECOVERY_ENABLED){
 		char command[config::recovery_settings::COMMAND_LOG_SIZE];
 		size_t messageSize = cart.logMessage(command);
-		recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
+		recoveryClient_->writeCommandToLog(*localTimestampVector_, oracleContext_->getClientIDsInSnapshot(), command, messageSize);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 	}
 
@@ -519,7 +563,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.result = TransactionResult::Result::COMMITTED;
 	trxResult.reason = TransactionResult::Reason::SUCCESS;
 	trxResult.cts = cts;
-	localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 
 	executor_.synchronizeSendEvents();
@@ -540,6 +583,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.statistics.updatePhaseMicroSec = ( (double)( afterUpdateTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.indexElapsedMicroSec = ( (double)( afterUpdateTime.tv_sec - beforeIndexTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - beforeIndexTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.commitSnapshotMicroSec = ( (double)( afterCommitTime.tv_sec - afterUpdateTime.tv_sec ) * 1E9 + (double)( afterCommitTime.tv_nsec - afterUpdateTime.tv_nsec ) ) / 1000;
+
 
 	return trxResult;
 }

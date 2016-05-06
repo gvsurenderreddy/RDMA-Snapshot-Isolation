@@ -14,6 +14,7 @@
 #include "../rdma-region/MemoryHandler.hpp"
 #include <utility>
 #include <string>
+#include <set>
 
 class RecoveryClient {
 private:
@@ -30,7 +31,7 @@ private:
 public:
 	RecoveryClient(std::ostream &os, primitive::client_id_t clientID, size_t clientsCnt, std::vector<std::pair<MemoryHandler<char>, ibv_qp*> > logServers, RDMAContext &context);
 	~RecoveryClient();
-	void writeCommandToLog(RDMARegion<primitive::timestamp_t> &timestampVector, const char *command, size_t commandSize);
+	void writeCommandToLog(RDMARegion<primitive::timestamp_t> &timestampVector, const std::set<primitive::client_id_t> &clientsInSnapshot, const char *command, size_t commandSize);
 	void writeResultToLog(char transactionResult);
 	RecoveryClient& operator=(const RecoveryClient&) = delete;	// Disallow copying
 	RecoveryClient(const RecoveryClient&) = delete;				// Disallow copying

@@ -59,12 +59,13 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
 
 
-	// ************************************************
-	//	Acquire read timestamp
-	// ************************************************
-	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
-
+	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
+		// ************************************************
+		//	Acquire read timestamp
+		// ************************************************
+		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+	}
 
 	// ************************************************
 	//	Read records in read-set
@@ -126,6 +127,36 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 			largestOrderRes->numOfOrderlines,
 			*localMemory_->getOrderLineHead(),
 			true);
+
+	// wait for all outstanding RDMA requests to finish
+	executor_.synchronizeSendEvents();
+
+	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::ONLY_READ_SET){
+		// ************************************************
+		//	Acquire Partial read timestamp
+		// ************************************************
+
+		// First find which clients are needed to put in the snapshot
+		for (uint8_t olNumber = 0; olNumber < largestOrderRes->numOfOrderlines; olNumber++){
+			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getOrderLineHead()->getRegion()[olNumber].writeTimestamp.getClientID());
+		}
+
+		// then, construct the snapshot, only limited to those clients
+		// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
+		if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+			// get the entire snapshot
+			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		}
+
+		else{
+			executor_.getPartialSnapshot(
+					*localTimestampVector_,
+					oracleContext_->getClientIDsInSnapshot(),
+					oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+					oracleContext_->getQP(),
+					true);
+		}
+	}
 
 	executor_.synchronizeSendEvents();
 

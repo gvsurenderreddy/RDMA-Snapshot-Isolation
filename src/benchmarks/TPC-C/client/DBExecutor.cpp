@@ -254,6 +254,37 @@ void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegio
 	if (signaled) outstandingSendCompletionCnt_++;
 }
 
+void DBExecutor::getPartialSnapshot(RDMARegion<primitive::timestamp_t> &localRegion, const std::set<primitive::client_id_t> &clientsInSnapshot, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled){
+
+	for (std::set<primitive::client_id_t>::iterator it = clientsInSnapshot.begin(); it != clientsInSnapshot.end(); ++it) {
+		bool s = false;
+		bool lastIteration = (it == (--clientsInSnapshot.end()));
+		if (lastIteration && signaled) {
+			s = true;
+		}
+		primitive::client_id_t clientID = *it;
+		size_t tableOffset = (size_t)(clientID * sizeof(primitive::timestamp_t));		// offset of client's cts in timestampVector
+
+		primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)(tableOffset + (uint64_t)remoteMH.rdmaHandler_.addr);
+		uint32_t size = (uint32_t)sizeof(primitive::timestamp_t);
+
+		if(remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
+			PRINT_CERR(CLASS_NAME, __func__, "Error in timestamp acquisition");
+			exit(-1);
+		}
+
+		TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+				IBV_WR_RDMA_READ,
+				qp,
+				localRegion.getRDMAHandler(),
+				(uintptr_t)&localRegion.getRegion()[clientID],
+				&remoteMH.rdmaHandler_,
+				(uintptr_t)lookupAddress,
+				size,
+				s));
+	}
+	if (signaled) outstandingSendCompletionCnt_++;
+}
 
 
 void DBExecutor::submitResult(primitive::client_id_t clientID, RDMARegion<primitive::timestamp_t> &localRegion,  MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled){

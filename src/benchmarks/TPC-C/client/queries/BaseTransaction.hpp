@@ -65,6 +65,7 @@ public:
 			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
 	std::string getTransactionName() const;
 	virtual TransactionResult doOne() = 0;
+	void cleanupAfterCommit();
 	virtual ~BaseTransaction();
 };
 

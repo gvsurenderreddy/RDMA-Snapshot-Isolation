@@ -18,22 +18,24 @@
 namespace config {
 /* Logging			*/
 #define DEBUG_ENABLED (false)
+enum 	Output{FILE, SCREEN};						// Don't change this. Possible options for logging.
 #define DEBUG_OUTPUT config::Output::SCREEN			// Where to write the logs (possible options are specified in Output enum.
-enum Output{FILE, SCREEN};							// Don't change this. Possible options for logging.
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
 /* Server settings */
-static const size_t						SERVER_CNT	= 2;
-static const std::vector<std::string>	SERVER_ADDR = {"192.168.1.1", "192.168.1.1"};		// IP address of the servers
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681};							// TCP port of the servers
-static const std::vector<uint8_t>		IB_PORT		= {1, 1};										// InfiniBand port of the servers
+static const size_t						SERVER_CNT	= 3;
+static const std::vector<std::string>	SERVER_ADDR = {"192.168.1.1", "192.168.2.1", "192.168.3.1"};		// IP address of the servers
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680, 45680};							// TCP port of the servers
+static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};										// InfiniBand port of the servers
 static const size_t						SERVER_THREADS_CNT = 40;										// Number of threads running on each server for handling index requests. Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
-static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.1.1";						// IP address of the oracle
+static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.0.1";						// IP address of the oracle
 static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;								// TCP port of the oracle
 static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;									// IB port of the oracle
+enum 						SnapshotAcquisitionType{COMPLETE, ONLY_READ_SET};					// Don't change this. Possible options for snapshot acquisition.
+static const SnapshotAcquisitionType	SNAPSHOT_ACQUISITION_TYPE = SnapshotAcquisitionType::ONLY_READ_SET;
 
 
 /* Client setting */
@@ -52,7 +54,7 @@ static const size_t 	COMMAND_LOG_SIZE 		= 200;					// the maximum size of comman
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 1000000;		// This is __per client__. For the experiments, we will use 1,000,000
+static const unsigned				TRANSACTION_CNT 		= 100000;		// This is __per client__. For the experiments, we will use 1,000,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {			// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment

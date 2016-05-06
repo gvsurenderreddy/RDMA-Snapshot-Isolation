@@ -55,14 +55,16 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 	for (uint8_t dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; dID++){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Starting independent transaction for dID " << (int)dID);
+		BaseTransaction::cleanupAfterCommit();
 
-
-		// ************************************************
-		//	Acquire read timestamp
-		// ************************************************
-		clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
-		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+		if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
+			// ************************************************
+			//	Acquire read timestamp
+			// ************************************************
+			clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
+			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
+		}
 
 
 		// ************************************************
@@ -120,6 +122,42 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		customerV = localMemory_->getCustomerHead()->getRegion();
 
 		executor_.retrieveCustomerPointerList(cart.wID, dID, cID, *localMemory_->getCustomerTS(), true);
+
+		// wait for all outstanding RDMA requests to finish
+		executor_.synchronizeSendEvents();
+
+		if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::ONLY_READ_SET){
+			// ************************************************
+			//	Acquire Partial read timestamp
+			// ************************************************
+
+			// First find which clients are needed to put in the snapshot
+			oracleContext_->insertClientIDIntoSnapshot(orderV->writeTimestamp.getClientID());
+			oracleContext_->insertClientIDIntoSnapshot(newOrderV->writeTimestamp.getClientID());
+			oracleContext_->insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
+			for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++) {
+				oracleContext_->insertClientIDIntoSnapshot(orderLinesV[olNumber].writeTimestamp.getClientID());
+			}
+
+			for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++){
+				oracleContext_->insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
+			}
+
+			// then, construct the snapshot, only limited to those clients
+			// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
+			if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+				// get the entire snapshot
+				executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			}
+			else{
+				executor_.getPartialSnapshot(
+						*localTimestampVector_,
+						oracleContext_->getClientIDsInSnapshot(),
+						oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+						oracleContext_->getQP(),
+						true);
+			}
+		}
 
 		executor_.synchronizeSendEvents();
 
@@ -360,10 +398,11 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		//	Write the command to logs
 		// ************************************************
 		// At this point, it is determined that the transaction can successfully commit
+		localTimestampVector_->getRegion()[clientID_] = cts;
 		if (config::recovery_settings::RECOVERY_ENABLED){
 			char command[config::recovery_settings::COMMAND_LOG_SIZE];
 			size_t messageSize = cart.logMessage(dID, command);
-			recoveryClient_->writeCommandToLog(*localTimestampVector_, command, messageSize);
+			recoveryClient_->writeCommandToLog(*localTimestampVector_, oracleContext_->getClientIDsInSnapshot(), command, messageSize);
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 		}
 
@@ -451,7 +490,6 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		trxResult.result = TransactionResult::Result::COMMITTED;
 		trxResult.reason = TransactionResult::Reason::SUCCESS;
 		trxResult.cts = cts;
-		localTimestampVector_->getRegion()[clientID_] = trxResult.cts;
 		executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
 
 		executor_.synchronizeSendEvents();

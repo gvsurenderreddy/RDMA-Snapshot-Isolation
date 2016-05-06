@@ -128,4 +128,9 @@ uint64_t BaseTransaction::reserveOrderLineRID(size_t orderLineCnt){
 	}
 }
 
+void BaseTransaction::cleanupAfterCommit(){
+	oracleContext_->clearSnapshot();
+}
+
+
 } /* namespace TPCC */
