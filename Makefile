@@ -10,6 +10,7 @@ TPC			:= benchmarks/TPC-C
 QUERIES		:= $(TPC)/client/queries
 CLIENT_MODULES	:= $(TPC)/client $(QUERIES) $(QUERIES)/new-order $(QUERIES)/payment $(QUERIES)/order-status $(QUERIES)/delivery $(QUERIES)/stock-level
 SERVER_MODULES	:= $(TPC)/server 
+#SERVER_MODULES	:= $(TPC)/2PC-architecture/server 
 INDEX_MODULES	:= index/hash $(TPC)/index-messages
 EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle recovery $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
 

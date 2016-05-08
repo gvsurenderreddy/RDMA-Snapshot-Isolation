@@ -10,24 +10,45 @@
 
 namespace TPCC {
 
-BaseTransaction::BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: os_(os),
-  transactionName_(transactionName),
-  executor_(executor),
-  clientID_(clientID),
-  clientCnt_(clientCnt),
-  dsCtx_(dsCtx),
-  sessionState_(sessionState),
-  random_(random),
-  context_(context),
-  oracleContext_(oracleContext),
-  localTimestampVector_(localTimestampVector),
-  recoveryClient_(recoveryClient),
-  nextOrderID_(0),
-  nextNewOrderID_(0),
-  nextOrderLineID_(0),
-  nextHistoryID_(0){
+BaseTransaction::BaseTransaction(std::string transactionName, TPCCClient &client, DBExecutor &executor)
+:   os_(*client.os_),
+	transactionName_(transactionName),
+	client_(client),
+	executor_(executor),
+	clientID_(client.clientID_),
+	clientCnt_(client.clientCnt_),
+	dsCtx_(client.dsCtx_),
+	sessionState_(*client.sessionState_),
+	random_(client.random_),
+	context_(*client.context_),
+	oracleContext_(*client.oracleContext_),
+	localTimestampVector_(*client.localTimestampVector_),
+	recoveryClient_(*client.recoveryClient_),
+	oracleReader_(client.oracleReader_),
+	nextOrderID_(0),
+	nextNewOrderID_(0),
+	nextOrderLineID_(0),
+	nextHistoryID_(0){
 }
+
+//BaseTransaction::BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient, OracleReader *oracleReader)
+//: os_(os),
+//  transactionName_(transactionName),
+//  executor_(executor),
+//  clientID_(clientID),
+//  clientCnt_(clientCnt),
+//  dsCtx_(dsCtx),
+//  sessionState_(sessionState),
+//  random_(random),
+//  context_(context),
+//  oracleContext_(oracleContext),
+//  localTimestampVector_(localTimestampVector),
+//  recoveryClient_(recoveryClient),
+//  nextOrderID_(0),
+//  nextNewOrderID_(0),
+//  nextOrderLineID_(0),
+//  nextHistoryID_(0){
+//}
 
 BaseTransaction::~BaseTransaction() {
 	// TODO Auto-generated destructor stub
@@ -45,11 +66,11 @@ bool BaseTransaction::isRecordAccessible(const Timestamp &ts) const{
 		return false;
 
 	primitive::client_id_t committingClient = ts.getClientID();
-	if (committingClient == clientID_)
+	if (committingClient == client_.clientID_)
 		// regardless of whether the version matches the snapshot or not, the version is installed by the client itself, so is valid
 		// when is it useful? when using adaptive abort rate control.
 		return true;
-	if (ts.getTimestamp() > localTimestampVector_->getRegion()[committingClient])
+	if (ts.getTimestamp() > client_.localTimestampVector_->getRegion()[committingClient])
 		// from a later snapshot, so not useful
 		return false;
 
@@ -66,8 +87,8 @@ int BaseTransaction::findValidVersion(const Timestamp *timestampList, const size
 
 primitive::timestamp_t BaseTransaction::getNewCommitTimestamp() {
 	primitive::timestamp_t output;
-	output = (primitive::timestamp_t)(sessionState_->getNextEpoch() * clientCnt_ + clientID_);
-	sessionState_->advanceEpoch();
+	output = (primitive::timestamp_t)(client_.sessionState_->getNextEpoch() * client_.clientCnt_ + client_.clientID_);
+	client_.sessionState_->advanceEpoch();
 	return output;
 }
 
@@ -80,8 +101,8 @@ std::string BaseTransaction::pointer_to_string(Timestamp* ts) const{
 
 std::string BaseTransaction::readTimestampToString() const{
 	std::stringstream ss;
-	for (size_t i = 0; i < clientCnt_; i++)
-		ss << "client " << i << ": " << localTimestampVector_->getRegion()[i] << ", ";
+	for (size_t i = 0; i < client_.clientCnt_; i++)
+		ss << "client " << i << ": " << client_.localTimestampVector_->getRegion()[i] << ", ";
 
 	return ss.str();
 }
@@ -129,7 +150,7 @@ uint64_t BaseTransaction::reserveOrderLineRID(size_t orderLineCnt){
 }
 
 void BaseTransaction::cleanupAfterCommit(){
-	oracleContext_->clearSnapshot();
+	client_.oracleContext_->clearSnapshot();
 }
 
 

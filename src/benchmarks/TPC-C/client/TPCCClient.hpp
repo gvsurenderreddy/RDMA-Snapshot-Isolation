@@ -18,6 +18,7 @@
 #include "../random/randomgenerator.hpp"
 #include "queries/BaseTransaction.hpp"
 #include "../../../recovery/RecoveryClient.hpp"
+#include "OracleReader.hpp"
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
@@ -26,7 +27,9 @@
 namespace TPCC{
 
 class TPCCClient {
-private:
+	friend class BaseTransaction;
+
+protected:
 	primitive::client_id_t	clientID_;
 	const unsigned instanceNum_;
 	const uint8_t ibPort_;
@@ -39,9 +42,10 @@ private:
 	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
 	std::ostream *os_;
 	RecoveryClient *recoveryClient_;
+	OracleReader *oracleReader_;
 
 public:
-	TPCCClient(unsigned instance_num, uint16_t homeWarehouseID, uint8_t homeDistrictID, uint8_t ibPort);
+	TPCCClient(unsigned instance_num, uint16_t homeWarehouseID, uint8_t homeDistrictID, uint8_t ibPort, OracleReader *oracleReader);
 	~TPCCClient();
 	void start();
 

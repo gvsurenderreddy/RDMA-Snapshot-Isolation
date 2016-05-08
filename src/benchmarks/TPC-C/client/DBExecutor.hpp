@@ -28,6 +28,7 @@
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
 #include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
+#include "OracleReader.hpp"
 #include "ServerContext.hpp"
 #include <set>
 
@@ -38,6 +39,7 @@ private:
 	std::ostream &os_;
 	std::vector<ServerContext*> dsCtx_;
 	const unsigned instanceNum_;
+	OracleReader *oracleReader_;
 	ibv_cq *sendCQ_;
 	ibv_cq *recvCQ_;
 	size_t outstandingSendCompletionCnt_;
@@ -46,7 +48,7 @@ private:
 	bool isServerLocal(size_t serverNum) const;
 
 public:
-	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
+	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
 	virtual ~DBExecutor();
 	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
 	DBExecutor(const DBExecutor&) = delete;				// Disallow copying

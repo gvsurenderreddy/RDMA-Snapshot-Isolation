@@ -10,6 +10,7 @@
 
 #include "../BaseTransaction.hpp"
 #include "OrderStatusLocalMemory.hpp"
+#include "../../TPCCClient.hpp"
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
@@ -51,7 +52,7 @@ private:
 	OrderStatusLocalMemory* localMemory_;
 	OrderStatusCart buildCart();
 public:
-	OrderStatusTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
+	OrderStatusTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~OrderStatusTransaction();
 	OrderStatusTransaction& operator=(const OrderStatusTransaction&) = delete;	// Disallow copying
 	OrderStatusTransaction(const OrderStatusTransaction&) = delete;				// Disallow copying

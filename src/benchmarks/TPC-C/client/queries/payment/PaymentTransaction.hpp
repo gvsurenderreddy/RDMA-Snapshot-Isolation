@@ -10,6 +10,7 @@
 
 #include "../BaseTransaction.hpp"
 #include "PaymentLocalMemory.hpp"
+#include "../../TPCCClient.hpp"
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
@@ -65,7 +66,7 @@ private:
 	PaymentCart buildCart();
 
 public:
-	PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
+	PaymentTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~PaymentTransaction();
 	PaymentTransaction& operator=(const PaymentTransaction&) = delete;	// Disallow copying
 	PaymentTransaction(const PaymentTransaction&) = delete;				// Disallow copying

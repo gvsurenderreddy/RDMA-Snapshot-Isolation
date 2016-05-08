@@ -28,11 +28,11 @@
 #include <fstream>      // std::ofstream
 
 
-
 #define CLASS_NAME	"Oracle"
 
-Oracle::Oracle(size_t clients_cnt)
-: clients_cnt_ (clients_cnt),
+Oracle::Oracle(size_t clientsCnt, size_t instancesCnt)
+: clientsCnt_ (clientsCnt),
+  instancesCnt_(instancesCnt),
   server_sockfd_ (-1),
   tcp_port_(config::TIMESTAMP_SERVER_PORT),
   ib_port_(config::TIMESTAMP_SERVER_IB_PORT){
@@ -44,11 +44,9 @@ Oracle::Oracle(size_t clients_cnt)
 	else os_ = &std::cout;
 
 	std::vector<WorkerContext*> workerCtxs;
-
-
 	context_ = new RDMAContext(*os_, ib_port_);
-	lastCommittedVector_ = new RDMARegion<primitive::timestamp_t>(clients_cnt_, *context_, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
-	for (size_t i = 0; i < clients_cnt_; i++)
+	lastCommittedVector_ = new RDMARegion<primitive::timestamp_t>(clientsCnt_, *context_, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
+	for (size_t i = 0; i < clientsCnt_; i++)
 		lastCommittedVector_->getRegion()[i] = (primitive::timestamp_t)0;
 
 	struct sockaddr_in serv_addr, returned_addr;
@@ -68,18 +66,24 @@ Oracle::Oracle(size_t clients_cnt)
 	serv_addr.sin_port = htons(tcp_port_);
 	TEST_NZ(bind(server_sockfd_, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
 
-	// listen				  
-	TEST_NZ(listen (server_sockfd_, (int)clients_cnt_));
+	// listen
+	if (config::SNAPSHOT_CLUSTER_MODE == true)
+	TEST_NZ(listen (server_sockfd_, (int)(clientsCnt_ + instancesCnt_) ));
 
 	// accept connections from clients
-	PRINT_COUT(CLASS_NAME, __func__, "[Info] Waiting for " << clients_cnt_ << " client(s) on port " << tcp_port_);
+	PRINT_COUT(CLASS_NAME, __func__, "[Info] Waiting for " << instancesCnt_ << " instances(s) and " << clientsCnt_ << " clients on port " << tcp_port_);
 
-	for (primitive::client_id_t c = 0; c < clients_cnt_; c++){
+	primitive::client_id_t clientID = 0;
+	for (size_t c = 0; c < instancesCnt_ + clientsCnt_; c++){
 		int sockfd = accept (server_sockfd_, (struct sockaddr *) &returned_addr, &len);
 		if (sockfd < 0) {
 			PRINT_CERR(CLASS_NAME, __func__, "ERROR on accept() client #" << c );
 			exit(-1);
 		}
+
+		char type;
+		TEST_NZ(utils::sock_read(sockfd, &type, sizeof(char)));
+
 		workerCtxs.push_back(new WorkerContext(*os_, sockfd, *context_));
 
 		// connect the QPs
@@ -90,14 +94,20 @@ Oracle::Oracle(size_t clients_cnt)
 		workerCtxs[c]->clientPort_ = (int) ntohs(returned_addr.sin_port);
 		PRINT_COUT(CLASS_NAME, __func__, "[Conn] Received client (" << *workerCtxs[c] <<  ")");
 
-
 		// prepare the message before sending to client
-		workerCtxs[c]->getMemoryKeysMessage()->getRegion()->client_cnt = clients_cnt;
-		workerCtxs[c]->getMemoryKeysMessage()->getRegion()->client_id = c;
+		workerCtxs[c]->getMemoryKeysMessage()->getRegion()->client_cnt = clientsCnt;
+		if (type == 'c') {
+			workerCtxs[c]->getMemoryKeysMessage()->getRegion()->client_id = clientID;
+			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] received client " << clientID);
+			clientID++;
+		}
+		else if (type == 'i')
+			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Conn] received instance");
+
 		lastCommittedVector_->getMemoryHandler(workerCtxs[c]->getMemoryKeysMessage()->getRegion()->lastCommittedVector);
 	}
 
-	for (size_t c = 0; c < clients_cnt_; c++){
+	for (size_t c = 0; c < instancesCnt_ + clientsCnt_; c++){
 		// send memory locations using SEND
 		TEST_NZ (RDMACommon::post_SEND (workerCtxs[c]->getQP(), workerCtxs[c]->getMemoryKeysMessage()->getRDMAHandler(), (uintptr_t)workerCtxs[c]->getMemoryKeysMessage()->getRegion(), sizeof(struct OracleMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
@@ -105,11 +115,12 @@ Oracle::Oracle(size_t clients_cnt)
 	}
 
 	// Destroy clients' resources
-	for (size_t c = 0; c < clients_cnt_; c++) {
+	for (size_t c = 0; c < instancesCnt_ + clientsCnt_; c++) {
 		// once it's finished with the client, it syncs with client to ensure that client is over
 		TEST_NZ (utils::sock_sync (workerCtxs[c]->getSockFd()));	// just send a dummy char back and forth
 		delete workerCtxs[c];
 	}
+
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Oracle is done.");
 }
 

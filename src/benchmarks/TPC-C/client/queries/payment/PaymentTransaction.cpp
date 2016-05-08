@@ -13,10 +13,9 @@
 
 namespace TPCC {
 
-
-PaymentTransaction::PaymentTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: BaseTransaction(os, "Payment", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
-	localMemory_ 	= new PaymentLocalMemory(os_, *context_);
+PaymentTransaction::PaymentTransaction(TPCCClient &client, DBExecutor &executor)
+: BaseTransaction("Payment", client, executor){
+	localMemory_ 	= new PaymentLocalMemory(os_, context_);
 }
 
 PaymentTransaction::~PaymentTransaction() {
@@ -24,39 +23,38 @@ PaymentTransaction::~PaymentTransaction() {
 	delete localMemory_;
 }
 
-
 TPCC::PaymentCart PaymentTransaction::buildCart(){
 	PaymentCart cart;
 
-	int x = random_->number(1, 100);
-	int y = random_->number(1, 100);
+	int x = random_.number(1, 100);
+	int y = random_.number(1, 100);
 
 	// 2.5.1.1 For any given terminal, the home warehouse number (W_ID) is constant over the whole measurement interval
-	cart.wID = sessionState_->getHomeWarehouseID();
+	cart.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.5.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
-	cart.dID = (uint8_t) random_->number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	// 2.5.1.2 the customer resident warehouse is the home warehouse 85% of the time and is a randomly selected remote warehouse 15% of the time
 	if (x <= 85 || config::tpcc_settings::WAREHOUSE_CNT == 1)
 		cart.residentWarehouseID = cart.wID;
 	else
-		cart.residentWarehouseID = (uint16_t) random_->numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, cart.wID);
+		cart.residentWarehouseID = (uint16_t) random_.numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, cart.wID);
 
 	// 2.5.1.2 The customer is randomly selected 60% of the time by last name (C_W_ID , C_D_ID, C_LAST) and 40% of the time by number
 	if (y <= 60){
 		// selection by LastName
 		cart.customerSelectionMode = PaymentCart::LAST_NAME;
-		random_->lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+		random_.lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
 	}
 	else {
 		// selection by ID
 		cart.customerSelectionMode = PaymentCart::ID;
-		cart.cID = (uint32_t) random_->NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+		cart.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 	}
 
 	// 2.5.1.3 The payment amount (H_AMOUNT) is random ly selected within [1.00 .. 5,000.00].
-	cart.hAmount = random_->fixedPoint(2, 1.00, 5.00);
+	cart.hAmount = random_.fixedPoint(2, 1.00, 5.00);
 
 	return cart;
 }
@@ -78,7 +76,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		// ************************************************
 		//	Acquire read timestamp
 		// ************************************************
-		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 	}
 
@@ -139,22 +137,22 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		// ************************************************
 
 		// First find which clients are needed to put in the snapshot
-		oracleContext_->insertClientIDIntoSnapshot(warehouseV->writeTimestamp.getClientID());
-		oracleContext_->insertClientIDIntoSnapshot(districtV->writeTimestamp.getClientID());
-		oracleContext_->insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(warehouseV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(districtV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
 
 		// then, construct the snapshot, only limited to those clients
 		// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
-		if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+		if (oracleContext_.getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
 			// get the entire snapshot
-			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 		}
 		else{
 			executor_.getPartialSnapshot(
-					*localTimestampVector_,
-					oracleContext_->getClientIDsInSnapshot(),
-					oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
-					oracleContext_->getQP(),
+					localTimestampVector_,
+					oracleContext_.getClientIDsInSnapshot(),
+					oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+					oracleContext_.getQP(),
 					true);
 		}
 	}
@@ -294,11 +292,11 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	//	Write the command to logs
 	// ************************************************
 	// At this point, it is determined that the transaction can successfully commit
-	localTimestampVector_->getRegion()[clientID_] = cts;
+	localTimestampVector_.getRegion()[clientID_] = cts;
 	if (config::recovery_settings::RECOVERY_ENABLED){
 		char command[config::recovery_settings::COMMAND_LOG_SIZE];
 		size_t messageSize = cart.logMessage(command);
-		recoveryClient_->writeCommandToLog(*localTimestampVector_, oracleContext_->getClientIDsInSnapshot(), command, messageSize);
+		recoveryClient_.writeCommandToLog(localTimestampVector_, oracleContext_.getClientIDsInSnapshot(), command, messageSize);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 	}
 
@@ -392,7 +390,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 	trxResult.result = TransactionResult::Result::COMMITTED;
 	trxResult.reason = TransactionResult::Reason::SUCCESS;
 	trxResult.cts = cts;
-	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+	executor_.submitResult(clientID_, localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 
 	executor_.synchronizeSendEvents();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");

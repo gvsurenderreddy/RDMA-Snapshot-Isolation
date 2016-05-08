@@ -10,6 +10,7 @@
 
 #include "../BaseTransaction.hpp"
 #include "DeliveryLocalMemory.hpp"
+#include "../../TPCCClient.hpp"
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
@@ -55,7 +56,7 @@ private:
 	DeliveryCart buildCart();
 
 public:
-	DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
+	DeliveryTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~DeliveryTransaction();
 	TPCC::TransactionResult doOne();
 

@@ -10,6 +10,7 @@
 
 #include "../BaseTransaction.hpp"
 #include "../../../random/randomgenerator.hpp"
+#include "../../TPCCClient.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
 #include "StockLevelLocalMemory.hpp"
@@ -44,7 +45,7 @@ private:
 	StockLevelLocalMemory* localMemory_;
 	StockLevelCart buildCart();
 public:
-	StockLevelTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
+	StockLevelTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~StockLevelTransaction();
 	StockLevelTransaction& operator=(const StockLevelTransaction&) = delete;	// Disallow copying
 	StockLevelTransaction(const StockLevelTransaction&) = delete;				// Disallow copying

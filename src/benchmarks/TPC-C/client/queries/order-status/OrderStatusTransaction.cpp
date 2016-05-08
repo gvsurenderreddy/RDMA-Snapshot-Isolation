@@ -11,9 +11,10 @@
 #define CLASS_NAME "OrdStatTrx"
 namespace TPCC {
 
-OrderStatusTransaction::OrderStatusTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: BaseTransaction(os, "OrderStatus", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
-	localMemory_ 	= new OrderStatusLocalMemory(os_, *context_);
+
+OrderStatusTransaction::OrderStatusTransaction(TPCCClient &client, DBExecutor &executor)
+: BaseTransaction("OrderStatus", client, executor){
+	localMemory_ 	= new OrderStatusLocalMemory(os_, context_);
 }
 
 OrderStatusTransaction::~OrderStatusTransaction() {
@@ -25,22 +26,22 @@ TPCC::OrderStatusCart OrderStatusTransaction::buildCart(){
 	OrderStatusCart cart;
 
 	// 2.6.1.1 For any given terminal, the home warehouse number (W_ID) is constant over the whole measurement interval
-	cart.wID = sessionState_->getHomeWarehouseID();
+	cart.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.6.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
-	cart.dID = (uint8_t) random_->number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	// 2.6.1.2 The customer is randomly selected 60% of the time by last name (C_W_ID , C_D_ID, C_LAST) and 40% of the time by number
-	int y = random_->number(1, 100);
+	int y = random_.number(1, 100);
 	if (y <= 60){
 		// selection by LastName
 		cart.customerSelectionMode = OrderStatusCart::LAST_NAME;
-		random_->lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+		random_.lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
 	}
 	else {
 		// selection by ID
 		cart.customerSelectionMode = OrderStatusCart::ID;
-		cart.cID = (uint32_t) random_->NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+		cart.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 	}
 
 	return cart;
@@ -63,7 +64,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 		// ************************************************
 		//	Acquire read timestamp
 		// ************************************************
-		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 	}
 
@@ -138,22 +139,22 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 		// First find which clients are needed to put in the snapshot
 		for (uint8_t olNumber = 0; olNumber < largestOrderRes->numOfOrderlines; olNumber++){
-			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getOrderLineHead()->getRegion()[olNumber].writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(localMemory_->getOrderLineHead()->getRegion()[olNumber].writeTimestamp.getClientID());
 		}
 
 		// then, construct the snapshot, only limited to those clients
 		// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
-		if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+		if (oracleContext_.getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
 			// get the entire snapshot
-			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 		}
 
 		else{
 			executor_.getPartialSnapshot(
-					*localTimestampVector_,
-					oracleContext_->getClientIDsInSnapshot(),
-					oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
-					oracleContext_->getQP(),
+					localTimestampVector_,
+					oracleContext_.getClientIDsInSnapshot(),
+					oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+					oracleContext_.getQP(),
 					true);
 		}
 	}

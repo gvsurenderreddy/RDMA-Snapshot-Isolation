@@ -15,27 +15,31 @@
 #include "../../../../oracle/OracleContext.hpp"
 #include "../../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../../recovery/RecoveryClient.hpp"
+#include "../TPCCClient.hpp"
+#include "../OracleReader.hpp"
 #include <vector>
 #include <string>
 
-
 namespace TPCC {
+
+class TPCCClient;	// forward decleration
 
 class BaseTransaction {
 protected:
 	std::ostream &os_;
 	std::string transactionName_;
+	TPCC::TPCCClient &client_;
 	TPCC::DBExecutor &executor_;
 	primitive::client_id_t clientID_;
 	size_t	clientCnt_;
 	std::vector<ServerContext*> dsCtx_;
-	SessionState *sessionState_;
-	TPCC::RealRandomGenerator *random_;
-	RDMAContext *context_;
-	OracleContext *oracleContext_;
-	RDMARegion<primitive::timestamp_t> *localTimestampVector_;
-	RecoveryClient *recoveryClient_;
-
+	SessionState &sessionState_;
+	TPCC::RealRandomGenerator &random_;
+	RDMAContext &context_;
+	OracleContext &oracleContext_;
+	RDMARegion<primitive::timestamp_t> &localTimestampVector_;
+	RecoveryClient &recoveryClient_;
+	OracleReader *oracleReader_;
 
 	ServerContext* getServerContext(uint16_t wID);
 	bool isRecordAccessible(const Timestamp &ts) const;
@@ -60,9 +64,10 @@ private:
 	uint64_t nextHistoryID_;
 
 public:
-	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt,
-			std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext,
-			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
+	BaseTransaction(std::string transactionName, TPCCClient &client, DBExecutor &executor);
+//	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt,
+//			std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext,
+//			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
 	std::string getTransactionName() const;
 	virtual TransactionResult doOne() = 0;
 	void cleanupAfterCommit();

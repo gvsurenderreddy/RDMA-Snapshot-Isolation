@@ -23,7 +23,8 @@
 class Oracle{
 private:
 	std::ostream	*os_;
-	const size_t	clients_cnt_;	// coming from the command line.
+	const size_t	clientsCnt_;	// coming from the command line.
+	const size_t	instancesCnt_;	// coming from the command line.
 	int				server_sockfd_;	// Server's socket file descriptor
 	uint16_t		tcp_port_;
 	uint8_t			ib_port_;
@@ -32,7 +33,7 @@ private:
 	RDMARegion<primitive::timestamp_t> *lastCommittedVector_;
 	
 public:
-	Oracle(size_t clients_cnt);
+	Oracle(size_t clientsCnt, size_t instancesCnt);
 	~Oracle();
 };
 #endif /* SRC_ORACLE_ORACLE_HPP_ */

@@ -25,17 +25,18 @@ static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you 
 
 /* Server settings */
 static const size_t						SERVER_CNT	= 3;
-static const std::vector<std::string>	SERVER_ADDR = {"192.168.1.1", "192.168.2.1", "192.168.3.1"};		// IP address of the servers
-static const std::vector<uint16_t>		TCP_PORT	= {45680, 45680, 45680};							// TCP port of the servers
-static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};										// InfiniBand port of the servers
-static const size_t						SERVER_THREADS_CNT = 40;										// Number of threads running on each server for handling index requests. Ideally should be set to the number of CPU on each server machine
+static const std::vector<std::string>	SERVER_ADDR = {"192.168.1.1", "192.168.2.1", "192.168.3.1"};			// IP address of the servers
+static const std::vector<uint16_t>		TCP_PORT	= {45680, 45681, 45682};	// TCP port of the servers
+static const std::vector<uint8_t>		IB_PORT		= {1, 1, 1};				// InfiniBand port of the servers
+static const size_t						SERVER_THREADS_CNT = 40;				// Number of threads running on each server for handling index requests. Ideally should be set to the number of CPU on each server machine
 
 /* Oracle settings */
 static const std::string	TIMESTAMP_SERVER_ADDR		= "192.168.0.1";						// IP address of the oracle
 static const uint16_t		TIMESTAMP_SERVER_PORT		= 56788;								// TCP port of the oracle
 static const uint8_t		TIMESTAMP_SERVER_IB_PORT	= 1;									// IB port of the oracle
 enum 						SnapshotAcquisitionType{COMPLETE, ONLY_READ_SET};					// Don't change this. Possible options for snapshot acquisition.
-static const SnapshotAcquisitionType	SNAPSHOT_ACQUISITION_TYPE = SnapshotAcquisitionType::ONLY_READ_SET;
+static const SnapshotAcquisitionType	SNAPSHOT_ACQUISITION_TYPE = SnapshotAcquisitionType::COMPLETE;
+
 
 
 /* Client setting */
@@ -43,7 +44,9 @@ static const bool			ADAPTIVE_ABORT_RATE 		= false;
 static const double 		MAX_ABORT_RATE				= 0.1;
 static const unsigned		ADAPTIVE_WINDOW_SIZE		= 100;
 static const bool			APPLY_COMMUTATIVE_UPDATES 	= true;		// whether or not commutative updates should be applied for record updates which can be implemented using RDMA atomic operations instead of locking.
-static const bool			LOCALITY_EXPLOITAION 		= false;	// Whether or not co-located servers and clients could exchange data through memcpy instead of over the wire
+static const bool			LOCALITY_EXPLOITAION 		= false;	// whether or not co-located servers and clients could exchange data through memcpy instead of over the wire
+static const bool			SNAPSHOT_CLUSTER_MODE		= true;		// whether or not each client group gets snapshot individually or in a group.
+static const int			ORACLE_READER_SLEEP_TIME	= 100;		// micro sec
 
 namespace recovery_settings {
 static const bool		RECOVERY_ENABLED		= true;				// whether or not logging should be enabled
@@ -54,8 +57,8 @@ static const size_t 	COMMAND_LOG_SIZE 		= 200;					// the maximum size of comman
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 100000;		// This is __per client__. For the experiments, we will use 1,000,000
-static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {			// Numbers must add up to 1
+static const unsigned				TRANSACTION_CNT 		= 1000000;		// This is __per client__. For the experiments, we will use 1,000,000
+static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {				// Numbers must add up to 1
 		0.45,	// Ratio of New Order
 		0.43,	// Ratio of Payment
 		0.04,	// Ratio of Order-Status

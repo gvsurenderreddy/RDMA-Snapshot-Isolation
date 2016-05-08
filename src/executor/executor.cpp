@@ -5,13 +5,11 @@
  *      Author: Erfan Zamanian
  */
 
-//#include "../TSM-SI/server/RDMAServer.hpp"
-//#include "../TSM-SI/timestamp-oracle/TimestampServer.hpp"
-//#include "../TSM-SI/client/RDMAClient.hpp"
 #include "../../config.hpp"
 #include "../benchmarks/TPC-C/server/TPCCServer.hpp"
 #include "../oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/client/TPCCClient.hpp"
+#include "../benchmarks/TPC-C/client/ClientGroup.hpp"
 #include "../util/utils.hpp"
 #include "../util/SimpleArgumentParser.hpp"
 #include <iostream>
@@ -26,6 +24,7 @@
 #include <cassert>
 #include <functional>
 #include <stdlib.h>		// srand, rand
+
 
 #define CLASS_NAME "executor"
 
@@ -49,6 +48,7 @@ int main (int argc, char *argv[]) {
 
 	SimpleArgumentParser argParser(argc, argv);
 
+
 	if (argParser.hasOption("client")){
 		try{
 			assert(argParser.getArgumentForOption("-b") == "TPCC");
@@ -57,7 +57,11 @@ int main (int argc, char *argv[]) {
 
 			uint16_t homeWarehouseID = (uint16_t)(instanceID * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
 			uint8_t homeDistrictID = (uint8_t)(rand() % config::tpcc_settings::DISTRICT_PER_WAREHOUSE);
-			TPCC::TPCCClient client(instanceID, homeWarehouseID, homeDistrictID, ibPort);
+
+			//			TPCC::ClientGroup clientGroup(instanceID, 1, homeWarehouseID, ibPort);
+			//			clientGroup.start();
+			//			clientGroup.join();
+			TPCC::TPCCClient client(instanceID, homeWarehouseID, homeDistrictID, ibPort, NULL);
 			client.start();
 		}
 		catch(const std::exception& e){
@@ -81,8 +85,9 @@ int main (int argc, char *argv[]) {
 	}
 	else if (argParser.hasOption("oracle")){
 		try{
-			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
-			Oracle ts(clientsCnt);
+			uint32_t clientsCnt = std::stoi(argParser.getArgumentForOption("-nc"));
+			uint32_t instancesCnt = std::stoi(argParser.getArgumentForOption("-ni"));
+			Oracle ts(clientsCnt, instancesCnt);
 		}
 		catch(const std::exception& e){
 			print_error_oracle(std::string(argv[0]));
@@ -108,7 +113,6 @@ int main (int argc, char *argv[]) {
 			}
 
 			uint16_t homeWarehouseID;
-			uint8_t homeDistrictID = (uint8_t)(rand() % config::tpcc_settings::DISTRICT_PER_WAREHOUSE);
 
 			if (argParser.hasOption("-w"))
 				homeWarehouseID = (uint16_t)std::stoi(argParser.getArgumentForOption("-w"));
@@ -120,35 +124,26 @@ int main (int argc, char *argv[]) {
 			size_t portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
 
 			TPCC::TPCCServer *server;
-			//std::unique_ptr<std::thread> serverThread;
 			std::thread serverThread;
 
 			if (hasServer){
 				// running server
 				server = new TPCC::TPCCServer(serverID, instanceID, totalClientsCnt);
-				//serverThread = std::unique_ptr<std::thread>(new std::thread(&TPCC::TPCCServer::start, std::ref(*server)));
 				serverThread = std::thread(&TPCC::TPCCServer::start, std::ref(*server));
 				sleep(10);	// sleep for some seconds so that (all other) servers become ready
 			}
 
 			// running clients
-			std::vector<TPCC::TPCCClient *> clients(clientsCntInInstance);
-			std::vector<std::thread> clientsThreads;
-			for (uint32_t i = 0; i < clientsCntInInstance; i++) {
-				uint8_t ibPort = (uint8_t)(i % portsCnt + 1);
-				clients[i] = new TPCC::TPCCClient(instanceID, homeWarehouseID, homeDistrictID, ibPort);
-				clientsThreads.push_back(std::thread(&TPCC::TPCCClient::start, std::ref(*clients[i])));
+			if (clientsCntInInstance != 0){
+				TPCC::ClientGroup clientGroup(instanceID, clientsCntInInstance, homeWarehouseID, portsCnt);
+				clientGroup.start();
+				clientGroup.join();
 			}
 
-			// waiting for threads to finish and join
-			for (auto& th : clientsThreads) th.join();
 			if (hasServer) {
 				serverThread.join();
 				delete server;
 			}
-
-			// cleanup
-			for (auto& c : clients) delete c;
 
 			std::cout << "All clients and server threads are finished." << std::endl;
 
@@ -196,20 +191,28 @@ void print_error_client(std::string executable_filename) {
 }
 void print_error_server(std::string executable_filename){
 	std::cerr << "Usage:" << std::endl;
-	std::cerr << executable_filename << " #SERVER_ID -b #BENCHMARK_NAME -n #NUM_OF_CLIENTS" << std::endl;
-	std::cerr << "starts a server and waits for connection on port Config.TCP_PORT[s] to run the BENCHMARK (e.g. TPCC) " << std::endl;
-	std::cerr << "(valid range of SERVER_ID: 0, 1, ..., [Config.SERVER_CNT - 1])" << std::endl;
+	std::cerr << executable_filename << " #SERVER_ID -s #SERVER_ID -b #BENCHMARK_NAME -n #NUM_OF_CLIENTS" << std::endl;
+	std::cerr << "starts a server and waits for connections" << std::endl;
+	std::cerr << std::endl;
+	std::cerr << '\t' << "-s  (required)" << '\t' << "valid range: [0, Config.SERVER_CNT - 1]" << std::endl;
+	std::cerr << '\t' << "-b  (required)" << '\t' << "choice of benchmark (e.g. TPCC)" << std::endl;
+	std::cerr << '\t' << "-n  (required)" << '\t' << "number of clients" << std::endl;
+	std::cerr << "" << std::endl;
 }
 void print_error_oracle(std::string executable_filename) {
 	std::cerr << "Usage:" << std::endl;
-	std::cerr << executable_filename << " oracle -n #NUM_OF_CLIENTS" << std::endl;
+	std::cerr << executable_filename << " oracle -ni #NUM_OF_INSTANCES -nc #NUM_OF_CLIENTS" << std::endl;
 	std::cerr << "connects to the oracle, specified in the config file" << std::endl;
+	std::cerr << std::endl;
+	std::cerr << '\t' << "-ni  (required)" << '\t' << "number of client instances" << std::endl;
+	std::cerr << '\t' << "-nc  (required)" << '\t' << "number of clients" << std::endl;
 }
 
 void print_error_instance(std::string executable_filename) {
 	std::cerr << "Usage:" << std::endl;
-	std::cerr << executable_filename << " instance -i #INSTANCE_NUM -b #BENCHMARK_NAME -s #SERVER_ID -n #NUM_OF_CLIENTS -pc #NUM_OF_IB_PORTS" << std::endl;
+	std::cerr << executable_filename << " instance -i #INSTANCE_NUM -b #BENCHMARK_NAME -s #SERVER_ID -c #NUM_OF_INSTANCE_CLIENTS -n #NUM_OF_TOTAL_CLIENTS -pc #NUM_OF_IB_PORTS" << std::endl;
 	std::cerr << "creates an instance with one server and clients" << std::endl;
+	std::cerr << std::endl;
 	std::cerr << '\t' << "-i  (required)" << '\t' << "unique identifier of the instance" << std::endl;
 	std::cerr << '\t' << "-b  (required)" << '\t' << "choice of benchmark (e.g. TPCC)" << std::endl;
 	std::cerr << '\t' << "-s  (optional)" << '\t' << "index of the server in the config file. Out of '-s' and '-w' options, once must be declared" << std::endl;
@@ -218,3 +221,4 @@ void print_error_instance(std::string executable_filename) {
 	std::cerr << '\t' << "-n  (required)" << '\t' << "number of total clients in the experiment" << std::endl;
 	std::cerr << '\t' << "-pc (required)" << '\t' << "number of IB ports" << std::endl;
 }
+

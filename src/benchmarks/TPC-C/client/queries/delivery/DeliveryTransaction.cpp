@@ -11,9 +11,9 @@
 #define CLASS_NAME "DeliveryTrx"
 
 namespace TPCC {
-DeliveryTransaction::DeliveryTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: BaseTransaction(os, "Delivery", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
-	localMemory_ 	= new DeliveryLocalMemory(os_, *context_);
+DeliveryTransaction::DeliveryTransaction(TPCCClient &client, DBExecutor &executor)
+: BaseTransaction("Delivery", client, executor){
+	localMemory_ 	= new DeliveryLocalMemory(os_, context_);
 }
 
 DeliveryTransaction::~DeliveryTransaction() {
@@ -25,10 +25,10 @@ DeliveryCart DeliveryTransaction::buildCart(){
 	DeliveryCart cart;
 
 	// 2.7.1.1 For any given terminal, the home warehouse number (W_ID) is constant over the whole measurement interval.
-	cart.wID = sessionState_->getHomeWarehouseID();
+	cart.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.7.1.2 The carrier number (O_CARRIER_ID) is random ly selected within [1 .. 10].
-	cart.oCarrierID = (uint8_t) random_->number(1, 10);
+	cart.oCarrierID = (uint8_t) random_.number(1, 10);
 
 	// 2.7.1.3 The delivery date (OL_DELIVERY_D) is generated within the SUT by using the current system date and time.
 	cart.olDeliveryD = std::time(nullptr);
@@ -62,7 +62,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			//	Acquire read timestamp
 			// ************************************************
 			clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
-			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 		}
 
@@ -132,29 +132,29 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			// ************************************************
 
 			// First find which clients are needed to put in the snapshot
-			oracleContext_->insertClientIDIntoSnapshot(orderV->writeTimestamp.getClientID());
-			oracleContext_->insertClientIDIntoSnapshot(newOrderV->writeTimestamp.getClientID());
-			oracleContext_->insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(orderV->writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(newOrderV->writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
 			for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++) {
-				oracleContext_->insertClientIDIntoSnapshot(orderLinesV[olNumber].writeTimestamp.getClientID());
+				oracleContext_.insertClientIDIntoSnapshot(orderLinesV[olNumber].writeTimestamp.getClientID());
 			}
 
 			for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++){
-				oracleContext_->insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
+				oracleContext_.insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
 			}
 
 			// then, construct the snapshot, only limited to those clients
 			// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
-			if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+			if (oracleContext_.getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
 				// get the entire snapshot
-				executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+				executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 			}
 			else{
 				executor_.getPartialSnapshot(
-						*localTimestampVector_,
-						oracleContext_->getClientIDsInSnapshot(),
-						oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
-						oracleContext_->getQP(),
+						localTimestampVector_,
+						oracleContext_.getClientIDsInSnapshot(),
+						oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+						oracleContext_.getQP(),
 						true);
 			}
 		}
@@ -398,11 +398,11 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		//	Write the command to logs
 		// ************************************************
 		// At this point, it is determined that the transaction can successfully commit
-		localTimestampVector_->getRegion()[clientID_] = cts;
+		localTimestampVector_.getRegion()[clientID_] = cts;
 		if (config::recovery_settings::RECOVERY_ENABLED){
 			char command[config::recovery_settings::COMMAND_LOG_SIZE];
 			size_t messageSize = cart.logMessage(dID, command);
-			recoveryClient_->writeCommandToLog(*localTimestampVector_, oracleContext_->getClientIDsInSnapshot(), command, messageSize);
+			recoveryClient_.writeCommandToLog(localTimestampVector_, oracleContext_.getClientIDsInSnapshot(), command, messageSize);
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 		}
 
@@ -490,7 +490,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		trxResult.result = TransactionResult::Result::COMMITTED;
 		trxResult.reason = TransactionResult::Reason::SUCCESS;
 		trxResult.cts = cts;
-		executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		executor_.submitResult(clientID_, localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 
 		executor_.synchronizeSendEvents();
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");

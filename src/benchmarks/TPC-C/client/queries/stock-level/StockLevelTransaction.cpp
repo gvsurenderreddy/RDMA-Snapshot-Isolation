@@ -11,9 +11,9 @@
 #define CLASS_NAME "StockLvlTrx"
 namespace TPCC {
 
-StockLevelTransaction::StockLevelTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: BaseTransaction(os, "StockLevel", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
-	localMemory_ 	= new StockLevelLocalMemory(os_, *context_);
+StockLevelTransaction::StockLevelTransaction(TPCCClient &client, DBExecutor &executor)
+: BaseTransaction("StockLevel", client, executor){
+	localMemory_ 	= new StockLevelLocalMemory(os_, context_);
 }
 
 StockLevelTransaction::~StockLevelTransaction() {
@@ -25,11 +25,11 @@ TPCC::StockLevelCart StockLevelTransaction::buildCart(){
 	StockLevelCart cart;
 
 	// 2.8.1.1 Each terminal must use a unique value of (W_ID, D_ID) that is constant over the whole measurement, i.e., D_IDs cannot be re-used within a warehouse.
-	cart.wID = sessionState_->getHomeWarehouseID();
-	cart.dID = sessionState_->getHomeDistrictID();
+	cart.wID = sessionState_.getHomeWarehouseID();
+	cart.dID = sessionState_.getHomeDistrictID();
 
 	// 2.8.1.2 The threshold of minimum quantity in stock (threshold ) is selected at random within [10 .. 20].
-	cart.threshold = (unsigned) random_->number(10, 20);
+	cart.threshold = (unsigned) random_.number(10, 20);
 	return cart;
 }
 
@@ -49,7 +49,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	// ************************************************
 	//	Acquire read timestamp
 	// ************************************************
-	executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+	executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": received read snapshot from oracle");
 
 

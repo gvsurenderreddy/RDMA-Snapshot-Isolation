@@ -19,10 +19,11 @@ DBExecutor::~DBExecutor() {
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Destructor called");
 }
 
-DBExecutor::DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue)
+DBExecutor::DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue)
 : os_(os),
   dsCtx_(dsCtx),
   instanceNum_(instanceNum),
+  oracleReader_(oracleReader),
   sendCQ_(sendCompletionQueue),
   recvCQ_(recvCompletionQueue),
   outstandingSendCompletionCnt_(0),
@@ -233,25 +234,32 @@ void DBExecutor::registerDelivery(primitive::client_id_t clientID, uint16_t wID,
 
 
 void DBExecutor::getReadTimestamp(RDMARegion<primitive::timestamp_t> &localRegion, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled) {
-	primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 	uint32_t size = (uint32_t)(remoteMH.regionSize_ * sizeof(primitive::timestamp_t));
 
-	if(remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
-		PRINT_CERR(CLASS_NAME, __func__, "Error in timestamp acquisition");
-		exit(-1);
+	if (config::SNAPSHOT_CLUSTER_MODE == true) {
+		std::memcpy(localRegion.getRegion(), oracleReader_->getTimestampVectorRegion()->getRegion() , size);
 	}
 
-	TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
-			IBV_WR_RDMA_READ,
-			qp,
-			localRegion.getRDMAHandler(),
-			(uintptr_t)localRegion.getRegion(),
-			&remoteMH.rdmaHandler_,
-			(uintptr_t)lookupAddress,
-			size,
-			signaled));
+	else{
+		primitive::timestamp_t *lookupAddress = (primitive::timestamp_t*)remoteMH.rdmaHandler_.addr;
 
-	if (signaled) outstandingSendCompletionCnt_++;
+		if(remoteMH.isAddressInRange((uintptr_t)lookupAddress) == false){
+			PRINT_CERR(CLASS_NAME, __func__, "Error in timestamp acquisition");
+			exit(-1);
+		}
+
+		TEST_NZ (RDMACommon::post_RDMA_READ_WRT(
+				IBV_WR_RDMA_READ,
+				qp,
+				localRegion.getRDMAHandler(),
+				(uintptr_t)localRegion.getRegion(),
+				&remoteMH.rdmaHandler_,
+				(uintptr_t)lookupAddress,
+				size,
+				signaled));
+
+		if (signaled) outstandingSendCompletionCnt_++;
+	}
 }
 
 void DBExecutor::getPartialSnapshot(RDMARegion<primitive::timestamp_t> &localRegion, const std::set<primitive::client_id_t> &clientsInSnapshot, MemoryHandler<primitive::timestamp_t> &remoteMH, ibv_qp *qp, bool signaled){

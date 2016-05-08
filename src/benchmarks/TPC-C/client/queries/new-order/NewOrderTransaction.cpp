@@ -11,10 +11,9 @@
 #define CLASS_NAME "NewOrderTrx"
 namespace TPCC {
 
-
-NewOrderTransaction::NewOrderTransaction(std::ostream &os, DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient)
-: BaseTransaction(os, "New Order", executor, clientID, clientCnt, dsCtx, sessionState, random, context, oracleContext,localTimestampVector, recoveryClient){
-	localMemory_ 	= new NewOrderLocalMemory(os_, *context_);
+NewOrderTransaction::NewOrderTransaction(TPCCClient &client, DBExecutor &executor)
+: BaseTransaction("New Order", client, executor){
+	localMemory_ 	= new NewOrderLocalMemory(os_, context_);
 }
 
 NewOrderTransaction::~NewOrderTransaction() {
@@ -22,28 +21,26 @@ NewOrderTransaction::~NewOrderTransaction() {
 	delete localMemory_;
 }
 
-
 NewOrderCart NewOrderTransaction::buildCart(){
 	NewOrderCart cart;
 
 	// 2.4.1.1 the home warehouse number (W_ID) is constant over the whole measurement interval
-	// cart.wID = (uint16_t) random_.number(0, config::tpcc_settings::WAREHOUSE_CNT - 1);
-	cart.wID = sessionState_->getHomeWarehouseID();
+	cart.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.4.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
-	cart.dID = (uint8_t) random_->number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	// 2.4.1.2 The non-uniform random customer number (C_ID) is selected using the NURand (1023,1,3000) function
-	cart.cID = (uint32_t) random_->NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+	cart.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 
 	// 2.4.1.3 The number of items in the order (ol_cnt) is randomly selected within [5 .. 15] (an average of 10)
-	uint8_t ol_cnt = (uint8_t ) random_->number(tpcc_settings::ORDER_MIN_OL_CNT, tpcc_settings::ORDER_MAX_OL_CNT);
+	uint8_t ol_cnt = (uint8_t ) random_.number(tpcc_settings::ORDER_MIN_OL_CNT, tpcc_settings::ORDER_MAX_OL_CNT);
 
 	// 2.4.1.4 A fixed 1% of the New-Order transactions are chosen at random to simulate user data entry errors and exercise the performance of rolling back update transactions.
 	// bool rollback = random_.number(1, 100) == 1;
 
 	std::vector<uint32_t> uniqueItemIDs(ol_cnt);
-	std::set<uint32_t> uniqueIDSets = random_->selectUniqueNonUniformIds(8191, ol_cnt, 0, config::tpcc_settings::ITEMS_CNT - 1);
+	std::set<uint32_t> uniqueIDSets = random_.selectUniqueNonUniformIds(8191, ol_cnt, 0, config::tpcc_settings::ITEMS_CNT - 1);
 	std::copy(uniqueIDSets.begin(), uniqueIDSets.end(), uniqueItemIDs.begin());
 
 	for (int i = 0; i < ol_cnt; ++i) {
@@ -54,15 +51,15 @@ NewOrderCart NewOrderTransaction::buildCart(){
 
 		// TPC-C suggests generating a number in range (1, 100) and selecting remote on 1 (clause 2.4.1.5.2)
 		// This provides more variation, and lets us tune the fraction of "remote" transactions.
-		bool remote = random_->number(0, 1) <= config::tpcc_settings::REMOTE_WAREHOUSE_PROB;
+		bool remote = random_.number(0, 1) <= config::tpcc_settings::REMOTE_WAREHOUSE_PROB;
 		if (config::tpcc_settings::WAREHOUSE_CNT > 1 && remote) {
-			noi.OL_SUPPLY_W_ID = (uint16_t) random_->numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, sessionState_->getHomeWarehouseID());
+			noi.OL_SUPPLY_W_ID = (uint16_t) random_.numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, sessionState_.getHomeWarehouseID());
 		} else {
-			noi.OL_SUPPLY_W_ID = sessionState_->getHomeWarehouseID();
+			noi.OL_SUPPLY_W_ID = sessionState_.getHomeWarehouseID();
 		}
 
 		// 2.4.1.5.3 A quantity (OL_QUANTITY) is randomly selected within [1 .. 10]
-		noi.OL_QUANTITY = (uint8_t) random_->number(1, 10);
+		noi.OL_QUANTITY = (uint8_t) random_.number(1, 10);
 		cart.items.push_back(noi);
 	}
 	return cart;
@@ -93,7 +90,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		//	Acquire read timestamp
 		// ************************************************
 		clock_gettime(CLOCK_REALTIME, &beforeReadSnapshotTime);
-		executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+		executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 	}
 
 	// ************************************************
@@ -138,34 +135,34 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		// ************************************************
 
 		// First find which clients are needed to put in the snapshot
-		oracleContext_->insertClientIDIntoSnapshot(warehouseV->writeTimestamp.getClientID());
-		oracleContext_->insertClientIDIntoSnapshot(districtV->writeTimestamp.getClientID());
-		oracleContext_->insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(warehouseV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(districtV->writeTimestamp.getClientID());
+		oracleContext_.insertClientIDIntoSnapshot(customerV->writeTimestamp.getClientID());
 
 		for (size_t i = 0; i < config::tpcc_settings::VERSION_NUM; i++){
-			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getWarehouseTS()->getRegion()[i].getClientID());
-			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getDistrictTS()->getRegion()[i].getClientID());
-			oracleContext_->insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(localMemory_->getWarehouseTS()->getRegion()[i].getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(localMemory_->getDistrictTS()->getRegion()[i].getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
 		}
 
 		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-			oracleContext_->insertClientIDIntoSnapshot(items[olNumber]->writeTimestamp.getClientID());
-			oracleContext_->insertClientIDIntoSnapshot(stocks[olNumber]->writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(items[olNumber]->writeTimestamp.getClientID());
+			oracleContext_.insertClientIDIntoSnapshot(stocks[olNumber]->writeTimestamp.getClientID());
 		}
 
 
 		// then, construct the snapshot, only limited to those clients
 		// decide if it makes more sense to get the partial snapshot through multiple messages or  get the entire snapshot through one message
-		if (oracleContext_->getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
+		if (oracleContext_.getClientIDsInSnapshot().size() > (clientCnt_ / 10)) {
 			// get the entire snapshot
-			executor_.getReadTimestamp(*localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+			executor_.getReadTimestamp(localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 		}
 		else{
 			executor_.getPartialSnapshot(
-					*localTimestampVector_,
-					oracleContext_->getClientIDsInSnapshot(),
-					oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
-					oracleContext_->getQP(),
+					localTimestampVector_,
+					oracleContext_.getClientIDsInSnapshot(),
+					oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector,
+					oracleContext_.getQP(),
 					true);
 		}
 	}
@@ -375,11 +372,11 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	//	Write the command to logs
 	// ************************************************
 	// At this point, it is determined that the transaction can successfully commit
-	localTimestampVector_->getRegion()[clientID_] = cts;
+	localTimestampVector_.getRegion()[clientID_] = cts;
 	if (config::recovery_settings::RECOVERY_ENABLED){
 		char command[config::recovery_settings::COMMAND_LOG_SIZE];
 		size_t messageSize = cart.logMessage(command);
-		recoveryClient_->writeCommandToLog(*localTimestampVector_, oracleContext_->getClientIDsInSnapshot(), command, messageSize);
+		recoveryClient_.writeCommandToLog(localTimestampVector_, oracleContext_.getClientIDsInSnapshot(), command, messageSize);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 	}
 
@@ -563,7 +560,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.result = TransactionResult::Result::COMMITTED;
 	trxResult.reason = TransactionResult::Reason::SUCCESS;
 	trxResult.cts = cts;
-	executor_.submitResult(clientID_, *localTimestampVector_, oracleContext_->getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_->getQP(), true);
+	executor_.submitResult(clientID_, localTimestampVector_, oracleContext_.getRemoteMemoryKeys()->getRegion()->lastCommittedVector, oracleContext_.getQP(), true);
 
 	executor_.synchronizeSendEvents();
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[WRIT] Client " << clientID_ << ": sent trx result for CTS " << cts << " to the Oracle");
