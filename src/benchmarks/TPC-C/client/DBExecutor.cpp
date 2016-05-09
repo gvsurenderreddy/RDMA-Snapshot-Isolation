@@ -53,7 +53,7 @@ void DBExecutor::synchronizeNetworkEvents(){
 }
 
 bool DBExecutor::isServerLocal(size_t serverNum) const {
-	return (config::LOCALITY_EXPLOITAION && dsCtx_[serverNum]->getInstanceNum());
+	return (config::LOCALITY_EXPLOITAION && dsCtx_[serverNum]->getInstanceNum() == instanceNum_);
 }
 
 void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
