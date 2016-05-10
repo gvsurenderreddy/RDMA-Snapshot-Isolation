@@ -21,36 +21,35 @@ DeliveryTransaction::~DeliveryTransaction() {
 	delete localMemory_;
 }
 
-DeliveryCart DeliveryTransaction::buildCart(){
-	DeliveryCart cart;
+void DeliveryTransaction::buildCart(){
+	// reset cart
+	cart_.reset();
 
 	// 2.7.1.1 For any given terminal, the home warehouse number (W_ID) is constant over the whole measurement interval.
-	cart.wID = sessionState_.getHomeWarehouseID();
+	cart_.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.7.1.2 The carrier number (O_CARRIER_ID) is random ly selected within [1 .. 10].
-	cart.oCarrierID = (uint8_t) random_.number(1, 10);
+	cart_.oCarrierID = (uint8_t) random_.number(1, 10);
 
 	// 2.7.1.3 The delivery date (OL_DELIVERY_D) is generated within the SUT by using the current system date and time.
-	cart.olDeliveryD = std::time(nullptr);
-	return cart;
+	cart_.olDeliveryD = std::time(nullptr);
+}
+
+void DeliveryTransaction::initilizeTransaction(){
+	// ************************************************
+	//	Constructing the transaction cart
+	// ************************************************
+	buildCart();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 }
 
 TPCC::TransactionResult DeliveryTransaction::doOne(){
-	time_t timer;
-	std::time(&timer);
 	TransactionResult trxResult;
 	TPCC::OrderVersion *orderV;
 	TPCC::NewOrderVersion *newOrderV;
 	TPCC::OrderLineVersion *orderLinesV;
 	TPCC::CustomerVersion *customerV;
 	struct timespec beforeReadSnapshotTime, beforeIndexTime1, beforeIndexTime2, afterIndexTime1, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterUpdateTime, afterCommitTime;
-
-
-	// ************************************************
-	//	Constructing the transaction cart
-	// ************************************************
-	DeliveryCart cart = buildCart();
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 
 
 	for (uint8_t dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; dID++){
@@ -74,11 +73,11 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		// This is the oldest undelivered order of that district.
 		clock_gettime(CLOCK_REALTIME, &beforeIndexTime1);
 
-		size_t serverNum = Warehouse::getServerNum(cart.wID);
+		size_t serverNum = Warehouse::getServerNum(cart_.wID);
 
 		executor_.getOldestUndeliveredOrder(
 				clientID_,
-				cart.wID,
+				cart_.wID,
 				dID,
 				*dsCtx_[serverNum]->getIndexRequestMessage(),
 				*dsCtx_[serverNum]->getOldestUndeliveredOrderIndexResponseMessage(),
@@ -87,14 +86,14 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		executor_.synchronizeNetworkEvents();
 
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: Oldest_Undelivered_Order. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)dID);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: Oldest_Undelivered_Order. Parameters: wID = " << (int)cart_.wID << ", dID = " << (int)dID);
 
 		clock_gettime(CLOCK_REALTIME, &afterIndexTime1);
 
 		// check if there is an undelivered order in this district
 		TPCC::OldestUndeliveredOrderIndexResMsg *oldestUndeliveredOrderRes = dsCtx_[serverNum]->getOldestUndeliveredOrderIndexResponseMessage()->getRegion();
 		if (! oldestUndeliveredOrderRes->isSuccessful || !oldestUndeliveredOrderRes->existUndeliveredOrder ) {
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": No undelivered order in wID: " << cart.wID << " and dID: " << (int)dID);
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": No undelivered order in wID: " << cart_.wID << " and dID: " << (int)dID);
 			continue;
 		}
 
@@ -102,15 +101,15 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				<< ", #orderlines = " << (int)oldestUndeliveredOrderRes->numOfOrderlines);
 
 		// From Order table, retrieve the row with matching O_W_ID, O_D_ID and O_ID.
-		executor_.retrieveOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart.wID, *localMemory_->getOrderHead(), false);
+		executor_.retrieveOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart_.wID, *localMemory_->getOrderHead(), false);
 		orderV = localMemory_->getOrderHead()->getRegion();
 
 		// From NewOrder table, retrieve the row with matching NO_W_ID, NO_D_ID and NO_ID.
-		executor_.retrieveNewOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->newOrderRegionOffset, cart.wID, *localMemory_->getNewOrderHead(), false);
+		executor_.retrieveNewOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->newOrderRegionOffset, cart_.wID, *localMemory_->getNewOrderHead(), false);
 		newOrderV = localMemory_->getNewOrderHead()->getRegion();
 
 		// From OrderLine table, retrieve the row with matching OL_W_ID, OL_D_ID and OL_ID.
-		executor_.retrieveOrderLines(oldestUndeliveredOrderRes->clientWhoOrdered, cart.wID, oldestUndeliveredOrderRes->orderLineRegionOffset, oldestUndeliveredOrderRes->numOfOrderlines, *localMemory_->getOrderLineHead(), true);
+		executor_.retrieveOrderLines(oldestUndeliveredOrderRes->clientWhoOrdered, cart_.wID, oldestUndeliveredOrderRes->orderLineRegionOffset, oldestUndeliveredOrderRes->numOfOrderlines, *localMemory_->getOrderLineHead(), true);
 
 		orderLinesV = localMemory_->getOrderLineHead()->getRegion();
 
@@ -118,10 +117,10 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		// From Customer table, retrieve the customer with matching wID, dID and cID
 		uint32_t cID = localMemory_->getOrderHead()->getRegion()->order.O_C_ID;
-		executor_.retrieveCustomer(cart.wID, dID, cID, *localMemory_->getCustomerHead(), false);
+		executor_.retrieveCustomer(cart_.wID, dID, cID, *localMemory_->getCustomerHead(), false);
 		customerV = localMemory_->getCustomerHead()->getRegion();
 
-		executor_.retrieveCustomerPointerList(cart.wID, dID, cID, *localMemory_->getCustomerTS(), true);
+		executor_.retrieveCustomerPointerList(cart_.wID, dID, cID, *localMemory_->getCustomerTS(), true);
 
 		// wait for all outstanding RDMA requests to finish
 		executor_.synchronizeSendEvents();
@@ -202,7 +201,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 			else{
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << *customerV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getCustomerTS()->getRegion()[ind] << ")");
 
-				executor_.retrieveCustomerOlderVersion(cart.wID, dID, cID, (size_t)ind, *localMemory_->getCustomerHead(), true);
+				executor_.retrieveCustomerOlderVersion(cart_.wID, dID, cID, (size_t)ind, *localMemory_->getCustomerHead(), true);
 
 				executor_.synchronizeSendEvents();
 
@@ -247,7 +246,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				*orderV,
 				oldestUndeliveredOrderRes->clientWhoOrdered,
 				oldestUndeliveredOrderRes->orderRegionOffset,
-				cart.wID,
+				cart_.wID,
 				orderLockTS,
 				*localMemory_->getOrderLockRegion(),
 				false);
@@ -258,7 +257,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				*newOrderV,
 				oldestUndeliveredOrderRes->clientWhoOrdered,
 				oldestUndeliveredOrderRes->newOrderRegionOffset,
-				cart.wID,
+				cart_.wID,
 				newOrderLockTS,
 				*localMemory_->getNewOrderLockRegion(),
 				false);
@@ -271,7 +270,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 					orderLinesV[olNumber],
 					oldestUndeliveredOrderRes->clientWhoOrdered,
 					oldestUndeliveredOrderRes->orderLineRegionOffset + olNumber,
-					cart.wID,
+					cart_.wID,
 					orderLineLockTS,
 					*localMemory_->getOrderLinesLocksRegion(),
 					false);
@@ -356,21 +355,21 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
 				if (successfulNewOrderLock || isAnyOrderLineSuccessful || successfulCustomerLock) signaled = false;
 				else signaled = true;
-				executor_.revertOrderLock(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart.wID, *localMemory_->getOrderHead(),signaled);
+				executor_.revertOrderLock(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart_.wID, *localMemory_->getOrderHead(),signaled);
 			}
 
 			if (successfulNewOrderLock) {
 				// since all lock_revert operations go to the same queue pair, only one signaled operation is enough
 				if (isAnyOrderLineSuccessful || successfulCustomerLock) signaled = false;
 				else signaled = true;
-				executor_.revertNewOrderLock(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->newOrderRegionOffset, cart.wID, *localMemory_->getNewOrderHead(), signaled);
+				executor_.revertNewOrderLock(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->newOrderRegionOffset, cart_.wID, *localMemory_->getNewOrderHead(), signaled);
 			}
 
 			for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++){
 				if (successfulOrderLineLocks[olNumber]) {
 					if (olNumber != largestSuccessfulOrderLineLock || successfulCustomerLock) signaled = false;
 					else signaled = true;
-					executor_.revertOrderLineLock(olNumber, oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderLineRegionOffset + olNumber, cart.wID, *localMemory_->getOrderLineHead(), signaled);
+					executor_.revertOrderLineLock(olNumber, oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderLineRegionOffset + olNumber, cart_.wID, *localMemory_->getOrderLineHead(), signaled);
 				}
 			}
 
@@ -401,7 +400,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		localTimestampVector_.getRegion()[clientID_] = cts;
 		if (config::recovery_settings::RECOVERY_ENABLED){
 			char command[config::recovery_settings::COMMAND_LOG_SIZE];
-			size_t messageSize = cart.logMessage(dID, command);
+			size_t messageSize = cart_.logMessage(dID, command);
 			recoveryClient_.writeCommandToLog(localTimestampVector_, oracleContext_.getClientIDsInSnapshot(), command, messageSize);
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 		}
@@ -424,8 +423,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		deletedStatus = false;
 		versionOffset = orderV->writeTimestamp.getVersionOffset();
 		orderV->writeTimestamp.setAll(deletedStatus, lockStatus, versionOffset, clientID_, cts);
-		orderV->order.O_CARRIER_ID = cart.oCarrierID;
-		executor_.insertIntoOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart.wID, *localMemory_->getOrderHead(), false);
+		orderV->order.O_CARRIER_ID = cart_.oCarrierID;
+		executor_.insertIntoOrder(oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderRegionOffset, cart_.wID, *localMemory_->getOrderHead(), false);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated Order " << orderV->order);
 
 
@@ -434,7 +433,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		versionOffset = newOrderV->writeTimestamp.getVersionOffset();
 		newOrderV->writeTimestamp.setAll(deletedStatus, lockStatus, versionOffset, clientID_, cts);
 		newOrderV->writeTimestamp.markDeleted();
-		executor_.insertIntoNewOrder(clientID_, BaseTransaction::getNewOrderRID(), cart.wID, *localMemory_->getNewOrderHead(), false);
+		executor_.insertIntoNewOrder(clientID_, BaseTransaction::getNewOrderRID(), cart_.wID, *localMemory_->getNewOrderHead(), false);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": deleted NewOrder " << newOrderV->newOrder);
 
 
@@ -444,9 +443,9 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		for (size_t olNumber = 0; olNumber < oldestUndeliveredOrderRes->numOfOrderlines; olNumber++){
 			versionOffset = orderLinesV[olNumber].writeTimestamp.getVersionOffset();
 			orderLinesV[olNumber].writeTimestamp.setAll(deletedStatus, lockStatus, versionOffset, clientID_, cts);
-			orderLinesV[olNumber].orderLine.OL_DELIVERY_D = cart.olDeliveryD;
+			orderLinesV[olNumber].orderLine.OL_DELIVERY_D = cart_.olDeliveryD;
 			sumOfOrderLinesAmount += orderLinesV[olNumber].orderLine.OL_AMOUNT;
-			executor_.insertIntoOrderLine( oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderLineRegionOffset + olNumber, (uint8_t)olNumber, cart.wID, *localMemory_->getOrderLineHead(), false);
+			executor_.insertIntoOrderLine( oldestUndeliveredOrderRes->clientWhoOrdered, oldestUndeliveredOrderRes->orderLineRegionOffset + olNumber, (uint8_t)olNumber, cart_.wID, *localMemory_->getOrderLineHead(), false);
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated OrderLine " << orderLinesV[olNumber].orderLine << " (" << (int)olNumber << ")");
 		}
 
@@ -466,14 +465,14 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 		clock_gettime(CLOCK_REALTIME, &beforeIndexTime2);
 		executor_.registerDelivery(
 				clientID_,
-				cart.wID,
+				cart_.wID,
 				dID,
 				orderV->order.O_ID,
 				*dsCtx_[serverNum]->getIndexRequestMessage(),
 				*dsCtx_[serverNum]->getRegisterDeliveryIndexResponseMessage(),
 				dsCtx_[serverNum]->getQP(),
 				true);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_DELIVERY. Parameters: wID = " << (int)cart.wID
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_DELIVERY. Parameters: wID = " << (int)cart_.wID
 				<< ", dID = " << (int)dID << ", OID = " << (int)orderV->order.O_ID);
 
 		executor_.synchronizeNetworkEvents();

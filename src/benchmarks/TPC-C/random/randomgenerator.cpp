@@ -65,6 +65,20 @@ std::set<int> RandomGenerator::selectUniqueIds(size_t num_unique, int lower_id, 
 }
 
 
+std::set<uint32_t> RandomGenerator::selectZipfIds(size_t num_unique, ZipfDistribution &zipf){
+	std::set<uint32_t> rows;
+
+	for (size_t i = 0; i < num_unique; ++i) {
+		int index = -1;
+		do {
+			index = zipf.getSample() - 1;
+		} while (rows.find(index) != rows.end());
+		rows.insert((uint32_t)index);
+	}
+	assert(rows.size() == num_unique);
+	return rows;
+}
+
 std::set<uint32_t> RandomGenerator::selectUniqueNonUniformIds(int A, size_t num_unique, int lower_id, int upper_id){
 	std::set<uint32_t> rows;
 	for (size_t i = 0; i < num_unique; ++i) {

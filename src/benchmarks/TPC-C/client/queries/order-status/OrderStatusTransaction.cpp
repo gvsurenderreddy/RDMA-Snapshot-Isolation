@@ -22,43 +22,40 @@ OrderStatusTransaction::~OrderStatusTransaction() {
 	delete localMemory_;
 }
 
-TPCC::OrderStatusCart OrderStatusTransaction::buildCart(){
-	OrderStatusCart cart;
+void OrderStatusTransaction::buildCart(){
+	// reset cart
+	cart_.reset();
 
 	// 2.6.1.1 For any given terminal, the home warehouse number (W_ID) is constant over the whole measurement interval
-	cart.wID = sessionState_.getHomeWarehouseID();
+	cart_.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.6.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
-	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+	cart_.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	// 2.6.1.2 The customer is randomly selected 60% of the time by last name (C_W_ID , C_D_ID, C_LAST) and 40% of the time by number
 	int y = random_.number(1, 100);
 	if (y <= 60){
 		// selection by LastName
-		cart.customerSelectionMode = OrderStatusCart::LAST_NAME;
-		random_.lastName(cart.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+		cart_.customerSelectionMode = OrderStatusCart::LAST_NAME;
+		random_.lastName(cart_.cLastName, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
 	}
 	else {
 		// selection by ID
-		cart.customerSelectionMode = OrderStatusCart::ID;
-		cart.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+		cart_.customerSelectionMode = OrderStatusCart::ID;
+		cart_.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 	}
-
-	return cart;
 }
 
-TPCC::TransactionResult OrderStatusTransaction::doOne(){
-	time_t timer;
-	std::time(&timer);
-	TransactionResult trxResult;
-
-
+void OrderStatusTransaction::initilizeTransaction(){
 	// ************************************************
 	//	Constructing the shopping cart
 	// ************************************************
-	OrderStatusCart cart = buildCart();
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
+	buildCart();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
+}
 
+TPCC::TransactionResult OrderStatusTransaction::doOne(){
+	TransactionResult trxResult;
 
 	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
 		// ************************************************
@@ -71,43 +68,43 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	// ************************************************
 	//	Read records in read-set
 	// ************************************************
-	size_t serverNum = Warehouse::getServerNum(cart.wID);
+	size_t serverNum = Warehouse::getServerNum(cart_.wID);
 
 
-	if (cart.customerSelectionMode == OrderStatusCart::LAST_NAME) {
+	if (cart_.customerSelectionMode == OrderStatusCart::LAST_NAME) {
 		// First, use the index on the server to find the cID for the given last name
 		executor_.lookupCustomerByLastName(
 				clientID_,
-				cart.wID,
-				cart.dID,
-				cart.cLastName,
+				cart_.wID,
+				cart_.dID,
+				cart_.cLastName,
 				*dsCtx_[serverNum]->getIndexRequestMessage(),
 				*dsCtx_[serverNum]->getCustomerNameIndexResponseMessage(),
 				dsCtx_[serverNum]->getQP(),
 				true);
 
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", lastName = " << cart.cLastName);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart_.wID << ", dID = " << (int)cart_.dID << ", lastName = " << cart_.cLastName);
 
 		executor_.synchronizeNetworkEvents();
 
 		TPCC::CustomerNameIndexRespMsg *customerLastNameRes = dsCtx_[serverNum]->getCustomerNameIndexResponseMessage()->getRegion();
 		assert(customerLastNameRes->isSuccessful == true);
-		cart.cID = customerLastNameRes->cID;
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart.cID);
+		cart_.cID = customerLastNameRes->cID;
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Recv] Client " << clientID_ << ": Index Response Message received. cID = " << (int)cart_.cID);
 	}
 
-	// get the largest existing O_ID for (O_W_ID = cart.wID, O_D_ID = cart.dID, O_C_ID = cart.CID).
+	// get the largest existing O_ID for (O_W_ID = cart_.wID, O_D_ID = cart_.dID, O_C_ID = cart_.CID).
 	executor_.getLastOrderOfCustomer(
 			clientID_,
-			cart.wID,
-			cart.dID,
-			cart.cID,
+			cart_.wID,
+			cart_.dID,
+			cart_.cID,
 			*dsCtx_[serverNum]->getIndexRequestMessage(),
 			*dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage(),
 			dsCtx_[serverNum]->getQP(),
 			true);
 
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart.wID << ", dID = " << (int)cart.dID << ", cID = " << cart.cID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart_.wID << ", dID = " << (int)cart_.dID << ", cID = " << cart_.cID);
 	executor_.synchronizeNetworkEvents();
 
 	TPCC::LargestOrderForCustomerIndexRespMsg *largestOrderRes = dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
@@ -123,7 +120,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	// retrieve the orderlines
 	executor_.retrieveOrderLines(
 			largestOrderRes->clientWhoOrdered,
-			cart.wID,
+			cart_.wID,
 			largestOrderRes->orderRegionOffset,
 			largestOrderRes->numOfOrderlines,
 			*localMemory_->getOrderLineHead(),

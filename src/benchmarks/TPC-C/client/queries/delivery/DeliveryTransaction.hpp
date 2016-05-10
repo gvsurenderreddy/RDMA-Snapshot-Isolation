@@ -23,6 +23,11 @@ struct DeliveryCart{
 	uint8_t oCarrierID;
 	time_t olDeliveryD;
 
+	void reset(){
+		wID = 0;
+		oCarrierID = 0;
+	}
+
 	friend std::ostream& operator<<(std::ostream& os, const DeliveryCart& c) {
 		os << "wID:" << (int)c.wID << " | oCarrierID:" << (int)c.oCarrierID;
 		return os;
@@ -53,11 +58,14 @@ struct DeliveryCart{
 class DeliveryTransaction : public BaseTransaction {
 private:
 	DeliveryLocalMemory* localMemory_;
-	DeliveryCart buildCart();
+	DeliveryCart cart_;
+	void buildCart();
 
 public:
 	DeliveryTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~DeliveryTransaction();
+
+	void initilizeTransaction();
 	TPCC::TransactionResult doOne();
 
 	DeliveryTransaction& operator=(const DeliveryTransaction&) = delete;	// Disallow copying

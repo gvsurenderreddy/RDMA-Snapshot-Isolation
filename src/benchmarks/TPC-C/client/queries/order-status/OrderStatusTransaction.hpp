@@ -28,6 +28,12 @@ struct OrderStatusCart{
 	char cLastName[17];
 	uint32_t cID;
 
+	void reset(){
+		wID = 0;
+		dID = 0;
+		std::memset(cLastName, 0, sizeof(cLastName));
+	}
+
 	friend std::ostream& operator<<(std::ostream& os, const OrderStatusCart& c) {
 		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID;
 		c.customerSelectionMode == LAST_NAME ? (os << " | LAST_NAME: " << c.cLastName) :  (os << " | cID: " << c.cID);
@@ -50,14 +56,18 @@ struct OrderStatusCart{
 class OrderStatusTransaction: public BaseTransaction {
 private:
 	OrderStatusLocalMemory* localMemory_;
-	OrderStatusCart buildCart();
+	OrderStatusCart cart_;
+	void buildCart();
+
 public:
 	OrderStatusTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~OrderStatusTransaction();
+
+	void initilizeTransaction();
+	TPCC::TransactionResult doOne();
+
 	OrderStatusTransaction& operator=(const OrderStatusTransaction&) = delete;	// Disallow copying
 	OrderStatusTransaction(const OrderStatusTransaction&) = delete;				// Disallow copying
-
-	TPCC::TransactionResult doOne();
 };
 
 } /* namespace TPCC */

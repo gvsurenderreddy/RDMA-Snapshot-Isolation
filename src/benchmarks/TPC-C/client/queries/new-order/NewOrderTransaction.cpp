@@ -12,7 +12,10 @@
 namespace TPCC {
 
 NewOrderTransaction::NewOrderTransaction(TPCCClient &client, DBExecutor &executor)
-: BaseTransaction("New Order", client, executor){
+: BaseTransaction("New Order", client, executor),
+  zipf(config::tpcc_settings::SKEWNESS_IN_ITEM_ACCESS, config::tpcc_settings::ITEMS_CNT){
+//  zipf(3, config::tpcc_settings::ITEMS_CNT){
+
 	localMemory_ 	= new NewOrderLocalMemory(os_, context_);
 }
 
@@ -21,17 +24,18 @@ NewOrderTransaction::~NewOrderTransaction() {
 	delete localMemory_;
 }
 
-NewOrderCart NewOrderTransaction::buildCart(){
-	NewOrderCart cart;
+void NewOrderTransaction::buildCart(){
+	// reset cart
+	cart_.reset();
 
 	// 2.4.1.1 the home warehouse number (W_ID) is constant over the whole measurement interval
-	cart.wID = sessionState_.getHomeWarehouseID();
+	cart_.wID = sessionState_.getHomeWarehouseID();
 
 	// 2.4.1.2 The district number (D_ID) is randomly selected within [1 .. 10] from the home warehouse (D_W_ID = W_ID).
-	cart.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
+	cart_.dID = (uint8_t) random_.number(0, config::tpcc_settings::DISTRICT_PER_WAREHOUSE - 1);
 
 	// 2.4.1.2 The non-uniform random customer number (C_ID) is selected using the NURand (1023,1,3000) function
-	cart.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+	cart_.cID = (uint32_t) random_.NURand(1023, 0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
 
 	// 2.4.1.3 The number of items in the order (ol_cnt) is randomly selected within [5 .. 15] (an average of 10)
 	uint8_t ol_cnt = (uint8_t ) random_.number(tpcc_settings::ORDER_MIN_OL_CNT, tpcc_settings::ORDER_MAX_OL_CNT);
@@ -40,7 +44,8 @@ NewOrderCart NewOrderTransaction::buildCart(){
 	// bool rollback = random_.number(1, 100) == 1;
 
 	std::vector<uint32_t> uniqueItemIDs(ol_cnt);
-	std::set<uint32_t> uniqueIDSets = random_.selectUniqueNonUniformIds(8191, ol_cnt, 0, config::tpcc_settings::ITEMS_CNT - 1);
+	//std::set<uint32_t> uniqueIDSets = random_.selectUniqueNonUniformIds(8191, ol_cnt, 0, config::tpcc_settings::ITEMS_CNT - 1);
+	std::set<uint32_t> uniqueIDSets = random_.selectZipfIds(ol_cnt, zipf);
 	std::copy(uniqueIDSets.begin(), uniqueIDSets.end(), uniqueItemIDs.begin());
 
 	for (int i = 0; i < ol_cnt; ++i) {
@@ -51,7 +56,7 @@ NewOrderCart NewOrderTransaction::buildCart(){
 
 		// TPC-C suggests generating a number in range (1, 100) and selecting remote on 1 (clause 2.4.1.5.2)
 		// This provides more variation, and lets us tune the fraction of "remote" transactions.
-		bool remote = random_.number(0, 1) <= config::tpcc_settings::REMOTE_WAREHOUSE_PROB;
+		bool remote = ( ((double)random_.number(0, 100)) / 100) <= config::tpcc_settings::REMOTE_WAREHOUSE_PROB;
 		if (config::tpcc_settings::WAREHOUSE_CNT > 1 && remote) {
 			noi.OL_SUPPLY_W_ID = (uint16_t) random_.numberExcluding(0, config::tpcc_settings::WAREHOUSE_CNT - 1, sessionState_.getHomeWarehouseID());
 		} else {
@@ -60,9 +65,16 @@ NewOrderCart NewOrderTransaction::buildCart(){
 
 		// 2.4.1.5.3 A quantity (OL_QUANTITY) is randomly selected within [1 .. 10]
 		noi.OL_QUANTITY = (uint8_t) random_.number(1, 10);
-		cart.items.push_back(noi);
+		cart_.items.push_back(noi);
 	}
-	return cart;
+}
+
+void NewOrderTransaction::initilizeTransaction(){
+	// ************************************************
+	//	Constructing the shopping cart
+	// ************************************************
+	buildCart();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 }
 
 
@@ -78,13 +90,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	struct timespec beforeReadSnapshotTime, beforeIndexTime, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterUpdateTime, afterCommitTime;
 
 
-	// ************************************************
-	//	Constructing the shopping cart
-	// ************************************************
-	NewOrderCart cart = buildCart();
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
-
-
 	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
 		// ************************************************
 		//	Acquire read timestamp
@@ -97,31 +102,31 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	//	Read records in read-set
 	// ************************************************
 	// From Warehouse table, retrieve the row with matching W_ID.
-	executor_.retrieveWarehouse(cart.wID, *localMemory_->getWarehouseHead(), false);
-	executor_.retrieveWarehousePointerList(cart.wID, *localMemory_->getWarehouseTS(), false);
+	executor_.retrieveWarehouse(cart_.wID, *localMemory_->getWarehouseHead(), false);
+	executor_.retrieveWarehousePointerList(cart_.wID, *localMemory_->getWarehouseTS(), false);
 	warehouseV = localMemory_->getWarehouseHead()->getRegion();
 
 	// From District table, retrieve the row with matching D_W_ID and D_ID.
-	executor_.retrieveDistrict(cart.wID, cart.dID, *localMemory_->getDistrictHead(), false);
-	executor_.retrieveDistrictPointerList(cart.wID, cart.dID, *localMemory_->getDistrictTS(), false);
+	executor_.retrieveDistrict(cart_.wID, cart_.dID, *localMemory_->getDistrictHead(), false);
+	executor_.retrieveDistrictPointerList(cart_.wID, cart_.dID, *localMemory_->getDistrictTS(), false);
 	districtV = localMemory_->getDistrictHead()->getRegion();
 
 	// From Customer table, retrieve C_DISCOUNT (the customer's discount rate), C_LAST (the customer's last name), and C_CREDIT (the customer's credit status)
-	executor_.retrieveCustomer(cart.wID, cart.dID, cart.cID, *localMemory_->getCustomerHead(), false);
-	executor_.retrieveCustomerPointerList(cart.wID, cart.dID, cart.cID, *localMemory_->getCustomerTS(), false);
+	executor_.retrieveCustomer(cart_.wID, cart_.dID, cart_.cID, *localMemory_->getCustomerHead(), false);
+	executor_.retrieveCustomerPointerList(cart_.wID, cart_.dID, cart_.cID, *localMemory_->getCustomerTS(), false);
 	customerV = localMemory_->getCustomerHead()->getRegion();
 
 	// Retrieve item and stock
 	bool signaled = false;
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 		// make the last request a signaled one
-		if (olNumber == cart.items.size() - 1) signaled = true;
+		if (olNumber == cart_.items.size() - 1) signaled = true;
 
-		executor_.retrieveItem((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.wID, *localMemory_->getItemHead(), signaled);
+		executor_.retrieveItem((size_t)olNumber, cart_.items.at(olNumber).I_ID, cart_.wID, *localMemory_->getItemHead(), signaled);
 		items.push_back(&localMemory_->getItemHead()->getRegion()[olNumber]);
 
-		executor_.retrieveStock((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), false);
-		executor_.retrieveStockPointerList((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockTS(), true);
+		executor_.retrieveStock((size_t)olNumber, cart_.items.at(olNumber).I_ID, cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), false);
+		executor_.retrieveStockPointerList((size_t)olNumber, cart_.items.at(olNumber).I_ID, cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockTS(), true);
 		stocks.push_back(&localMemory_->getStockHead()->getRegion()[olNumber]);
 	}
 
@@ -145,7 +150,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			oracleContext_.insertClientIDIntoSnapshot(localMemory_->getCustomerTS()->getRegion()[i].getClientID());
 		}
 
-		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 			oracleContext_.insertClientIDIntoSnapshot(items[olNumber]->writeTimestamp.getClientID());
 			oracleContext_.insertClientIDIntoSnapshot(stocks[olNumber]->writeTimestamp.getClientID());
 		}
@@ -174,12 +179,12 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Warehouse " << *warehouseV);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved District " << *districtV);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Customer " << *customerV);
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved Item " << *items[olNumber]);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved stock " << *stocks[olNumber] << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved stock " << *stocks[olNumber] << " from warehouse " << (int)cart_.items.at(olNumber).OL_SUPPLY_W_ID);
 		size_t offset = (size_t) olNumber * config::tpcc_settings::VERSION_NUM;		// offset of versions for the given stock
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[READ] Client " << clientID_ << ": retrieved the pointer list for Stock " << stocks[olNumber]->stock
-				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID );
+				<< ": " << pointer_to_string(&localMemory_->getStockTS()->getRegion()[offset]) << " from warehouse " << (int)cart_.items.at(olNumber).OL_SUPPLY_W_ID );
 
 		(void) offset; // to avoid getting the "unused variable" warning when compiled with DEBUG_ENABLED = false
 	}
@@ -203,7 +208,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		else{
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Warehouse " << *warehouseV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getWarehouseTS()->getRegion()[ind] << ")");
-			executor_.retrieveWarehouseOlderVersion(cart.wID, (size_t)ind, *localMemory_->getWarehouseHead(), true);
+			executor_.retrieveWarehouseOlderVersion(cart_.wID, (size_t)ind, *localMemory_->getWarehouseHead(), true);
 			retrieveOlderVersionCnt++;
 		}
 	}
@@ -215,7 +220,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		else{
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << *districtV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getDistrictTS()->getRegion()[ind] << ")");
-			executor_.retrieveDistrictOlderVersion(cart.wID, cart.dID, (size_t)ind, *localMemory_->getDistrictHead(), true);
+			executor_.retrieveDistrictOlderVersion(cart_.wID, cart_.dID, (size_t)ind, *localMemory_->getDistrictHead(), true);
 			retrieveOlderVersionCnt++;
 		}
 	}
@@ -227,12 +232,12 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		}
 		else{
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Customer " << *customerV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getCustomerTS()->getRegion()[ind] << ")");
-			executor_.retrieveCustomerOlderVersion(cart.wID, cart.dID, cart.cID, (size_t)ind, *localMemory_->getCustomerHead(), true);
+			executor_.retrieveCustomerOlderVersion(cart_.wID, cart_.dID, cart_.cID, (size_t)ind, *localMemory_->getCustomerHead(), true);
 			retrieveOlderVersionCnt++;
 		}
 	}
 	if (!abortFlag){
-		for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+		for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 			if (! isRecordAccessible(items[olNumber]->writeTimestamp)){
 				abortFlag = true;
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": item " << *items[olNumber] << " is not consistent (locked or from a later snapshot)");
@@ -290,12 +295,12 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	}
 
 	// lock stocks
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 		primitive::version_offset_t	versionOffset = stocks.at(olNumber)->writeTimestamp.getVersionOffset();
 		primitive::client_id_t		clientID = clientID_;
 		Timestamp lockTS (isDeleted, isLocked, versionOffset, clientID, cts);
 
-		executor_.lockStock((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, stocks.at(olNumber)->writeTimestamp, lockTS, *localMemory_->getStocksLocksRegion(), true);
+		executor_.lockStock((size_t)olNumber, cart_.items.at(olNumber).I_ID, cart_.items.at(olNumber).OL_SUPPLY_W_ID, stocks.at(olNumber)->writeTimestamp, lockTS, *localMemory_->getStocksLocksRegion(), true);
 		numberOfLocks++;
 	}
 
@@ -309,7 +314,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		districtExpectedLock.copy(districtV->writeTimestamp);
 	}
 
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++)
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++)
 		localMemory_->getStocksLocksRegion()->getRegion()[olNumber] = utils::bigEndianToHost(localMemory_->getStocksLocksRegion()->getRegion()[olNumber]);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": received the results for all the locks");
@@ -326,18 +331,18 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	std::vector<uint8_t> unsuccesfulOrderLines;
 	std::vector<uint8_t> succesfulOrderLines;
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 		Timestamp existingLock(localMemory_->getStocksLocksRegion()->getRegion()[olNumber]);
 		Timestamp &expectedLock = stocks.at(olNumber)->writeTimestamp;
 		if (! existingLock.isEqual(expectedLock)){
 			unsuccesfulOrderLines.push_back(olNumber);
 			abortFlag = true;
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was NOT successful "
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart_.items.at(olNumber).I_ID << " was NOT successful "
 					<< "(expected: " << expectedLock << ", existing: " << existingLock << ")");
 		}
 		else {
 			succesfulOrderLines.push_back(olNumber);
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart.items.at(olNumber).I_ID << " was successful "
+			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[CMSW] Client " << clientID_ << ": attempt to lock item " << (int)cart_.items.at(olNumber).I_ID << " was successful "
 					<< "(expected = existing = " << existingLock << ")");
 		}
 	}
@@ -355,7 +360,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 		for (auto const& olNumber: succesfulOrderLines){
 			successfulLocksCnt++;
-			executor_.revertStockLock((size_t)olNumber, cart.items.at(olNumber).I_ID, cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), true);
+			executor_.revertStockLock((size_t)olNumber, cart_.items.at(olNumber).I_ID, cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), true);
 		}
 
 		executor_.synchronizeSendEvents();
@@ -375,7 +380,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	localTimestampVector_.getRegion()[clientID_] = cts;
 	if (config::recovery_settings::RECOVERY_ENABLED){
 		char command[config::recovery_settings::COMMAND_LOG_SIZE];
-		size_t messageSize = cart.logMessage(command);
+		size_t messageSize = cart_.logMessage(command);
 		recoveryClient_.writeCommandToLog(localTimestampVector_, oracleContext_.getClientIDsInSnapshot(), command, messageSize);
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 	}
@@ -389,9 +394,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Writ] Client " << clientID_ << ": updated pointers and older versions for district " << districtV->district);
 	}
 
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		executor_.updateStockPointers((size_t)olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockTS(), false);
-		executor_.updateStockOlderVersions((size_t)olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockOlderVersions(), false);
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
+		executor_.updateStockPointers((size_t)olNumber, stocks[olNumber], cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockTS(), false);
+		executor_.updateStockOlderVersions((size_t)olNumber, stocks[olNumber], cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockOlderVersions(), false);
 	}
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": added the pointers and older version");
 
@@ -404,10 +409,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	uint64_t old_D_NEXT_ID;
 	uint64_t orderRID = BaseTransaction::getOrderRID();
 	uint64_t newOrderRID = BaseTransaction::getNewOrderRID();
-	uint64_t orderLineRID = BaseTransaction::reserveOrderLineRID(cart.items.size());
+	uint64_t orderLineRID = BaseTransaction::reserveOrderLineRID(cart_.items.size());
 
 	if (config::APPLY_COMMUTATIVE_UPDATES){
-		executor_.retrieveAndIncrementDistrictNextOID(cart.wID, cart.dID, *localMemory_->getDistrictHead(), true);
+		executor_.retrieveAndIncrementDistrictNextOID(cart_.wID, cart_.dID, *localMemory_->getDistrictHead(), true);
 		executor_.synchronizeSendEvents();
 
 		localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID = utils::bigEndianToHost(localMemory_->getDistrictHead()->getRegion()->district.D_NEXT_O_ID);
@@ -431,15 +436,15 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	versionOffset = 0;
 	ov->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	ov->order.O_ID = assignedOID;
-	ov->order.O_W_ID = cart.wID;
-	ov->order.O_D_ID = cart.dID;
-	ov->order.O_C_ID = cart.cID;
+	ov->order.O_W_ID = cart_.wID;
+	ov->order.O_D_ID = cart_.dID;
+	ov->order.O_C_ID = cart_.cID;
 	ov->order.O_ENTRY_D = timer;
 	ov->order.O_CARRIER_ID = 0;
-	ov->order.O_OL_CNT = (uint8_t)cart.items.size();
+	ov->order.O_OL_CNT = (uint8_t)cart_.items.size();
 	ov->order.O_ALL_LOCAL = 1;	// TODO: must be fixed
 
-	executor_.insertIntoOrder(clientID_, orderRID, cart.wID, *localMemory_->getOrderHead(), false);
+	executor_.insertIntoOrder(clientID_, orderRID, cart_.wID, *localMemory_->getOrderHead(), false);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted Order " << *ov << ". Table position: " << orderRID);
 
 
@@ -447,10 +452,10 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	versionOffset = 0;
 	nov->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 	nov->newOrder.NO_O_ID = assignedOID;
-	nov->newOrder.NO_W_ID = cart.wID;
-	nov->newOrder.NO_D_ID = cart.dID;
+	nov->newOrder.NO_W_ID = cart_.wID;
+	nov->newOrder.NO_D_ID = cart_.dID;
 
-	executor_.insertIntoNewOrder(clientID_, newOrderRID, cart.wID, *localMemory_->getNewOrderHead(), false);
+	executor_.insertIntoNewOrder(clientID_, newOrderRID, cart_.wID, *localMemory_->getNewOrderHead(), false);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted NewOrder " << *nov << ". Table position: " << newOrderRID);
 
 	// For each O_OL_CNT item on the order:
@@ -469,41 +474,41 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// |   The amount for the item in the order (OL_AMOUNT) is computed as: OL_QUANTITY * I_PRICE
 
 	signaled = false;
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
-		bool remote = cart.items.at(olNumber).OL_SUPPLY_W_ID == 0;	// TODO
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
+		bool remote = cart_.items.at(olNumber).OL_SUPPLY_W_ID == 0;	// TODO
 
-		if (olNumber == cart.items.size() - 1)
+		if (olNumber == cart_.items.size() - 1)
 			signaled = true;
 
 		versionOffset = (primitive::version_offset_t)(stocks[olNumber]->writeTimestamp.getVersionOffset() + 1) % config::tpcc_settings::VERSION_NUM;
 		stocks[olNumber]->writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
-		if (stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY >= 10)
-			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY);
+		if (stocks[olNumber]->stock.S_QUANTITY - cart_.items.at(olNumber).OL_QUANTITY >= 10)
+			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart_.items.at(olNumber).OL_QUANTITY);
 		else
-			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart.items.at(olNumber).OL_QUANTITY + 91);
-		stocks[olNumber]->stock.S_YTD = (uint32_t)(stocks[olNumber]->stock.S_YTD + cart.items.at(olNumber).OL_QUANTITY);
+			stocks[olNumber]->stock.S_QUANTITY = (uint16_t)(stocks[olNumber]->stock.S_QUANTITY - cart_.items.at(olNumber).OL_QUANTITY + 91);
+		stocks[olNumber]->stock.S_YTD = (uint32_t)(stocks[olNumber]->stock.S_YTD + cart_.items.at(olNumber).OL_QUANTITY);
 		stocks[olNumber]->stock.S_ORDER_CNT = (uint16_t)(stocks[olNumber]->stock.S_ORDER_CNT + 1);
 		if (remote)
 			stocks[olNumber]->stock.S_REMOTE_CNT++;
 
-		executor_.updateStock((size_t)olNumber, stocks[olNumber], cart.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), true);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated stock " << *stocks[olNumber] << " from warehouse " << (int)cart.items.at(olNumber).OL_SUPPLY_W_ID);
+		executor_.updateStock((size_t)olNumber, stocks[olNumber], cart_.items.at(olNumber).OL_SUPPLY_W_ID, *localMemory_->getStockHead(), true);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": updated stock " << *stocks[olNumber] << " from warehouse " << (int)cart_.items.at(olNumber).OL_SUPPLY_W_ID);
 
 		TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
 		versionOffset = 0;
 		olv.writeTimestamp.setAll(isDeleted, isLocked, versionOffset, clientID_, cts);
 		olv.orderLine.OL_O_ID 			= assignedOID;
-		olv.orderLine.OL_D_ID 			= cart.dID;
-		olv.orderLine.OL_W_ID 			= cart.wID;
+		olv.orderLine.OL_D_ID 			= cart_.dID;
+		olv.orderLine.OL_W_ID 			= cart_.wID;
 		olv.orderLine.OL_NUMBER 		= olNumber;
 		olv.orderLine.OL_I_ID 			= items[olNumber]->item.I_ID;
-		olv.orderLine.OL_SUPPLY_W_ID 	= cart.items.at(olNumber).OL_SUPPLY_W_ID;
+		olv.orderLine.OL_SUPPLY_W_ID 	= cart_.items.at(olNumber).OL_SUPPLY_W_ID;
 		olv.orderLine.OL_DELIVERY_D 	= (time_t)0;
-		olv.orderLine.OL_QUANTITY 		=  cart.items.at(olNumber).OL_QUANTITY;
-		olv.orderLine.OL_AMOUNT 		= (float)cart.items.at(olNumber).OL_QUANTITY * items[olNumber]->item.I_PRICE;
-		std::memcpy(olv.orderLine.OL_DIST_INFO, stocks[olNumber]->stock.S_DIST[cart.dID], 25);
+		olv.orderLine.OL_QUANTITY 		=  cart_.items.at(olNumber).OL_QUANTITY;
+		olv.orderLine.OL_AMOUNT 		= (float)cart_.items.at(olNumber).OL_QUANTITY * items[olNumber]->item.I_PRICE;
+		std::memcpy(olv.orderLine.OL_DIST_INFO, stocks[olNumber]->stock.S_DIST[cart_.dID], 25);
 
-		executor_.insertIntoOrderLine(clientID_, (uint64_t)(orderLineRID + olNumber), olNumber, cart.wID, *localMemory_->getOrderLineHead(), signaled);
+		executor_.insertIntoOrderLine(clientID_, (uint64_t)(orderLineRID + olNumber), olNumber, cart_.wID, *localMemory_->getOrderLineHead(), signaled);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": inserted OrderLine " << olv << ". Table position: " << orderLineRID + olNumber);
 	}
@@ -514,23 +519,23 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	// update the index
 	clock_gettime(CLOCK_REALTIME, &beforeIndexTime);
-	size_t serverNum = Warehouse::getServerNum(cart.wID);
+	size_t serverNum = Warehouse::getServerNum(cart_.wID);
 	executor_.registerOrder(
 			clientID_,
-			cart.wID,
-			cart.dID,
-			cart.cID,
+			cart_.wID,
+			cart_.dID,
+			cart_.cID,
 			assignedOID,
 			orderRID,
 			newOrderRID,
 			orderLineRID,
-			(uint8_t)cart.items.size(),
+			(uint8_t)cart_.items.size(),
 			*dsCtx_[serverNum]->getIndexRequestMessage(),
 			*dsCtx_[serverNum]->getRegisterOrderIndexResponseMessage(),
 			dsCtx_[serverNum]->getQP(),
 			true);
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Msg sent. Type: REGISTER_ORDER. Params: wID = " << (int)cart.wID
-			<< ", dID = " << (int)cart.dID << ", cID = " << (int)cart.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << orderRID << ", #orderlines: " << cart.items.size());
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Msg sent. Type: REGISTER_ORDER. Params: wID = " << (int)cart_.wID
+			<< ", dID = " << (int)cart_.dID << ", cID = " << (int)cart_.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << orderRID << ", #orderlines: " << cart_.items.size());
 
 	executor_.synchronizeNetworkEvents();
 
@@ -543,7 +548,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	// Perform computation
 	// ************************************************
 	float sum = 0;
-	for (uint8_t olNumber = 0; olNumber < cart.items.size(); olNumber++){
+	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
 		TPCC::OrderLineVersion &olv = localMemory_->getOrderLineHead()->getRegion()[olNumber];
 		sum += olv.orderLine.OL_AMOUNT;
 	}
@@ -567,7 +572,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	BaseTransaction::incrementOrderRID(1);
 	BaseTransaction::incrementNewOrderRID(1);
-	BaseTransaction::incrementOrderLineRID(cart.items.size());
+	BaseTransaction::incrementOrderLineRID(cart_.items.size());
 
 	clock_gettime(CLOCK_REALTIME, &afterCommitTime);
 

@@ -14,6 +14,7 @@
 #include "../../../random/randomgenerator.hpp"
 #include "../../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
+#include "../../../../../util/ZipfDistribution.hpp"
 #include <sstream>
 
 
@@ -29,6 +30,13 @@ struct NewOrderCart{
 	uint8_t dID;
 	uint32_t cID;
 	std::vector<NewOrderItem> items;
+
+	void reset(){
+		wID = 0;
+		dID = 0;
+		cID = 0;
+		items.clear();
+	}
 
 	friend std::ostream& operator<<(std::ostream& os, const NewOrderCart& c) {
 		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | cID:" << (int)c.cID << " -- Items (iID,suppWID):";
@@ -64,11 +72,17 @@ struct NewOrderCart{
 class NewOrderTransaction : public BaseTransaction {
 private:
 	NewOrderLocalMemory* localMemory_;
-	NewOrderCart buildCart();
+	NewOrderCart cart_;
+	ZipfDistribution zipf;
+	void buildCart();
+
+
 
 public:
 	NewOrderTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~NewOrderTransaction();
+
+	void initilizeTransaction();
 	TPCC::TransactionResult doOne();
 
 	NewOrderTransaction& operator=(const NewOrderTransaction&) = delete;	// Disallow copying

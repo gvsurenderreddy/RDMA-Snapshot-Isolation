@@ -65,10 +65,8 @@ private:
 
 public:
 	BaseTransaction(std::string transactionName, TPCCClient &client, DBExecutor &executor);
-//	BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt,
-//			std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext,
-//			RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient);
 	std::string getTransactionName() const;
+	virtual void initilizeTransaction() = 0;
 	virtual TransactionResult doOne() = 0;
 	void cleanupAfterCommit();
 	virtual ~BaseTransaction();

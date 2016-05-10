@@ -19,7 +19,7 @@ namespace config {
 /* Logging			*/
 #define DEBUG_ENABLED (false)
 enum 	Output{FILE, SCREEN};						// Don't change this. Possible options for logging.
-#define DEBUG_OUTPUT config::Output::SCREEN			// Where to write the logs (possible options are specified in Output enum.
+#define DEBUG_OUTPUT config::Output::SCREEN 		// Where to write the logs (possible options are specified in Output enum.
 static const std::string LOG_FOLDER		= "logs";	// Don't change this, unless you change the Makefile too
 
 
@@ -57,13 +57,13 @@ static const size_t 	COMMAND_LOG_SIZE 		= 200;					// the maximum size of comman
 
 namespace tpcc_settings{
 /* Experiment settings	*/
-static const unsigned				TRANSACTION_CNT 		= 1000000;		// This is __per client__. For the experiments, we will use 1,000,000
+static const unsigned				TRANSACTION_CNT 		= 100000;		// This is __per client__. For the experiments, we will use 1,000,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {				// Numbers must add up to 1
-		0.45,	// Ratio of New Order
-		0.43,	// Ratio of Payment
-		0.04,	// Ratio of Order-Status
-		0.04,	// Ratio of Delivery
-		0.04};	// Ratio of Stock-Level.
+		1.0};	//		0.45,	// Ratio of New Order
+//		0.43,	// Ratio of Payment
+//		0.04,	// Ratio of Order-Status
+//		0.04,	// Ratio of Delivery
+//		0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
 static const size_t WAREHOUSE_PER_SERVER		= 1;			// Number of warehouses per server
@@ -76,6 +76,9 @@ static const size_t ORDER_BUFFER_PER_CLIENT		= 1000;			// The buffer size alloca
 static const size_t HISTORY_BUFFER_PER_CLIENT	= 1000;			// the buffer size allocated to each client for storing history. In the ideal case, this should be TRANSACTION_CNT.
 static const double REMOTE_WAREHOUSE_PROB		= 0.01; 		// probability of new order selecting a remote warehouse for ol_supply_w_id. TPCC Default is 0.01
 static const size_t VERSION_NUM 				= 3;			// Number of versions to be kept around for each record, excluding the head version. So the total number of versions will be VERSION_NUM + 1
+
+static const double	SKEWNESS_IN_ITEM_ACCESS		= 0;			// 0 means no skew (random access). 1 is zipf law. Could be arbitrariliy large.
+
 }	// namespace tpcc_settings
 
 

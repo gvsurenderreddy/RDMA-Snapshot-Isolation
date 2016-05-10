@@ -31,25 +31,6 @@ BaseTransaction::BaseTransaction(std::string transactionName, TPCCClient &client
 	nextHistoryID_(0){
 }
 
-//BaseTransaction::BaseTransaction(std::ostream &os, std::string transactionName, TPCC::DBExecutor &executor, primitive::client_id_t clientID, size_t clientCnt, std::vector<ServerContext*> dsCtx, SessionState *sessionState, RealRandomGenerator *random, RDMAContext *context, OracleContext *oracleContext, RDMARegion<primitive::timestamp_t> *localTimestampVector, RecoveryClient *recoveryClient, OracleReader *oracleReader)
-//: os_(os),
-//  transactionName_(transactionName),
-//  executor_(executor),
-//  clientID_(clientID),
-//  clientCnt_(clientCnt),
-//  dsCtx_(dsCtx),
-//  sessionState_(sessionState),
-//  random_(random),
-//  context_(context),
-//  oracleContext_(oracleContext),
-//  localTimestampVector_(localTimestampVector),
-//  recoveryClient_(recoveryClient),
-//  nextOrderID_(0),
-//  nextNewOrderID_(0),
-//  nextOrderLineID_(0),
-//  nextHistoryID_(0){
-//}
-
 BaseTransaction::~BaseTransaction() {
 	// TODO Auto-generated destructor stub
 }

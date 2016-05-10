@@ -21,29 +21,28 @@ StockLevelTransaction::~StockLevelTransaction() {
 	delete localMemory_;
 }
 
-TPCC::StockLevelCart StockLevelTransaction::buildCart(){
-	StockLevelCart cart;
+void StockLevelTransaction::buildCart(){
+	cart_.reset();
 
 	// 2.8.1.1 Each terminal must use a unique value of (W_ID, D_ID) that is constant over the whole measurement, i.e., D_IDs cannot be re-used within a warehouse.
-	cart.wID = sessionState_.getHomeWarehouseID();
-	cart.dID = sessionState_.getHomeDistrictID();
+	cart_.wID = sessionState_.getHomeWarehouseID();
+	cart_.dID = sessionState_.getHomeDistrictID();
 
 	// 2.8.1.2 The threshold of minimum quantity in stock (threshold ) is selected at random within [10 .. 20].
-	cart.threshold = (unsigned) random_.number(10, 20);
-	return cart;
+	cart_.threshold = (unsigned) random_.number(10, 20);
+}
+
+void StockLevelTransaction::initilizeTransaction(){
+	// ************************************************
+	//	Constructing the transaction cart
+	// ************************************************
+	buildCart();
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
 }
 
 TPCC::TransactionResult StockLevelTransaction::doOne(){
-	time_t timer;
-	std::time(&timer);
 	TransactionResult trxResult;
 	TPCC::DistrictVersion *districtV;
-
-	// ************************************************
-	//	Constructing the shopping cart
-	// ************************************************
-	StockLevelCart cart = buildCart();
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << (int)clientID_ << ": Cart: " << cart);
 
 
 	// ************************************************
@@ -56,10 +55,10 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	// ************************************************
 	//	Read records in read-set
 	// ************************************************
-	size_t serverNum = Warehouse::getServerNum(cart.wID);
+	size_t serverNum = Warehouse::getServerNum(cart_.wID);
 
-	executor_.retrieveDistrict(cart.wID, cart.dID, *localMemory_->getDistrictHead(), false);
-	executor_.retrieveDistrictPointerList(cart.wID, cart.dID, *localMemory_->getDistrictTS(), true);
+	executor_.retrieveDistrict(cart_.wID, cart_.dID, *localMemory_->getDistrictHead(), false);
+	executor_.retrieveDistrictPointerList(cart_.wID, cart_.dID, *localMemory_->getDistrictTS(), true);
 
 	executor_.synchronizeSendEvents();
 
@@ -76,7 +75,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		}
 		else{
 			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": District " << *districtV << " is not consistent, but its " << ind << "'s version is consistent (" << localMemory_->getDistrictTS()->getRegion()[ind] << ")");
-			executor_.retrieveDistrictOlderVersion(cart.wID, cart.dID, (size_t)ind, *localMemory_->getDistrictHead(), true);
+			executor_.retrieveDistrictOlderVersion(cart_.wID, cart_.dID, (size_t)ind, *localMemory_->getDistrictHead(), true);
 			executor_.synchronizeSendEvents();
 			// note that districtV is not updated with a consistent version
 		}
@@ -84,16 +83,16 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 
 	executor_.getDistinctItemsForLastTwentyOrders(
 			clientID_,
-			cart.wID,
-			cart.dID,
+			cart_.wID,
+			cart_.dID,
 			(uint32_t)districtV->district.D_NEXT_O_ID,
 			*dsCtx_[serverNum]->getIndexRequestMessage(),
 			*dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage(),
 			dsCtx_[serverNum]->getQP(),
 			true);
 
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: ITEMS_FOR_LAST_20_ORDERS. Parameters: wID = " << (int)cart.wID
-			<< ", dID = " << (int)cart.dID << ", d_next_oid = " << (uint32_t)districtV->district.D_NEXT_O_ID);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: ITEMS_FOR_LAST_20_ORDERS. Parameters: wID = " << (int)cart_.wID
+			<< ", dID = " << (int)cart_.dID << ", d_next_oid = " << (uint32_t)districtV->district.D_NEXT_O_ID);
 
 	executor_.synchronizeNetworkEvents();
 
@@ -118,8 +117,8 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	bool signaled = false;
 	for (size_t i=0; i < orderlinesCnt; i++){
 		if (i == orderlinesCnt - 1) signaled = true;
-		executor_.retrieveStock(i, itemIDs[i], cart.wID, *localMemory_->getStockHead(), false);
-		executor_.retrieveStockPointerList(i, itemIDs[i], cart.wID, *localMemory_->getStockTS(), signaled);
+		executor_.retrieveStock(i, itemIDs[i], cart_.wID, *localMemory_->getStockHead(), false);
+		executor_.retrieveStockPointerList(i, itemIDs[i], cart_.wID, *localMemory_->getStockTS(), signaled);
 	}
 	executor_.synchronizeSendEvents();
 
@@ -142,7 +141,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 				DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Stock " << localMemory_->getStockHead()->getRegion()[i] << " is not consistent"
 						<< ", but its " << ind << "'s version is consistent (" << localMemory_->getStockTS()->getRegion()[ind] << ")");
 
-				executor_.retrieveStockOlderVersion(i, itemIDs[i], cart.wID, (size_t)ind, *localMemory_->getStockHead(), true);
+				executor_.retrieveStockOlderVersion(i, itemIDs[i], cart_.wID, (size_t)ind, *localMemory_->getStockHead(), true);
 				retrieveOlderVersionCnt++;
 			}
 		}
@@ -166,7 +165,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 	// Count stocks whose quantity is lower than the given threshold
 	unsigned lowStockCnt = 0;
 	for (size_t i=0; i < orderlinesCnt; i++){
-		if (localMemory_->getStockHead()->getRegion()[i].stock.S_QUANTITY < cart.threshold)
+		if (localMemory_->getStockHead()->getRegion()[i].stock.S_QUANTITY < cart_.threshold)
 			lowStockCnt++;
 	}
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": The number of stocks with low quantity: " << (int)lowStockCnt);

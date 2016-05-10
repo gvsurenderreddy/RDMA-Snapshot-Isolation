@@ -1,6 +1,7 @@
 #ifndef RANDOMGENERATOR_H__
 #define RANDOMGENERATOR_H__
 
+#include "../../../util/ZipfDistribution.hpp"
 #include <cstdlib>  // for struct random_data
 #include <set>		// for std::set
 #include <cstdint>
@@ -40,6 +41,8 @@ public:
     std::set<int> selectUniqueIds(size_t num_unique, int lower_id, int upper_id);
 
     std::set<uint32_t> selectUniqueNonUniformIds(int A, size_t num_unique, int lower_id, int upper_id);
+
+    std::set<uint32_t> selectZipfIds(size_t num_unique, ZipfDistribution &zipf);
 
 
     void astring(char* s, int lower_length, int upper_length);

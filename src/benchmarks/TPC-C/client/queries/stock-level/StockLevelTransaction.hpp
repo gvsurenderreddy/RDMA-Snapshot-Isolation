@@ -23,6 +23,12 @@ struct StockLevelCart{
 	uint8_t dID;
 	unsigned threshold;
 
+	void reset(){
+		wID = 0;
+		dID = 0;
+		threshold = 0;
+	}
+
 	friend std::ostream& operator<<(std::ostream& os, const StockLevelCart& c) {
 		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | Threshold: " << c.threshold;
 		return os;
@@ -43,13 +49,15 @@ struct StockLevelCart{
 class StockLevelTransaction: public BaseTransaction {
 private:
 	StockLevelLocalMemory* localMemory_;
-	StockLevelCart buildCart();
+	StockLevelCart cart_;
+	void buildCart();
 public:
 	StockLevelTransaction(TPCCClient &client, DBExecutor &executor);
 	virtual ~StockLevelTransaction();
 	StockLevelTransaction& operator=(const StockLevelTransaction&) = delete;	// Disallow copying
 	StockLevelTransaction(const StockLevelTransaction&) = delete;				// Disallow copying
 
+	void initilizeTransaction();
 	TPCC::TransactionResult doOne();
 };
 

@@ -30,6 +30,10 @@ struct PaymentCart{
 	uint32_t cID;
 	float hAmount;
 
+	void reset(){
+		std::memset(cLastName, 0, sizeof(cLastName));
+	}
+
 	friend std::ostream& operator<<(std::ostream& os, const PaymentCart& c) {
 		os << "wID:" << (int)c.wID << " | dID:" << (int)c.dID << " | resident_W_ID:" << (int)c.residentWarehouseID;
 		c.customerSelectionMode == LAST_NAME ? (os << " | LAST_NAME: " << c.cLastName) :  (os << " | cID: " << c.cID);
@@ -63,7 +67,8 @@ struct PaymentCart{
 class PaymentTransaction : public BaseTransaction {
 private:
 	PaymentLocalMemory* localMemory_;
-	PaymentCart buildCart();
+	PaymentCart cart_;
+	void buildCart();
 
 public:
 	PaymentTransaction(TPCCClient &client, DBExecutor &executor);
@@ -71,6 +76,7 @@ public:
 	PaymentTransaction& operator=(const PaymentTransaction&) = delete;	// Disallow copying
 	PaymentTransaction(const PaymentTransaction&) = delete;				// Disallow copying
 
+	void initilizeTransaction();
 	TPCC::TransactionResult doOne();
 };
 

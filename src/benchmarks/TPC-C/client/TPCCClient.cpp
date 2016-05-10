@@ -134,10 +134,10 @@ void TPCCClient::start(){
 	//	Preparing the transactions
 	// ************************************************
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*this, executor_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*this, executor_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*this, executor_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*this, executor_)));
-	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*this, executor_)));
+//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*this, executor_)));
+//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*this, executor_)));
+//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*this, executor_)));
+//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*this, executor_)));
 	assert(trxs.size() == config::tpcc_settings::TRANSACTION_MIX_RATIOS.size());
 
 
@@ -192,10 +192,14 @@ void TPCCClient::start(){
 		}
 
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] --------------- Transaction " << t << " (" << trx->getTransactionName() << ") --------------");
+
+		trx->initilizeTransaction();
+
 		clock_gettime(CLOCK_REALTIME, &trxBeginTime);
 		TransactionResult trxResult = trx->doOne();
-		trx->cleanupAfterCommit();
 		clock_gettime(CLOCK_REALTIME, &trxFinishTime);
+
+		trx->cleanupAfterCommit();
 
 		std::string trxName = trx->getTransactionName();
 		executedTrxCnt[trxName]++;
