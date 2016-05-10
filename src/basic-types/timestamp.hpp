@@ -13,22 +13,23 @@
 #include <string>
 #include "PrimitiveTypes.hpp"
 
+struct BitMasks{
+	static const uint8_t checkAliveBits = 0x0F;
+	static const uint8_t checkDeletedBits = 0x1F;
+	static const uint8_t deletingBits = 0x10;
+
+	static const uint8_t checkLockedBits = 0xF1;
+	static const uint8_t checkUnLockedBits = 0xF0;
+	static const uint8_t lockingBits = 0x01;
+	static const uint8_t unLockingBits = 0xF0;
+};
+
 class Timestamp {
 private:
 	primitive::timestamp_t timestamp_;
 	primitive::client_id_t clientID_;
 	primitive::lock_status_t lockStatus_;
 	primitive::version_offset_t versionOffset_;
-
-	const uint8_t checkAliveBits = 0x0F;
-	const uint8_t checkDeletedBits = 0x1F;
-	const uint8_t deletingBits = 0x10;
-
-	const uint8_t checkLockedBits = 0xF1;
-	const uint8_t checkUnLockedBits = 0xF0;
-	const uint8_t lockingBits = 0x01;
-	const uint8_t unLockingBits = 0xF0;
-
 
 public:
 	Timestamp();

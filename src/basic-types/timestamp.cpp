@@ -26,10 +26,10 @@ Timestamp::Timestamp(uint64_t ull) {
 }
 
 Timestamp::Timestamp(const bool isDeleted, const bool isLocked, const primitive::version_offset_t versionOffset, const primitive::client_id_t clientID, const primitive::timestamp_t timestamp){
-	if (isDeleted && isLocked) lockStatus_ = checkDeletedBits & checkLockedBits;
-	else if (isDeleted && !isLocked) lockStatus_ = checkDeletedBits & checkUnLockedBits;
-	else if (!isDeleted && isLocked) lockStatus_ = checkAliveBits & checkLockedBits;
-	else lockStatus_ = checkAliveBits & checkUnLockedBits;
+	if (isDeleted && isLocked) lockStatus_ = BitMasks::checkDeletedBits & BitMasks::checkLockedBits;
+	else if (isDeleted && !isLocked) lockStatus_ = BitMasks::checkDeletedBits & BitMasks::checkUnLockedBits;
+	else if (!isDeleted && isLocked) lockStatus_ = BitMasks::checkAliveBits & BitMasks::checkLockedBits;
+	else lockStatus_ = BitMasks::checkAliveBits & BitMasks::checkUnLockedBits;
 	timestamp_ = timestamp;
 	clientID_ = clientID;
 	versionOffset_ = versionOffset;
@@ -50,11 +50,11 @@ const primitive::version_offset_t Timestamp::getVersionOffset() const {
 }
 
 const bool Timestamp::isLocked() const{
-	return ((lockStatus_ & checkLockedBits) << 7 ) >> 7  == 1;
+	return ((lockStatus_ & BitMasks::checkLockedBits) << 7 ) >> 7  == 1;
 }
 
 const bool Timestamp::isDeleted() const{
-	return (lockStatus_ & checkDeletedBits) >> 4  == 1;
+	return (lockStatus_ & BitMasks::checkDeletedBits) >> 4  == 1;
 }
 
 void Timestamp::setClientID(const primitive::client_id_t clientID) {
@@ -66,22 +66,22 @@ void Timestamp::setTimestamp(const primitive::timestamp_t timestamp) {
 }
 
 void Timestamp::markDeleted(){
-	lockStatus_ = lockStatus_ | deletingBits;
+	lockStatus_ = lockStatus_ | BitMasks::deletingBits;
 }
 
 void Timestamp::markLocked(){
-	lockStatus_ = lockStatus_ | lockingBits;
+	lockStatus_ = lockStatus_ | BitMasks::lockingBits;
 }
 
 void Timestamp::markUnlocked(){
-	lockStatus_ = lockStatus_ & unLockingBits;
+	lockStatus_ = lockStatus_ & BitMasks::unLockingBits;
 }
 
 void Timestamp::setAll(const bool isDeleted, const bool isLocked, const primitive::version_offset_t versionOffset, const primitive::client_id_t clientID, const primitive::timestamp_t timestamp){
-	if (isDeleted && isLocked) lockStatus_ = checkDeletedBits & checkLockedBits;
-	else if (isDeleted && !isLocked) lockStatus_ = checkDeletedBits & checkUnLockedBits;
-	else if (!isDeleted && isLocked) lockStatus_ = checkAliveBits & checkLockedBits;
-	else lockStatus_ = checkAliveBits & checkUnLockedBits;
+	if (isDeleted && isLocked) lockStatus_ = BitMasks::checkDeletedBits & BitMasks::checkLockedBits;
+	else if (isDeleted && !isLocked) lockStatus_ = BitMasks::checkDeletedBits & BitMasks::checkUnLockedBits;
+	else if (!isDeleted && isLocked) lockStatus_ = BitMasks::checkAliveBits & BitMasks::checkLockedBits;
+	else lockStatus_ = BitMasks::checkAliveBits & BitMasks::checkUnLockedBits;
 
 	versionOffset_ = versionOffset;
 	clientID_ = clientID;
