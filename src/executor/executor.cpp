@@ -115,7 +115,7 @@ int main (int argc, char *argv[]) {
 			uint16_t homeWarehouseID;
 
 			if (argParser.hasOption("-w"))
-				homeWarehouseID = (uint16_t)std::stoi(argParser.getArgumentForOption("-w"));
+				homeWarehouseID = (uint16_t)(std::stoi(argParser.getArgumentForOption("-w")) * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
 			else
 				homeWarehouseID = (uint16_t)(instanceID * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
 
@@ -216,7 +216,7 @@ void print_error_instance(std::string executable_filename) {
 	std::cerr << '\t' << "-i  (required)" << '\t' << "unique identifier of the instance" << std::endl;
 	std::cerr << '\t' << "-b  (required)" << '\t' << "choice of benchmark (e.g. TPCC)" << std::endl;
 	std::cerr << '\t' << "-s  (optional)" << '\t' << "index of the server in the config file. Out of '-s' and '-w' options, once must be declared" << std::endl;
-	std::cerr << "\t" << "-w  (optional)" << "\t" << "the home warehouse for clients (the default is one of the warehouses on #SERVER_ID)" << std::endl;
+	std::cerr << "\t" << "-w  (optional)" << "\t" << "the server ID which keeps the home warehouses for clients (the default is one of the warehouses on #SERVER_ID)" << std::endl;
 	std::cerr << '\t' << "-c  (required)" << '\t' << "number of clients in the instance" << std::endl;
 	std::cerr << '\t' << "-n  (required)" << '\t' << "number of total clients in the experiment" << std::endl;
 	std::cerr << '\t' << "-pc (required)" << '\t' << "number of IB ports" << std::endl;
