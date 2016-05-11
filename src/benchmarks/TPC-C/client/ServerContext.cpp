@@ -50,6 +50,10 @@ unsigned ServerContext::getInstanceNum() const{
 	return instanceNum_;
 }
 
+TPCC::TPCCDB* ServerContext::getDatabaseObject(){
+	return db_;
+}
+
 ibv_qp* ServerContext::getQP() const{
 	return qp_;
 }
@@ -88,6 +92,10 @@ RDMARegion<TPCC::IndexResponseMessage>* ServerContext::getRegisterDeliveryIndexR
 
 void ServerContext::setInstanceNum(unsigned instanceNum) {
 	instanceNum_ = instanceNum;
+}
+
+void ServerContext::setDatabaseObject(TPCC::TPCCDB *db){
+	db_ = db;
 }
 
 void ServerContext::activateQueuePair(RDMAContext &context){

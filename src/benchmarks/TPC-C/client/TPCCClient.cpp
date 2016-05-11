@@ -111,10 +111,12 @@ void TPCCClient::start(){
 		TEST_NZ(RDMACommon::poll_completion(context_->getRecvCq()));
 
 		dsCtx_[i]->setInstanceNum(dsCtx_[i]->getRemoteMemoryKeys()->getRegion()->serverInstanceNum);
+		dsCtx_[i]->setDatabaseObject(dsCtx_[i]->getRemoteMemoryKeys()->getRegion()->databaseObject);
+
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Recv] Buffers info from server " << i);
 	}
 
-	TPCC::DBExecutor executor_(*os_, dsCtx_, instanceNum_, oracleReader_, context_->getSendCq(), context_->getRecvCq());
+	TPCC::DBExecutor executor_(*os_, instanceNum_, dsCtx_, oracleReader_, context_->getSendCq(), context_->getRecvCq());
 	std::vector<std::unique_ptr<TPCC::BaseTransaction> > trxs;
 
 	// ************************************************

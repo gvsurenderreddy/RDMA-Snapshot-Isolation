@@ -12,17 +12,16 @@
 
 #define CLASS_NAME "DBExecutor"
 
-
 namespace TPCC {
 
 DBExecutor::~DBExecutor() {
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Destructor called");
 }
 
-DBExecutor::DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue)
+DBExecutor::DBExecutor(std::ostream &os, unsigned instanceNum, std::vector<ServerContext *> dsCtx, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue)
 : os_(os),
-  dsCtx_(dsCtx),
   instanceNum_(instanceNum),
+  dsCtx_(dsCtx),
   oracleReader_(oracleReader),
   sendCQ_(sendCompletionQueue),
   recvCQ_(recvCompletionQueue),
@@ -56,8 +55,13 @@ bool DBExecutor::isServerLocal(size_t serverNum) const {
 	return (config::LOCALITY_EXPLOITAION && dsCtx_[serverNum]->getInstanceNum() == instanceNum_);
 }
 
-void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, const char *cLastName, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion = *dsCtx_[serverNum]->getCustomerNameIndexResponseMessage();
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -67,26 +71,39 @@ void DBExecutor::lookupCustomerByLastName(primitive::client_id_t clientID, uint1
 	req->parameters.lastNameIndex.dID = dID;
 	std::memcpy(req->parameters.lastNameIndex.customerLastName, cLastName,  17);
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(CustomerNameIndexRespMsg)));
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleCustomerNameIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	outstandingRecvCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(CustomerNameIndexRespMsg)));
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		outstandingRecvCompletionCnt_++;
+
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
-void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion = *dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage();
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -96,25 +113,39 @@ void DBExecutor::getLastOrderOfCustomer(primitive::client_id_t clientID, uint16_
 	req->parameters.largestOrderIndex.dID = dID;
 	req->parameters.largestOrderIndex.cID= cID;
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(LargestOrderForCustomerIndexRespMsg)));
-	outstandingRecvCompletionCnt_++;
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleLargestOrderIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(LargestOrderForCustomerIndexRespMsg)));
+		outstandingRecvCompletionCnt_++;
+
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
-void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::IndexResponseMessage> &responseRegion = *dsCtx_[serverNum]->getRegisterOrderIndexResponseMessage();
+
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -129,27 +160,40 @@ void DBExecutor::registerOrder(primitive::client_id_t clientID, uint16_t wID, ui
 	req->parameters.registerOrderIndex.orderLineRegionOffset = orderLineRegionOffset;
 	req->parameters.registerOrderIndex.numOfOrderlines = numOfOrderlines;
 
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleRegisterOrderIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(IndexResponseMessage)));
-	outstandingRecvCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(IndexResponseMessage)));
+		outstandingRecvCompletionCnt_++;
 
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
-void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::Last20OrdersIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::Last20OrdersIndexResMsg> &responseRegion = *dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage();
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -159,25 +203,38 @@ void DBExecutor::getDistinctItemsForLastTwentyOrders(primitive::client_id_t clie
 	req->parameters.last20OrdersIndex.dID = dID;
 	req->parameters.last20OrdersIndex.D_NEXT_O_ID = D_NEXT_O_ID;
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(Last20OrdersIndexResMsg)));
-	outstandingRecvCompletionCnt_++;
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleLast20OrdersIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(Last20OrdersIndexResMsg)));
+		outstandingRecvCompletionCnt_++;
+
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
-void DBExecutor::getOldestUndeliveredOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::getOldestUndeliveredOrder(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg> &responseRegion = *dsCtx_[serverNum]->getOldestUndeliveredOrderIndexResponseMessage();
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -186,25 +243,38 @@ void DBExecutor::getOldestUndeliveredOrder(primitive::client_id_t clientID, uint
 	req->parameters.oldestUndeliveredOrderIndex.warehouseOffset = warehouseOffset;
 	req->parameters.oldestUndeliveredOrderIndex.dID = dID;
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(OldestUndeliveredOrderIndexResMsg)));
-	outstandingRecvCompletionCnt_++;
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleOldestUndeliveredOrderIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(OldestUndeliveredOrderIndexResMsg)));
+		outstandingRecvCompletionCnt_++;
+
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
-void DBExecutor::registerDelivery(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t oID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled){
+void DBExecutor::registerDelivery(primitive::client_id_t clientID, uint16_t wID, uint8_t dID, uint32_t oID, bool signaled){
 	uint16_t warehouseOffset = Warehouse::getWarehouseOffsetOnServer(wID);
+	size_t serverNum = Warehouse::getServerNum(wID);
+	ibv_qp *qp = dsCtx_[serverNum]->getQP();
+
+	RDMARegion<TPCC::IndexRequestMessage> &requestRegion = *dsCtx_[serverNum]->getIndexRequestMessage();
+	RDMARegion<TPCC::IndexResponseMessage> &responseRegion = *dsCtx_[serverNum]->getRegisterDeliveryIndexResponseMessage();
 
 	TPCC::IndexRequestMessage *req = requestRegion.getRegion();
 	req->clientID = clientID;
@@ -214,22 +284,29 @@ void DBExecutor::registerDelivery(primitive::client_id_t clientID, uint16_t wID,
 	req->parameters.registerDeliveryIndex.dID = dID;
 	req->parameters.registerDeliveryIndex.oID = oID;
 
+	if (isServerLocal(serverNum)) {
+		// the index can be access/modified directly by the client, as the server and its database is located within the same address space
+		dsCtx_[serverNum]->getDatabaseObject()->handleRegisterDeliveryIndexRequest(*req, *responseRegion.getRegion());
+	}
+	else{
+		// the client must send index request over wire
 
-	// to avoid race, post the next indexResponse message before sending the request
-	TEST_NZ (RDMACommon::post_RECEIVE (
-			qp,
-			responseRegion.getRDMAHandler(),
-			(uintptr_t)responseRegion.getRegion(),
-			sizeof(IndexResponseMessage)));
-	outstandingRecvCompletionCnt_++;
+		// to avoid race, post the next indexResponse message before sending the request
+		TEST_NZ (RDMACommon::post_RECEIVE (
+				qp,
+				responseRegion.getRDMAHandler(),
+				(uintptr_t)responseRegion.getRegion(),
+				sizeof(IndexResponseMessage)));
+		outstandingRecvCompletionCnt_++;
 
-	TEST_NZ (RDMACommon::post_SEND(
-			qp,
-			requestRegion.getRDMAHandler(),
-			(uintptr_t)requestRegion.getRegion(),
-			sizeof(IndexRequestMessage),
-			signaled));
-	outstandingSendCompletionCnt_++;
+		TEST_NZ (RDMACommon::post_SEND(
+				qp,
+				requestRegion.getRDMAHandler(),
+				(uintptr_t)requestRegion.getRegion(),
+				sizeof(IndexRequestMessage),
+				signaled));
+		outstandingSendCompletionCnt_++;
+	}
 }
 
 

@@ -98,15 +98,7 @@ TPCC::TransactionResult PaymentTransaction::doOne(){
 		// First, use the index on the server to find the cID for the given last name
 		size_t serverNum = Warehouse::getServerNum(cart_.wID);
 
-		executor_.lookupCustomerByLastName(
-				clientID_,
-				cart_.residentWarehouseID,
-				cart_.dID,
-				cart_.cLastName,
-				*dsCtx_[serverNum]->getIndexRequestMessage(),
-				*dsCtx_[serverNum]->getCustomerNameIndexResponseMessage(),
-				dsCtx_[serverNum]->getQP(),
-				true);
+		executor_.lookupCustomerByLastName(clientID_, cart_.residentWarehouseID, cart_.dID, cart_.cLastName, true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart_.residentWarehouseID << ", dID = " << (int)cart_.dID << ", lastName = " << cart_.cLastName);
 

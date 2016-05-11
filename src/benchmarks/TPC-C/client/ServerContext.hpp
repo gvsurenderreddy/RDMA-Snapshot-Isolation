@@ -16,6 +16,7 @@
 #include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
 #include "../index-messages/Last20OrdersIndexResMsg.hpp"
 #include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
+#include "../tables/TPCCDB.hpp"
 #include <string>	// for std::string
 #include <infiniband/verbs.h>	// for ibv_qp
 #include <cstdint>	// uintX_t
@@ -29,6 +30,8 @@ private:
 	uint16_t	tcpPort_;
 	uint8_t 	ibPort_;
 	unsigned	instanceNum_;
+	TPCC::TPCCDB	*db_;	// this object may __ONLY__ be used by the client only if it sits within the same address space of the server
+
 	struct	ibv_qp	*qp_;
 
 	// RDMA region for storing remote memory keys
@@ -49,6 +52,7 @@ public:
 	uint16_t getTcpPort() const;
 	int getSockFd() const;
 	unsigned getInstanceNum() const;
+	TPCC::TPCCDB* getDatabaseObject();
 	ibv_qp* getQP() const;
 	RDMARegion<ServerMemoryKeys>* getRemoteMemoryKeys();
 	RDMARegion<TPCC::IndexRequestMessage>* getIndexRequestMessage();
@@ -60,6 +64,7 @@ public:
 	RDMARegion<TPCC::IndexResponseMessage>* getRegisterDeliveryIndexResponseMessage();
 
 	void setInstanceNum(unsigned instanceNum);
+	void setDatabaseObject(TPCC::TPCCDB	*db);
 	void activateQueuePair(RDMAContext &context);
 	ServerContext& operator=(const ServerContext&) = delete;	// Disallow copying
 	ServerContext(const ServerContext&) = delete;				// Disallow copying

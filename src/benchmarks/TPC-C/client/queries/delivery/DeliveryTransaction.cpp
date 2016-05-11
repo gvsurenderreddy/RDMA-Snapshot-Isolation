@@ -75,14 +75,7 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		size_t serverNum = Warehouse::getServerNum(cart_.wID);
 
-		executor_.getOldestUndeliveredOrder(
-				clientID_,
-				cart_.wID,
-				dID,
-				*dsCtx_[serverNum]->getIndexRequestMessage(),
-				*dsCtx_[serverNum]->getOldestUndeliveredOrderIndexResponseMessage(),
-				dsCtx_[serverNum]->getQP(),
-				true);
+		executor_.getOldestUndeliveredOrder(clientID_, cart_.wID, dID, true);
 
 		executor_.synchronizeNetworkEvents();
 
@@ -463,15 +456,8 @@ TPCC::TransactionResult DeliveryTransaction::doOne(){
 
 		// update the index
 		clock_gettime(CLOCK_REALTIME, &beforeIndexTime2);
-		executor_.registerDelivery(
-				clientID_,
-				cart_.wID,
-				dID,
-				orderV->order.O_ID,
-				*dsCtx_[serverNum]->getIndexRequestMessage(),
-				*dsCtx_[serverNum]->getRegisterDeliveryIndexResponseMessage(),
-				dsCtx_[serverNum]->getQP(),
-				true);
+		executor_.registerDelivery(clientID_, cart_.wID, dID, orderV->order.O_ID, true);
+
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: REGISTER_DELIVERY. Parameters: wID = " << (int)cart_.wID
 				<< ", dID = " << (int)dID << ", OID = " << (int)orderV->order.O_ID);
 

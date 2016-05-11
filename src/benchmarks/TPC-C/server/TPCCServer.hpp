@@ -40,7 +40,7 @@ private:
 	int server_sockfd_;
 	uint16_t	tcp_port_;
 	uint8_t	ib_port_;
-	TPCC::TPCCDB	*db;
+	TPCC::TPCCDB	*db_;
 	RecoveryServer *recoveryServer_;
 	RDMAContext *context_;
 	std::vector<ClientContext*> clientCtxs;

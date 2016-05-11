@@ -29,8 +29,10 @@
 #include <vector>
 
 namespace TPCC{
+struct ServerMemoryKeys;	// forward declaration
 
 class TPCCDB {
+
 private:
 	std::ostream &os_;
 	size_t itemCnt_;

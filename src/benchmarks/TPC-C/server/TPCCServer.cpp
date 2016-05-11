@@ -65,7 +65,7 @@ TPCCServer::TPCCServer(uint32_t serverNum, unsigned instanceNum, uint32_t client
 	for (size_t i = 0; i < config::tpcc_settings::WAREHOUSE_PER_SERVER; i++)
 		warehouseIDs.push_back((uint16_t)(serverNum_ * config::tpcc_settings::WAREHOUSE_PER_SERVER + i));
 
-	db = new TPCC::TPCCDB(*os_, warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
+	db_ = new TPCC::TPCCDB(*os_, warehouseIDs, warehouseTableSize, districtTableSize, customerTableSize, orderTableSize, orderLineTableSize, newOrderTableSize, stockTableSize, itemTableSize, historyTableSize, versionNum, random, *context_);
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << "'s database is successfully loaded");
 
 	// **********************************************
@@ -80,8 +80,9 @@ void TPCCServer::start() {
 	// Put the memory keys into the message that is to be sent to clients
 	// **********************************************
 	memoryKeysMessage_ = new RDMARegion<ServerMemoryKeys>(1, *context_, IBV_ACCESS_LOCAL_WRITE);
-	db->getMemoryKeys(memoryKeysMessage_->getRegion());
+	db_->getMemoryKeys(memoryKeysMessage_->getRegion());
 	memoryKeysMessage_->getRegion()->serverInstanceNum = instanceNum_;
+	memoryKeysMessage_->getRegion()->databaseObject = db_;
 
 
 	// **********************************************
@@ -206,42 +207,42 @@ void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 
 			if (req->indexType == TPCC::IndexRequestMessage::IndexType::REGISTER_ORDER){
 				TPCC::IndexResponseMessage *res = clientCtxs[clientIndex]->getIndexResponseMessage()->getRegion();
-				db->handleRegisterOrderIndexRequest(*req, *res);
+				db_->handleRegisterOrderIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(IndexResponseMessage);
 			}
 			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::LARGEST_ORDER_FOR_CUSTOMER_INDEX){
 				TPCC::LargestOrderForCustomerIndexRespMsg *res = clientCtxs[clientIndex]->getLargestOrderForCustomerIndexResponseMessage()->getRegion();
-				db->handleLargestOrderIndexRequest(*req, *res);
+				db_->handleLargestOrderIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getLargestOrderForCustomerIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(LargestOrderForCustomerIndexRespMsg);
 			}
 			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::CUSTOMER_LAST_NAME_INDEX){
 				TPCC::CustomerNameIndexRespMsg *res = clientCtxs[clientIndex]->getCustomerNameIndexResponseMessage()->getRegion();
-				db->handleCustomerNameIndexRequest(*req, *res);
+				db_->handleCustomerNameIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getCustomerNameIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(CustomerNameIndexRespMsg);
 			}
 			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::ITEMS_FOR_LAST_20_ORDERS){
 				TPCC::Last20OrdersIndexResMsg *res = clientCtxs[clientIndex]->getLast20OrdersIndexResponseMessage()->getRegion();
-				db->handleLast20OrdersIndexRequest(*req, *res);
+				db_->handleLast20OrdersIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getLast20OrdersIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(Last20OrdersIndexResMsg);
 			}
 			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::OLDEST_UNDELIVERED_ORDER){
 				TPCC::OldestUndeliveredOrderIndexResMsg *res = clientCtxs[clientIndex]->getOldestUndeliveredOrderIndexResponseMessage()->getRegion();
-				db->handleOldestUndeliveredOrderIndexRequest(*req, *res);
+				db_->handleOldestUndeliveredOrderIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getOldestUndeliveredOrderIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(OldestUndeliveredOrderIndexResMsg);
 			}
 			else if (req->indexType == TPCC::IndexRequestMessage::IndexType::REGISTER_DELIVERY){
 				TPCC::IndexResponseMessage *res = clientCtxs[clientIndex]->getIndexResponseMessage()->getRegion();
-				db->handleRegisterDeliveryIndexRequest(*req, *res);
+				db_->handleRegisterDeliveryIndexRequest(*req, *res);
 				resRDMAHandler	= clientCtxs[clientIndex]->getIndexResponseMessage()->getRDMAHandler();
 				resPointer		=  (uintptr_t)res;
 				resSize 		= sizeof(IndexResponseMessage);
@@ -274,7 +275,7 @@ void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 TPCCServer::~TPCCServer() {
 	DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Deconstructor called");
 	delete memoryKeysMessage_;
-	delete db;
+	delete db_;
 	if (config::recovery_settings::RECOVERY_ENABLED) delete recoveryServer_;
 	delete context_;
 

@@ -530,9 +530,6 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 			newOrderRID,
 			orderLineRID,
 			(uint8_t)cart_.items.size(),
-			*dsCtx_[serverNum]->getIndexRequestMessage(),
-			*dsCtx_[serverNum]->getRegisterOrderIndexResponseMessage(),
-			dsCtx_[serverNum]->getQP(),
 			true);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Msg sent. Type: REGISTER_ORDER. Params: wID = " << (int)cart_.wID
 			<< ", dID = " << (int)cart_.dID << ", cID = " << (int)cart_.cID << ", oID = " << (int)assignedOID << ", regionOffset: " << orderRID << ", #orderlines: " << cart_.items.size());

@@ -19,13 +19,17 @@
 #include "../tables/OrderTable.hpp"
 #include "../tables/StockTable.hpp"
 #include "../tables/WarehouseTable.hpp"
+#include "../tables/TPCCDB.hpp"
 #include <infiniband/verbs.h>
 
 namespace TPCC{
+class TPCCDB;	// forward declaration
+
 struct ServerMemoryKeys{
 public:
-	unsigned serverInstanceNum;
-	MemoryHandler<char>						logBuffer;
+	unsigned 			serverInstanceNum;
+	MemoryHandler<char>	logBuffer;
+	TPCC::TPCCDB		*databaseObject;		// this may __ONLY__ be used by client if it sits within the same address space of the server
 
 	MemoryHandler<TPCC::CustomerVersion>	customerTableHeadVersions;
 	MemoryHandler<Timestamp>				customerTableTimestampList;

@@ -73,15 +73,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 
 	if (cart_.customerSelectionMode == OrderStatusCart::LAST_NAME) {
 		// First, use the index on the server to find the cID for the given last name
-		executor_.lookupCustomerByLastName(
-				clientID_,
-				cart_.wID,
-				cart_.dID,
-				cart_.cLastName,
-				*dsCtx_[serverNum]->getIndexRequestMessage(),
-				*dsCtx_[serverNum]->getCustomerNameIndexResponseMessage(),
-				dsCtx_[serverNum]->getQP(),
-				true);
+		executor_.lookupCustomerByLastName(clientID_, cart_.wID, cart_.dID, cart_.cLastName, true);
 
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LastName_TO_CID. Parameters: wID = " << (int)cart_.wID << ", dID = " << (int)cart_.dID << ", lastName = " << cart_.cLastName);
 
@@ -94,15 +86,7 @@ TPCC::TransactionResult OrderStatusTransaction::doOne(){
 	}
 
 	// get the largest existing O_ID for (O_W_ID = cart_.wID, O_D_ID = cart_.dID, O_C_ID = cart_.CID).
-	executor_.getLastOrderOfCustomer(
-			clientID_,
-			cart_.wID,
-			cart_.dID,
-			cart_.cID,
-			*dsCtx_[serverNum]->getIndexRequestMessage(),
-			*dsCtx_[serverNum]->getLargestOrderForCustomerIndexResponseMessage(),
-			dsCtx_[serverNum]->getQP(),
-			true);
+	executor_.getLastOrderOfCustomer(clientID_, cart_.wID, cart_.dID, cart_.cID, true);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: LARGEST_ORDER_FOR_CUSTOMER. Parameters: wID = " << (int)cart_.wID << ", dID = " << (int)cart_.dID << ", cID = " << cart_.cID);
 	executor_.synchronizeNetworkEvents();

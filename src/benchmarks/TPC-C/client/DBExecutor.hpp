@@ -37,8 +37,8 @@ namespace TPCC {
 class DBExecutor {
 private:
 	std::ostream &os_;
-	std::vector<ServerContext*> dsCtx_;
 	const unsigned instanceNum_;
+	std::vector<ServerContext*> dsCtx_;
 	OracleReader *oracleReader_;
 	ibv_cq *sendCQ_;
 	ibv_cq *recvCQ_;
@@ -48,7 +48,7 @@ private:
 	bool isServerLocal(size_t serverNum) const;
 
 public:
-	DBExecutor(std::ostream &os, std::vector<ServerContext *> dsCtx, unsigned instanceNum, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
+	DBExecutor(std::ostream &os, unsigned instanceNum, std::vector<ServerContext *> dsCtx, OracleReader *oracleReader, ibv_cq *sendCompletionQueue, ibv_cq *recvCompletionQueue);
 	virtual ~DBExecutor();
 	DBExecutor& operator=(const DBExecutor&) = delete;	// Disallow copying
 	DBExecutor(const DBExecutor&) = delete;				// Disallow copying
@@ -57,13 +57,12 @@ public:
 	void synchronizeRecvEvents();
 	void synchronizeNetworkEvents();
 
-	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::CustomerNameIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
-	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
-	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::LargestOrderForCustomerIndexRespMsg> &responseRegion, ibv_qp *qp, bool signaled);
-	void registerOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, RDMARegion<TPCC::IndexRequestMessage> &, RDMARegion<TPCC::IndexResponseMessage> &, ibv_qp *qp, bool signaled);
-	void getDistinctItemsForLastTwentyOrders(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::Last20OrdersIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled);
-	void getOldestUndeliveredOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::OldestUndeliveredOrderIndexResMsg> &responseRegion, ibv_qp *qp, bool signaled);
-	void registerDelivery(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t oID, RDMARegion<TPCC::IndexRequestMessage> &requestRegion, RDMARegion<TPCC::IndexResponseMessage> &responseRegion, ibv_qp *qp, bool signaled);
+	void lookupCustomerByLastName(primitive::client_id_t, uint16_t wID, uint8_t dID, const char *cLastName, bool signaled);
+	void getLastOrderOfCustomer(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, bool signaled);
+	void registerOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t cID, uint32_t oID, size_t orderRegionOffset, size_t newOrderRegionOffset, size_t orderLineRegionOffset, uint8_t numOfOrderlines, bool signaled);
+	void getDistinctItemsForLastTwentyOrders(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t D_NEXT_O_ID, bool signaled);
+	void getOldestUndeliveredOrder(primitive::client_id_t, uint16_t wID, uint8_t dID, bool signaled);
+	void registerDelivery(primitive::client_id_t, uint16_t wID, uint8_t dID, uint32_t oID, bool signaled);
 
 	void getReadTimestamp(RDMARegion<primitive::timestamp_t> &, MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);
 	void getPartialSnapshot(RDMARegion<primitive::timestamp_t> &, const std::set<primitive::client_id_t> &clientsInSnapshot, MemoryHandler<primitive::timestamp_t> &, ibv_qp *, bool signaled);

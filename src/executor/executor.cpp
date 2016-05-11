@@ -130,7 +130,6 @@ int main (int argc, char *argv[]) {
 				// running server
 				server = new TPCC::TPCCServer(serverID, instanceID, totalClientsCnt);
 				serverThread = std::thread(&TPCC::TPCCServer::start, std::ref(*server));
-				sleep(10);	// sleep for some seconds so that (all other) servers become ready
 			}
 
 			// running clients

@@ -81,15 +81,7 @@ TPCC::TransactionResult StockLevelTransaction::doOne(){
 		}
 	}
 
-	executor_.getDistinctItemsForLastTwentyOrders(
-			clientID_,
-			cart_.wID,
-			cart_.dID,
-			(uint32_t)districtV->district.D_NEXT_O_ID,
-			*dsCtx_[serverNum]->getIndexRequestMessage(),
-			*dsCtx_[serverNum]->getLast20OrdersIndexResponseMessage(),
-			dsCtx_[serverNum]->getQP(),
-			true);
+	executor_.getDistinctItemsForLastTwentyOrders(clientID_, cart_.wID, cart_.dID, (uint32_t)districtV->district.D_NEXT_O_ID, true);
 
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Send] Client " << clientID_ << ": Index Request Message sent. Type: ITEMS_FOR_LAST_20_ORDERS. Parameters: wID = " << (int)cart_.wID
 			<< ", dID = " << (int)cart_.dID << ", d_next_oid = " << (uint32_t)districtV->district.D_NEXT_O_ID);
