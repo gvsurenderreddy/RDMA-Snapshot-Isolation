@@ -16,7 +16,7 @@
 
 namespace TPCC {
 
-ClientGroup::ClientGroup(unsigned instanceID, uint32_t clientsCnt, uint16_t homeWarehouseID, size_t ibPortsCnt)
+ClientGroup::ClientGroup(unsigned instanceID, uint32_t clientsCnt, uint32_t homeServerID, size_t ibPortsCnt)
 : clientsCnt_(clientsCnt){
 
 	DEBUG_COUT(CLASS_NAME, __func__, "[Info] Constructor called ");
@@ -29,6 +29,7 @@ ClientGroup::ClientGroup(unsigned instanceID, uint32_t clientsCnt, uint16_t home
 
 	for (uint32_t i = 0; i < clientsCnt; i++) {
 		uint8_t ibPort = (uint8_t)(i % ibPortsCnt + 1);
+		uint16_t homeWarehouseID = (uint16_t)(homeServerID * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
 		uint8_t homeDistrictID = (uint8_t)(rand() % config::tpcc_settings::DISTRICT_PER_WAREHOUSE);
 		clients_.push_back(new TPCC::TPCCClient(instanceID, homeWarehouseID, homeDistrictID, ibPort, oracleReader_));
 	}

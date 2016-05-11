@@ -97,34 +97,34 @@ int main (int argc, char *argv[]) {
 	else if(argParser.hasOption("instance")){
 		try{
 			bool hasServer = false;
-			uint32_t serverID = -1;
+			uint32_t serverID = 0;
+			uint32_t homeServerID;
+			unsigned instanceID;
+			uint32_t clientsCntInInstance;
+			uint32_t totalClientsCnt;
+			size_t portsCnt;
+			TPCC::TPCCServer *server;
+			std::thread serverThread;
 
 			assert(argParser.getArgumentForOption("-b") == "TPCC");
-			unsigned instanceID = (uint32_t)std::stoi(argParser.getArgumentForOption("-i"));
 
-			if (!argParser.hasOption("-w") && !argParser.hasOption("-s")) {
+			instanceID = (uint32_t)std::stoi(argParser.getArgumentForOption("-i"));
+
+			if (argParser.hasOption("-w"))
+				homeServerID = (uint32_t)std::stoi(argParser.getArgumentForOption("-w"));
+			else if (argParser.hasOption("-s")) {
+				hasServer = true;;
+				serverID = (size_t)std::stoi(argParser.getArgumentForOption("-s"));
+				homeServerID = serverID;
+			}
+			else {
 				print_error_instance(std::string(argv[0]));
 				return 1;
 			}
 
-			if (argParser.hasOption("-s")) {
-				hasServer = true;;
-				serverID = (size_t)std::stoi(argParser.getArgumentForOption("-s"));
-			}
-
-			uint16_t homeWarehouseID;
-
-			if (argParser.hasOption("-w"))
-				homeWarehouseID = (uint16_t)(std::stoi(argParser.getArgumentForOption("-w")) * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
-			else
-				homeWarehouseID = (uint16_t)(instanceID * config::tpcc_settings::WAREHOUSE_PER_SERVER + rand() % config::tpcc_settings::WAREHOUSE_PER_SERVER);
-
-			uint32_t clientsCntInInstance = std::stoi(argParser.getArgumentForOption("-c"));
-			uint32_t totalClientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
-			size_t portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
-
-			TPCC::TPCCServer *server;
-			std::thread serverThread;
+			clientsCntInInstance = std::stoi(argParser.getArgumentForOption("-c"));
+			totalClientsCnt = std::stoi(argParser.getArgumentForOption("-n"));
+			portsCnt = (size_t)std::stoi(argParser.getArgumentForOption("-pc"));
 
 			if (hasServer){
 				// running server
@@ -135,7 +135,7 @@ int main (int argc, char *argv[]) {
 
 			// running clients
 			if (clientsCntInInstance != 0){
-				TPCC::ClientGroup clientGroup(instanceID, clientsCntInInstance, homeWarehouseID, portsCnt);
+				TPCC::ClientGroup clientGroup(instanceID, clientsCntInInstance, homeServerID, portsCnt);
 				clientGroup.start();
 				clientGroup.join();
 			}
@@ -146,7 +146,6 @@ int main (int argc, char *argv[]) {
 			}
 
 			std::cout << "All clients and server threads are finished." << std::endl;
-
 		}
 		catch(const std::exception& e){
 			print_error_instance(std::string(argv[0]));

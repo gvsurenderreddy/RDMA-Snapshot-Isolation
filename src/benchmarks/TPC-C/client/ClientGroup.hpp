@@ -23,7 +23,7 @@ private:
 	OracleReader *oracleReader_;
 
 public:
-	ClientGroup(unsigned instanceID, uint32_t clientsCnt, uint16_t homeWarehouseID, size_t ibPortsCnt);
+	ClientGroup(unsigned instanceID, uint32_t clientsCnt, uint32_t homeServerID, size_t ibPortsCnt);
 	void start();
 	void join();
 	virtual ~ClientGroup();
