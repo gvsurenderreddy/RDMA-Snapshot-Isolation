@@ -51,7 +51,7 @@ void OrderStatusTransaction::initilizeTransaction(){
 	//	Constructing the shopping cart
 	// ************************************************
 	buildCart();
-	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_  << ": Cart: " << cart_);
 }
 
 TPCC::TransactionResult OrderStatusTransaction::doOne(){

@@ -134,10 +134,10 @@ void TPCCClient::start(){
 	//	Preparing the transactions
 	// ************************************************
 	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new NewOrderTransaction (*this, executor_)));
-//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*this, executor_)));
-//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*this, executor_)));
-//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*this, executor_)));
-//	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*this, executor_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new PaymentTransaction (*this, executor_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new OrderStatusTransaction (*this, executor_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new DeliveryTransaction (*this, executor_)));
+	trxs.push_back(std::unique_ptr<TPCC::BaseTransaction>(new StockLevelTransaction (*this, executor_)));
 	assert(trxs.size() == config::tpcc_settings::TRANSACTION_MIX_RATIOS.size());
 
 

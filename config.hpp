@@ -59,14 +59,14 @@ namespace tpcc_settings{
 /* Experiment settings	*/
 static const unsigned				TRANSACTION_CNT 		= 100000;		// This is __per client__. For the experiments, we will use 1,000,000
 static const std::vector<double>	TRANSACTION_MIX_RATIOS	= {				// Numbers must add up to 1
-		1.0};	//		0.45,	// Ratio of New Order
-//		0.43,	// Ratio of Payment
-//		0.04,	// Ratio of Order-Status
-//		0.04,	// Ratio of Delivery
-//		0.04};	// Ratio of Stock-Level.
+		0.45,	// Ratio of New Order
+		0.43,	// Ratio of Payment
+		0.04,	// Ratio of Order-Status
+		0.04,	// Ratio of Delivery
+		0.04};	// Ratio of Stock-Level.
 
 /*	Database settings	*/
-static const size_t WAREHOUSE_PER_SERVER		= 1;			// Number of warehouses per server
+static const size_t WAREHOUSE_PER_SERVER		= 10;			// Number of warehouses per server
 static const size_t WAREHOUSE_CNT				= WAREHOUSE_PER_SERVER * SERVER_CNT;
 static const size_t ITEMS_CNT					= 100000;		// Make sure that this number is >= TPCCUtil::ORDER_MAX_OL_CNT, which is 15 by default. TPCC default is 100000
 static const size_t DISTRICT_PER_WAREHOUSE		= 10; 			// TPCC default is 10;
