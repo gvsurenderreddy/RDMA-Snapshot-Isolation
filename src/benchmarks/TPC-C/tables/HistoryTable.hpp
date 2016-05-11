@@ -31,7 +31,7 @@ public:
 	uint16_t 	H_W_ID;		// 2*W unique IDs
 	time_t 		H_DATE; 	// date and time
 	float 		H_AMOUNT; 	// signed numeric(6, 2)
-	char 		H_DATA[25];	// variable text, size 24 Miscellaneous information
+	char 		H_DATA[24];	// variable text, size 24 Miscellaneous information
 
 	void initialize(uint32_t cID, uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random, time_t now) {
 		H_C_ID = cID;

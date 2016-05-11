@@ -27,29 +27,29 @@ class Customer{
 public:
 	// 	Primary Key: (C_W_ID, C_D_ID, C_ID)
 	//	(C_W_ID, C_D_ID) Foreign Key, references (D_W_ID, D_ID)
-	// 	Size: 680 bytes
+	// 	Size: 664 bytes
 
 	uint32_t 	C_ID;			// 96,000 unique IDs 3,000 are populated per district
 	uint8_t		C_D_ID;			// 20 unique IDs
 	uint16_t	C_W_ID;			// 2*W unique IDs
-	char		C_STREET_1[21];	// variable text, size 20
-	char		C_STREET_2[21];	// variable text, size 20
-	char		C_CITY[21];		// variable text, size 20
-	char		C_STATE[3];		// fixed text, size 2
-	char		C_ZIP[10];		// fixed text, size 9
-	char		C_PHONE[17];	// fixed text, size 16
+	char		C_STREET_1[20];	// variable text, size 20
+	char		C_STREET_2[20];	// variable text, size 20
+	char		C_CITY[20];		// variable text, size 20
+	char		C_STATE[2];		// fixed text, size 2
+	char		C_ZIP[9];		// fixed text, size 9
+	char		C_PHONE[16];	// fixed text, size 16
 	time_t		C_SINCE;		// date and time
-	char		C_FIRST[17];	// variable text, size 16
-	char		C_MIDDLE[3];	// fixed text, size 2
-	char		C_LAST[17];		// variable text, size 16
+	char		C_FIRST[16];	// variable text, size 16
+	char		C_MIDDLE[2];	// fixed text, size 2
+	char		C_LAST[16];		// variable text, size 16
 	float		C_DISCOUNT;		// signed numeric(4, 4)
-	char		C_CREDIT[3];	// fixed text, size 2 "GC"=good, "BC"=bad
+	char		C_CREDIT[2];	// fixed text, size 2 "GC"=good, "BC"=bad
 	float		C_CREDIT_LIM;	// signed numeric(12, 2)
 	float		C_BALANCE;		// signed numeric(12, 2)
 	float		C_YTD_PAYMENT;	// signed numeric(12, 2)
 	uint16_t	C_PAYMENT_CNT;	// numeric(4)
 	uint16_t	C_DELIVERY_CNT; // numeric(4)
-	char		C_DATA[501];	// variable text, size 500 Miscellaneous information
+	char		C_DATA[500];	// variable text, size 500 Miscellaneous information
 
 	void initialize(uint32_t cID, uint8_t dID, uint16_t wID, bool bad_credit, TPCC::RandomGenerator& random, time_t now) {
 		C_ID = cID;

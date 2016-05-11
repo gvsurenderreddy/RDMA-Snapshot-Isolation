@@ -23,12 +23,12 @@ namespace TPCC {
 class Item{
 public:
 	// Primary Key: I_ID
-	// Size: 92 Bytes
+	// Size: 88 Bytes
 	uint32_t 	I_ID;		// 200,000 unique IDs 100,000 items are populated
 	uint32_t 	I_IM_ID;	// 200,000 unique IDs Image ID associated to Item
-	char		I_NAME[25];	// variable text, size 24
+	char		I_NAME[24];	// variable text, size 24
 	float		I_PRICE;	// numeric(5, 2)
-	char		I_DATA[51];	// variable text, size 50 Brand information
+	char		I_DATA[50];	// variable text, size 50 Brand information
 
 	void initialize(uint32_t id, bool original, TPCC::RandomGenerator& random){
 		I_ID = id;

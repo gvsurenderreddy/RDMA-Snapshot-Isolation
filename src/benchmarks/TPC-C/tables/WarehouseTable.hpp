@@ -22,15 +22,15 @@ namespace TPCC{
 class Warehouse {
 public:
 	// Primary Key: W_ID
-	// Size: 100 Bytes
+	// Size: 96 Bytes
 
 	uint16_t	W_ID;			// 2*W unique IDs
 	char 		W_NAME[11]; 	// variable text, size 10
-	char 		W_STREET_1[21];	// variable text, size 20
-	char 		W_STREET_2[21];	// variable text, size 20
-	char 		W_CITY[21]; 	// variable text, size 20
+	char 		W_STREET_1[20];	// variable text, size 20
+	char 		W_STREET_2[20];	// variable text, size 20
+	char 		W_CITY[20]; 	// variable text, size 20
 	char 		W_STATE[3];		// fixed text, size 2
-	char 		W_ZIP[10];		// fixed text, size 9
+	char 		W_ZIP[9];		// fixed text, size 9
 	float		W_TAX;			// signed numeric(4,4) Sales tax
 	float		W_YTD;			// signed numeric(12,2) Year to date balance
 
@@ -99,7 +99,7 @@ public:
 		tsList 			= new RDMARegion<Timestamp>(size * maxVersionsCnt, baseContext, mrFlags);
 		olderVersions	= new RDMARegion<WarehouseVersion>(size * maxVersionsCnt, baseContext, mrFlags);
 
-		DEBUG_WRITE(os_, "WarehouseTable", __func__, "[Info] Warehouse table initialized");
+		DEBUG_WRITE(os_, "WarehouseTable", __func__, "[Info] Warehouse table initialized with " << size << " tuples");
 	}
 
 	void insert(size_t warehouseOffset, uint16_t wID, TPCC::RandomGenerator& random, Timestamp& ts){

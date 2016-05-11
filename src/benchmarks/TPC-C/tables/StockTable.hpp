@@ -24,16 +24,16 @@ public:
 	//	Primary Key: (S_W_ID, S_I_ID)
 	//	S_W_ID Foreign Key, references W_ID
 	//	S_I_ID Foreign Key, references I_ID
-	//	Size: 320 B
+	//	Size: 296 B
 
 	uint32_t	S_I_ID;			// 200,000 unique IDs 100,000 populated per warehouse
 	uint16_t	S_W_ID;			// 2*W unique IDs
 	uint16_t	S_QUANTITY;		// signed numeric(4)
-	char		S_DIST[config::tpcc_settings::DISTRICT_PER_WAREHOUSE][25];	// each fixed text, size 24
+	char		S_DIST[config::tpcc_settings::DISTRICT_PER_WAREHOUSE][23];	// each fixed text, size 23
 	uint32_t	S_YTD;			// numeric(8)
 	uint16_t	S_ORDER_CNT;	// numeric(4)
 	uint16_t	S_REMOTE_CNT;	// numeric(4)
-	char		S_DATA[51];		// variable text, size 50 Make information
+	char		S_DATA[50];		// variable text, size 50 Make information
 
 	void initialize(uint32_t iID, uint16_t wID, bool original, TPCC::RandomGenerator& random) {
 		S_I_ID = iID;
