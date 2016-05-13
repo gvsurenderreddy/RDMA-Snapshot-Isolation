@@ -32,6 +32,9 @@ public:
 	ibv_pd* getPd();
 	ibv_cq* getSendCq();
 	ibv_cq* getRecvCq();
+	ibv_comp_channel* getSendCompletionChannel();
+	ibv_comp_channel* getRecvCompletionChannel();
+
 	ibv_port_attr getPortAttr();
 	~RDMAContext();
 };

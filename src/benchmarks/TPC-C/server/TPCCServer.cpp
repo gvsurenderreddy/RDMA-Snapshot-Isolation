@@ -142,21 +142,34 @@ void TPCCServer::start() {
 
 		TEST_NZ (RDMACommon::post_SEND (clientCtxs[c]->getQP(), memoryKeysMessage_->getRDMAHandler(), (uintptr_t)memoryKeysMessage_->getRegion(), sizeof(struct ServerMemoryKeys), true));
 		TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+		//uint32_t qpnum;
+//		int ret = RDMACommon::event_based_poll_completion(context_->getSendCompletionChannel(), context_->getSendCq(), qpnum);
+//		if (ret < 0){
+//			utils::die("Cause of Error", __FILE__, __LINE__);
+//		}
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Sent] buffer info to client " << c);
 	}
 
 	// Handle Index requests using multiple threads
+	finished = false;
 	for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++) {
 		threadsActiveStateFlag[i] = true;
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Starting thread #" << i << " for handling index requests");
 		indexHandlerThreads.push_back(std::thread(&TPCC::TPCCServer::handleIndexRequests, this, &threadsActiveStateFlag[i]));
 	}
+
+//	while(true){
+//		if (finished == true)
+//			break;
+//		sleep(10);
+//	}
+//	sleep(20);
+
 	for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++) {
 		indexHandlerThreads[i].join();
 		DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] Thread " << i << " is finished");
 	}
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Update handler is finished");
-
 
 	// Gracefully destroy the connections
 	for (size_t c = 0; c < clientsCnt_; c++) {
@@ -169,9 +182,13 @@ void TPCCServer::start() {
 
 void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 	int ret;
+
 	while (liveClientCnt_ > 0 && *isThreadInActiveState){
 		uint32_t qpNum = -1;
 		ret = RDMACommon::poll_completion(context_->getRecvCq(), qpNum, isThreadInActiveState);
+
+		//ret = RDMACommon::event_based_poll_completion(context_->getRecvCompletionChannel(), context_->getRecvCq(), qpNum);
+
 		if (ret < 0){
 			utils::die("Cause of Error", __FILE__, __LINE__);
 		}
@@ -197,6 +214,7 @@ void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 				DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Info] TERMINATE was for the last client. Signaling other threads to stop");
 				for (size_t i = 0; i < config::SERVER_THREADS_CNT; i++)
 					threadsActiveStateFlag[i] = false;
+				finished = true;
 				break;
 			}
 		}
@@ -268,6 +286,11 @@ void TPCCServer::handleIndexRequests(bool *isThreadInActiveState) {
 
 			DEBUG_WRITE(*os_, CLASS_NAME, __func__, "[Send] Index response to client " << (int)clientID);
 			TEST_NZ (RDMACommon::poll_completion(context_->getSendCq()));
+			//ret = RDMACommon::event_based_poll_completion(context_->getSendCompletionChannel(), context_->getSendCq(), qpNum);
+			if (ret < 0){
+				utils::die("Cause of Error", __FILE__, __LINE__);
+			}
+
 		}
 	}
 }

@@ -313,7 +313,7 @@ int RDMACommon::poll_completion(struct ibv_cq* cq, uint32_t &returned_qp_num, bo
 	}
 }
 
-int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq) {
+int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channel, struct ibv_cq *cq, uint32_t &returned_qp_num) {
 	/* The following code will be called each time you need to read a Work Completion */
 	struct ibv_cq *ev_cq;
 	void *ev_ctx;
@@ -332,19 +332,24 @@ int RDMACommon::event_based_poll_completion(struct ibv_comp_channel *comp_channe
 	/* Empty the CQ: poll all of the completions from the CQ (if any exist) */
 	do {
 		ne = ibv_poll_cq(cq, 1, &wc);
+//		std::cout << "NE: " << ne << std::endl;
+
 		if (ne < 0) {
 			fprintf(stderr, "Failed to poll completions from the CQ: ret = %d\n", ne);
 			return -1;
 		}
 		/* there may be an extra event with no completion in the CQ */
-		if (ne == 0)
-			continue;
+//		if (ne == 0)
+//			continue;
 
 		if (wc.status != IBV_WC_SUCCESS) {
-			fprintf(stderr, "Completion with status 0x%x was found\n", wc.status);
+			fprintf(stderr, "Failed status #%d (%s) for wr_id %d\n", wc.status, ibv_wc_status_str(wc.status),  (int)wc.wr_id);
 			return -1;
 		}
-	} while (ne);
+	} while (ne == 0);
+//	std::cout << "Final: " << ne << std::endl;
+
+	returned_qp_num = wc.qp_num;
 	return 0;
 }
 
@@ -384,7 +389,7 @@ int RDMACommon::build_connection(uint8_t ib_port, struct ibv_context** ib_ctx,
 	// Create completion channel and completion queue for receive queue
 	TEST_Z(*recv_comp_channel = ibv_create_comp_channel(*ib_ctx));
 	TEST_Z(*recv_cq = ibv_create_cq (*ib_ctx, cq_size, NULL, *recv_comp_channel, 0));
-	TEST_NZ (ibv_req_notify_cq(*recv_cq, 0));
+	TEST_NZ (ibv_req_notify_cq(*recv_cq, 0));	// Request notification before any completion can be created (to prevent races)
 
 	return 0;
 }

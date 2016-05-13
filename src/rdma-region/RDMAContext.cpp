@@ -40,6 +40,14 @@ ibv_cq* RDMAContext::getRecvCq(){
 	return recv_cq_;
 }
 
+ibv_comp_channel* RDMAContext::getSendCompletionChannel(){
+	return send_comp_channel_;
+}
+
+ibv_comp_channel* RDMAContext::getRecvCompletionChannel(){
+	return recv_comp_channel_;
+}
+
 ibv_port_attr RDMAContext::getPortAttr(){
 	return port_attr_;
 }

@@ -52,6 +52,7 @@ private:
 	size_t liveClientCnt_;
 	std::mutex liveClientCntLock_;
 	void handleIndexRequests(bool *isAlive);
+	bool finished;
 
 };
 }
