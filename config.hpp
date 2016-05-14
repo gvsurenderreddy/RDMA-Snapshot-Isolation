@@ -55,6 +55,10 @@ static const size_t 	ENTRY_PER_LOG_JOURNAL 	= 100;					// the size of each clien
 static const size_t 	COMMAND_LOG_SIZE 		= 200;					// the maximum size of command in bytes
 }
 
+namespace traditional_2PC {
+static const size_t CROSS_SERVER_THREAD_CNT = 1;
+}
+
 namespace tpcc_settings{
 /* Experiment settings	*/
 static const unsigned				TRANSACTION_CNT 		= 100000;		// This is __per client__. For the experiments, we will use 1,000,000
