@@ -16,15 +16,15 @@
 #include "tables/NewOrderTable.hpp"
 #include "tables/StockTable.hpp"
 #include "tables/DistrictTable.hpp"
-#include "../../rdma-region/RDMAContext.hpp"
-#include "server/ServerMemoryKeys.hpp"
+#include "../../../rdma-region/RDMAContext.hpp"
+#include "../one-sided-architecture/server/ServerMemoryKeys.hpp"
 #include "random/randomgenerator.hpp"
-#include "../index-messages/IndexRequestMessage.hpp"
-#include "../index-messages/IndexResponseMessage.hpp"
-#include "../index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
-#include "../index-messages/CustomerNameIndexRespMsg.hpp"
-#include "../index-messages/Last20OrdersIndexResMsg.hpp"
-#include "../index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
+#include "../one-sided-architecture/index-messages/IndexRequestMessage.hpp"
+#include "../one-sided-architecture/index-messages/IndexResponseMessage.hpp"
+#include "../one-sided-architecture/index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
+#include "../one-sided-architecture/index-messages/CustomerNameIndexRespMsg.hpp"
+#include "../one-sided-architecture/index-messages/Last20OrdersIndexResMsg.hpp"
+#include "../one-sided-architecture/index-messages/OldestUndeliveredOrderIndexResMsg.hpp"
 #include <ctime>
 #include <vector>
 

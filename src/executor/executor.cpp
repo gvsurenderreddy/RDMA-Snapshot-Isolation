@@ -6,10 +6,10 @@
  */
 
 #include "../../config.hpp"
-#include "../benchmarks/TPC-C/server/TPCCServer.hpp"
+#include "../benchmarks/TPC-C/one-sided-architecture/server/TPCCServer.hpp"
 #include "../oracle/Oracle.hpp"
-#include "../benchmarks/TPC-C/client/TPCCClient.hpp"
-#include "../benchmarks/TPC-C/client/ClientGroup.hpp"
+#include "../benchmarks/TPC-C/one-sided-architecture/client/TPCCClient.hpp"
+#include "../benchmarks/TPC-C/one-sided-architecture/client/ClientGroup.hpp"
 #include "../util/utils.hpp"
 #include "../util/SimpleArgumentParser.hpp"
 #include <iostream>
