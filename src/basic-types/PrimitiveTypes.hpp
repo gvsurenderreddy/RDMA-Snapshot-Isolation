@@ -11,10 +11,11 @@
 #include <stdint.h>
 
 namespace primitive {
-	typedef uint16_t client_id_t;
-	typedef uint32_t timestamp_t;
-	typedef uint8_t version_offset_t;
-	typedef uint8_t lock_status_t;
+	typedef uint16_t	client_id_t;
+	typedef uint32_t	timestamp_t;
+	typedef uint8_t		version_offset_t;
+	typedef uint8_t		lock_status_t;
+	typedef uint32_t	server_id_t;
 }
 
 #endif /* SRC_BASIC_TYPES_PRIMITIVETYPES_HPP_ */

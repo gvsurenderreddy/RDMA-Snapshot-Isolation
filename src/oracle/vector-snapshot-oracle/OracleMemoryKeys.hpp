@@ -8,8 +8,8 @@
 #ifndef SRC_ORACLE_ORACLEMEMORYKEYS_HPP_
 #define SRC_ORACLE_ORACLEMEMORYKEYS_HPP_
 
-#include "../rdma-region/MemoryHandler.hpp"
-#include "../basic-types/PrimitiveTypes.hpp"
+#include "../../rdma-region/MemoryHandler.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
 
 struct OracleMemoryKeys{
 public:

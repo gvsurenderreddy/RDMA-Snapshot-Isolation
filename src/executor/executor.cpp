@@ -7,7 +7,7 @@
 
 #include "../../config.hpp"
 #include "../benchmarks/TPC-C/one-sided-architecture/server/TPCCServer.hpp"
-#include "../oracle/Oracle.hpp"
+#include "../oracle/vector-snapshot-oracle/Oracle.hpp"
 #include "../benchmarks/TPC-C/one-sided-architecture/client/TPCCClient.hpp"
 #include "../benchmarks/TPC-C/one-sided-architecture/client/ClientGroup.hpp"
 #include "../util/utils.hpp"
@@ -219,4 +219,3 @@ void print_error_instance(std::string executable_filename) {
 	std::cerr << '\t' << "-n  (required)" << '\t' << "number of total clients in the experiment" << std::endl;
 	std::cerr << '\t' << "-pc (required)" << '\t' << "number of IB ports" << std::endl;
 }
-

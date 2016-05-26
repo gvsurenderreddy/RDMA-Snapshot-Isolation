@@ -8,17 +8,17 @@
 #ifndef SRC_BENCHMARKS_TPCCDB_HPP_
 #define SRC_BENCHMARKS_TPCCDB_HPP_
 
-#include "tables/CustomerTable.hpp"
-#include "tables/ItemTable.hpp"
-#include "tables/OrderTable.hpp"
-#include "tables/WarehouseTable.hpp"
-#include "tables/OrderLineTable.hpp"
-#include "tables/NewOrderTable.hpp"
-#include "tables/StockTable.hpp"
-#include "tables/DistrictTable.hpp"
+#include "CustomerTable.hpp"
+#include "ItemTable.hpp"
+#include "OrderTable.hpp"
+#include "WarehouseTable.hpp"
+#include "OrderLineTable.hpp"
+#include "NewOrderTable.hpp"
+#include "StockTable.hpp"
+#include "DistrictTable.hpp"
 #include "../../../rdma-region/RDMAContext.hpp"
 #include "../one-sided-architecture/server/ServerMemoryKeys.hpp"
-#include "random/randomgenerator.hpp"
+#include "../random/randomgenerator.hpp"
 #include "../one-sided-architecture/index-messages/IndexRequestMessage.hpp"
 #include "../one-sided-architecture/index-messages/IndexResponseMessage.hpp"
 #include "../one-sided-architecture/index-messages/LargestOrderForCustomerIndexRespMsg.hpp"
@@ -45,6 +45,7 @@ private:
 
 	void populate();
 	void buildIndices();
+	void populateWarehouse(size_t warehouseOffset);
 
 public:
 	TPCC::ItemTable 		itemTable;

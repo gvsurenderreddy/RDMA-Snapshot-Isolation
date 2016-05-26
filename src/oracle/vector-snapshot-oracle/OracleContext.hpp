@@ -9,7 +9,7 @@
 #define SRC_ORACLECONTEXT_HPP_
 
 #include "OracleMemoryKeys.hpp"
-#include "../rdma-region/RDMARegion.hpp"
+#include "../../rdma-region/RDMARegion.hpp"
 #include <set>
 
 class OracleContext {

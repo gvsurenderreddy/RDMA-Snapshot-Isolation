@@ -9,10 +9,11 @@
 #define SRC_BENCHMARKS_TPC_C_TPCCDB_CPP_
 
 #include "TPCCDB.hpp"
-#include "../../../config.hpp"
-#include "tables/TPCCUtil.hpp"
+#include "../../../../config.hpp"
+#include "TPCCUtil.hpp"
 #include <set>
 #include <cassert>
+#include <thread>
 
 
 #define CLASS_NAME	"TPCCDB"
@@ -59,61 +60,78 @@ void TPCC::TPCCDB::populate() {
 	itemTable.populate(initialTS, random_);
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Item table populated successfully");
 
+//	std::vector<std::thread> dataLoaderThreads;
 
-	for (size_t warehouseOffset = 0; warehouseOffset < config::tpcc_settings::WAREHOUSE_PER_SERVER; warehouseOffset++){
-		uint16_t wID = warehouseIDs_.at(warehouseOffset);
-		// then populate the stock table for the given warehouse
-		stockTable.populate(warehouseOffset, wID, random_, itemCnt_, initialTS);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Stock table for warehouse " << wID << " populated successfully");
-
-
-		// insert the warehouse
-		warehouseTable.insert(warehouseOffset, wID, random_, initialTS);
-		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Warehouse " << wID << " populated successfully");
+	for (size_t warehouseOffset = 0; warehouseOffset < config::tpcc_settings::WAREHOUSE_PER_SERVER; warehouseOffset++)
+//		dataLoaderThreads.push_back(std::thread(&TPCCDB::populateWarehouse, this, warehouseOffset));
+		populateWarehouse(warehouseOffset);
 
 
-		for (unsigned char dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++dID) {
-			districtTable.insert(warehouseOffset, dID, wID, random_, initialTS);
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] District table (wID: " << wID << ", dID: " << (int)dID << " populated successfully");
+//	for (auto &th: dataLoaderThreads)
+//		th.join();
 
-
-			// Select 10% of the customers to have bad credit
-			std::set<int> selected_rows = random_.selectUniqueIds(config::tpcc_settings::CUSTOMER_PER_DISTRICT/10, 1, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
-			for (unsigned short int cID = 0; cID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++cID) {
-				bool bad_credit = selected_rows.find(cID) != selected_rows.end();
-				customerTable.insert(warehouseOffset, cID, dID, wID, bad_credit, random_, now_, initialTS);
-				//			History h;
-				//			generateHistory(c_id, d_id, w_id, &h);
-				//			tables->insertHistory(h);
-			}
-			DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Customers for wID: " << wID << ", dID: " << (int)dID << " populated successfully");
-
-
-			// TODO: TPC-C 4.3.3.1. says that this should be a permutation of [1, 3000]. But since it is
-			// for a c_id field, it seems to make sense to have it be a permutation of the customers.
-			// For the "real" thing this will be equivalent
-			//			int* permutation = random_.makePermutation(0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
-			//			for (unsigned int oID = 0; oID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++oID) {
-			//				// The last new_orders_per_district_ orders are new
-			//				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
-			//				TPCC::Order order;
-			//				order.initialize(oID, (unsigned short int)permutation[oID], dID, wID, isNewOrder,  random_, now_);
-			//				orderTable.insert(warehouseOffset, order, initialTS);
-			//
-			//				// Generate each OrderLine for the order
-			//				for (unsigned char olNumber = 0; olNumber < order.O_OL_CNT; ++olNumber) {
-			//					orderLineTable.insert(warehouseOffset, olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
-			//				}
-			//
-			//				if (isNewOrder) {
-			//					// This is a new order: make one for it
-			//					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
-			//				}
-			//			}
-			//			delete[] permutation;
-		}
-	}
 	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] All database tables populated successfully");
+}
+
+void TPCC::TPCCDB::populateWarehouse(size_t warehouseOffset) {
+	bool isLocked = false;
+	bool isDeleted = false;
+	primitive::client_id_t clientID = 0;
+	primitive::timestamp_t timestamp = 0;
+	primitive::version_offset_t versionOffset = 0;
+	Timestamp initialTS(isDeleted, isLocked, versionOffset, clientID, timestamp);
+
+	uint16_t wID = warehouseIDs_.at(warehouseOffset);
+	// then populate the stock table for the given warehouse
+	stockTable.populate(warehouseOffset, wID, random_, itemCnt_, initialTS);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Stock table for warehouse " << wID << " populated successfully");
+
+
+	// insert the warehouse
+	warehouseTable.insert(warehouseOffset, wID, random_, initialTS);
+	DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Warehouse " << wID << " populated successfully");
+
+
+	for (unsigned char dID = 0; dID < config::tpcc_settings::DISTRICT_PER_WAREHOUSE; ++dID) {
+		districtTable.insert(warehouseOffset, dID, wID, random_, initialTS);
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] District table (wID: " << wID << ", dID: " << (int)dID << " populated successfully");
+
+
+		// Select 10% of the customers to have bad credit
+		std::set<int> selected_rows = random_.selectUniqueIds(config::tpcc_settings::CUSTOMER_PER_DISTRICT/10, 1, config::tpcc_settings::CUSTOMER_PER_DISTRICT);
+		for (unsigned short int cID = 0; cID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++cID) {
+			bool bad_credit = selected_rows.find(cID) != selected_rows.end();
+			customerTable.insert(warehouseOffset, cID, dID, wID, bad_credit, random_, now_, initialTS);
+			//			History h;
+			//			generateHistory(c_id, d_id, w_id, &h);
+			//			tables->insertHistory(h);
+		}
+		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Customers for wID: " << wID << ", dID: " << (int)dID << " populated successfully");
+
+
+		// TODO: TPC-C 4.3.3.1. says that this should be a permutation of [1, 3000]. But since it is
+		// for a c_id field, it seems to make sense to have it be a permutation of the customers.
+		// For the "real" thing this will be equivalent
+		//			int* permutation = random_.makePermutation(0, config::tpcc_settings::CUSTOMER_PER_DISTRICT - 1);
+		//			for (unsigned int oID = 0; oID < config::tpcc_settings::CUSTOMER_PER_DISTRICT; ++oID) {
+		//				// The last new_orders_per_district_ orders are new
+		//				bool isNewOrder = (unsigned int)(config::tpcc_settings::CUSTOMER_PER_DISTRICT - tpcc_settings::NEWORDER_INITIAL_NUM_PER_DISTRICT) < oID;
+		//				TPCC::Order order;
+		//				order.initialize(oID, (unsigned short int)permutation[oID], dID, wID, isNewOrder,  random_, now_);
+		//				orderTable.insert(warehouseOffset, order, initialTS);
+		//
+		//				// Generate each OrderLine for the order
+		//				for (unsigned char olNumber = 0; olNumber < order.O_OL_CNT; ++olNumber) {
+		//					orderLineTable.insert(warehouseOffset, olNumber, oID, dID, wID, isNewOrder, random_, now_, initialTS);
+		//				}
+		//
+		//				if (isNewOrder) {
+		//					// This is a new order: make one for it
+		//					newOrderTable.insert(warehouseOffset, wID, dID, oID, initialTS);
+		//				}
+		//			}
+		//			delete[] permutation;
+	}
 }
 
 void TPCC::TPCCDB::buildIndices() {

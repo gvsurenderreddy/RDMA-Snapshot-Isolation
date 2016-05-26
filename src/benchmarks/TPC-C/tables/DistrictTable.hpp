@@ -100,9 +100,15 @@ public:
 		DEBUG_WRITE(os_, "DistrictTable", __func__, "[Info] District table initialized");
 	}
 
+	static size_t getRecordPositionInTable(size_t warehouseOffset, uint16_t dID){
+		return (size_t) (warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID);
+	}
+
+
 	void insert(size_t warehouseOffset, uint8_t dID, uint16_t wID, TPCC::RandomGenerator& random, Timestamp &ts){
-		headVersions->getRegion()[warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].district.initialize(dID, wID, random);
-		headVersions->getRegion()[warehouseOffset * config::tpcc_settings::DISTRICT_PER_WAREHOUSE + dID].writeTimestamp.copy(ts);
+		size_t tablePosition = getRecordPositionInTable(warehouseOffset, dID);
+		headVersions->getRegion()[tablePosition].district.initialize(dID, wID, random);
+		headVersions->getRegion()[tablePosition].writeTimestamp.copy(ts);
 	}
 
 	void getMemoryHandler(MemoryHandler<DistrictVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<DistrictVersion> &olderVersionsMH){

@@ -6,8 +6,8 @@
  */
 
 #include "OracleContext.hpp"
-#include "../../config.hpp"
-#include "../util/utils.hpp"
+#include "../../../config.hpp"
+#include "../../util/utils.hpp"
 #include <unistd.h>		// for close
 #include <iostream>
 

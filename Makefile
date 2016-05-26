@@ -9,10 +9,20 @@ LIBS		= -libverbs -lpthread
 TPC			:= benchmarks/TPC-C
 RDMA_TPC	:= $(TPC)/one-sided-architecture
 QUERIES		:= $(RDMA_TPC)/client/queries
-CLIENT_MODULES	:= $(RDMA_TPC)/client $(QUERIES) $(QUERIES)/new-order $(QUERIES)/payment $(QUERIES)/order-status $(QUERIES)/delivery $(QUERIES)/stock-level
+CLIENT_MODULES	:= $(RDMA_TPC)/client
+QUERIES_MODILES	:= $(QUERIES) $(QUERIES)/new-order $(QUERIES)/payment $(QUERIES)/order-status $(QUERIES)/delivery $(QUERIES)/stock-level
 SERVER_MODULES	:= $(RDMA_TPC)/server 
+ORACLE_MODULES	:= oracle oracle/vector-snapshot-oracle
 INDEX_MODULES	:= index/hash $(RDMA_TPC)/index-messages
-EXPERIMENT_MODULES	:= util executor basic-types rdma-region oracle recovery $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(INDEX_MODULES)
+
+#TwoPC_TPC	:= $(TPC)/2PC-architecture
+#ORACLE_MODULES	:= oracle oracle/single-rts-oracle oracle/vector-snapshot-oracle
+#CLIENT_MODULES	:= $(TwoPC_TPC)/client
+#SERVER_MODULES	:= $(TwoPC_TPC)/server 
+#QUERIES_MODULES	:= $(TwoPC_TPC)/queries
+#INDEX_MODULES	:= index/queue
+
+EXPERIMENT_MODULES	:= util executor basic-types rdma-region recovery $(ORACLE_MODULES) $(TPC) $(TPC)/random $(TPC)/tables $(SERVER_MODULES) $(CLIENT_MODULES) $(QUERIES_MODILES) $(QUERIES_MODULES) $(INDEX_MODULES)
 
 TEST_MODULES	:= unit-tests unit-tests/index unit-tests/TPCC unit-tests/basic-types
 UNIT_TEST_MODULES	:= util basic-types rdma-region $(TPC) $(TPC)/random $(TPC)/tables $(INDEX_MODULES) $(TEST_MODULES) 

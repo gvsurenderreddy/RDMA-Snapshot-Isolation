@@ -12,7 +12,7 @@
 #include "../ServerContext.hpp"
 #include "../DBExecutor.hpp"
 #include "../SessionState.hpp"
-#include "../../../../../oracle/OracleContext.hpp"
+#include "../../../../../oracle/vector-snapshot-oracle/OracleContext.hpp"
 #include "../../../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../../../recovery/RecoveryClient.hpp"
 #include "../TPCCClient.hpp"

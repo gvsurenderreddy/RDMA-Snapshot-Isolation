@@ -11,7 +11,7 @@
 #include "../../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../../rdma-region/RDMAContext.hpp"
 #include "../../../../rdma-region/RDMARegion.hpp"
-#include "../../../../oracle/OracleContext.hpp"
+#include "../../../../oracle/vector-snapshot-oracle/OracleContext.hpp"
 #include <vector>
 #include <mutex>		// for std::lock_guard
 

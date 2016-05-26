@@ -8,12 +8,12 @@
 #ifndef SRC_ORACLE_ORACLE_HPP_
 #define SRC_ORACLE_ORACLE_HPP_
 
-#include "../../config.hpp"
-#include "../rdma-region/MemoryHandler.hpp"
-#include "../rdma-region/RDMAContext.hpp"
-#include "../rdma-region/RDMARegion.hpp"
-#include "../basic-types/timestamp.hpp"
-#include "../basic-types/PrimitiveTypes.hpp"
+#include "../../../config.hpp"
+#include "../../rdma-region/MemoryHandler.hpp"
+#include "../../rdma-region/RDMAContext.hpp"
+#include "../../rdma-region/RDMARegion.hpp"
+#include "../../basic-types/timestamp.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
 #include <string>
 #include <stdint.h>
 #include <stdlib.h>

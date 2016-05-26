@@ -100,15 +100,20 @@ public:
 		DEBUG_WRITE(os_, "StockTable", __func__, "[Info] Stock table initialized");
 	}
 
+	static size_t getRecordPositionInTable(size_t warehouseOffset, uint32_t itemID){
+		return (size_t) (warehouseOffset * config::tpcc_settings::ITEMS_CNT + itemID);
+	}
+
 	void populate(size_t warehouseOffset, uint16_t wID, TPCC::RandomGenerator& random, size_t itemsCnt, Timestamp& ts){
 		// Select 10% of the stock to be marked "original"
 		//std::set<int> selected_rows = random.selectUniqueIds(itemsCnt/10, 0, (int)(itemsCnt - 1));
 
-		for (uint32_t i = 0; i < itemsCnt; ++i) {
+		for (uint32_t itemID = 0; itemID < itemsCnt; ++itemID) {
 			bool is_original = (random.number(1, 10) == 10);
 			//bool is_original = selected_rows.find(i) != selected_rows.end();
-			headVersions->getRegion()[warehouseOffset * itemsCnt + i].stock.initialize(i, wID, is_original, random);
-			headVersions->getRegion()[warehouseOffset * itemsCnt + i].writeTimestamp.copy(ts);
+			size_t tablePosition = getRecordPositionInTable(warehouseOffset, itemID);
+			headVersions->getRegion()[tablePosition].stock.initialize(itemID, wID, is_original, random);
+			headVersions->getRegion()[tablePosition].writeTimestamp.copy(ts);
 		}
 	}
 

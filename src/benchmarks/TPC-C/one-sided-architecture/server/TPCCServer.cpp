@@ -87,25 +87,9 @@ void TPCCServer::start() {
 	// **********************************************
 	// Set up connections to clients
 	// **********************************************
-	struct sockaddr_in serv_addr, cli_addr;
+	struct sockaddr_in cli_addr;
 	socklen_t clilen = sizeof(cli_addr);
-
-	// Open Socket
-	server_sockfd_ = socket (AF_INET, SOCK_STREAM, 0);
-	if (server_sockfd_ < 0) {
-		std::cerr << "Error opening socket" << std::endl;
-		exit(-1);
-	}
-
-	// Bind
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(tcp_port_);
-	TEST_NZ(bind(server_sockfd_, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
-
-	// listen
-	TEST_NZ(listen (server_sockfd_, clientsCnt_));
+	server_sockfd_ = utils::server_socket_setup(tcp_port_, clientsCnt_);
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Server " << serverNum_ << " is waiting for " << clientsCnt_ << " client(s) on tcp port: " << tcp_port_ << ", ib port: " << (int)ib_port_);
 
 	// accept connections

@@ -11,7 +11,7 @@
 #include "SessionState.hpp"
 #include "ServerContext.hpp"
 #include "TransactionResult.hpp"
-#include "../../../../oracle/OracleContext.hpp"
+#include "../../../../oracle/vector-snapshot-oracle/OracleContext.hpp"
 #include "../../../../../config.hpp"
 #include "../../../../basic-types/PrimitiveTypes.hpp"
 #include "../../../../rdma-region/RDMAContext.hpp"

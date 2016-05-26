@@ -16,7 +16,8 @@
 #include <iostream>
 #include <netinet/tcp.h>	// for setsockopt()
 #include <sched.h>	// for sched_setaffinity() and CPU_SET() and CPU_ZERO()
- 
+#include <cstring>
+
 #define CLASS_NAME "utils"
 
 int utils::pin_to_CPU (int CPU_num){
@@ -144,6 +145,23 @@ int utils::sock_connect (std::string servername, uint16_t port) {
 	return sockfd;
 }
 
+int utils::server_socket_setup(uint16_t tcpPort, int numberOfConnections) {
+	struct sockaddr_in serv_addr;
+
+	// Open Socket
+	int server_sockfd_ = open_socket();
+
+	// Bind
+	std::memset(&serv_addr, 0, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons(tcpPort);
+	TEST_NZ(bind(server_sockfd_, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
+
+	// listen
+	TEST_NZ(listen (server_sockfd_, numberOfConnections));
+	return server_sockfd_;
+}
 int utils::establish_tcp_connection(std::string remote_ip, uint16_t remote_port, int *sockfd) {
 	*sockfd = utils::sock_connect (remote_ip, remote_port);
 	if (*sockfd < 0) {

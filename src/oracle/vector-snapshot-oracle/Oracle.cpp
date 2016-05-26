@@ -5,8 +5,9 @@
  *	Author: Erfan Zamanian
  */
 
-#include "../util/utils.hpp"
-#include "../rdma-region/RDMACommon.hpp"
+#include "Oracle.hpp"
+#include "../../util/utils.hpp"
+#include "../../rdma-region/RDMACommon.hpp"
 #include "WorkerContext.hpp"
 #include <stdio.h>
 #include <cstring>	// for memcpy and memset
@@ -24,7 +25,6 @@
 #include <thread>         // std::thread
 #include <vector>
 #include <infiniband/verbs.h>	// for ibv_qp
-#include "Oracle.hpp"
 #include <fstream>      // std::ofstream
 
 
@@ -49,28 +49,11 @@ Oracle::Oracle(size_t clientsCnt, size_t instancesCnt)
 	for (size_t i = 0; i < clientsCnt_; i++)
 		lastCommittedVector_->getRegion()[i] = (primitive::timestamp_t)0;
 
-	struct sockaddr_in serv_addr, returned_addr;
+	struct sockaddr_in returned_addr;
 	socklen_t len = sizeof(returned_addr);
 
-	// Open Socket
-	server_sockfd_ = socket (AF_INET, SOCK_STREAM, 0);
-	if (server_sockfd_ < 0) {
-		PRINT_CERR(CLASS_NAME, __func__, "Error in opening socket");
-		exit(-1);
-	}
-
-	// Bind
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(tcp_port_);
-	TEST_NZ(bind(server_sockfd_, (struct sockaddr *) &serv_addr, sizeof(serv_addr)));
-
-	// listen
-	if (config::SNAPSHOT_CLUSTER_MODE == true)
-	TEST_NZ(listen (server_sockfd_, (int)(clientsCnt_ + instancesCnt_) ));
-
-	// accept connections from clients
+	int numberOfConnections = (int)(clientsCnt_ + instancesCnt_);
+	server_sockfd_ = utils::server_socket_setup(tcp_port_, numberOfConnections);
 	PRINT_COUT(CLASS_NAME, __func__, "[Info] Waiting for " << instancesCnt_ << " instances(s) and " << clientsCnt_ << " clients on port " << tcp_port_);
 
 	primitive::client_id_t clientID = 0;

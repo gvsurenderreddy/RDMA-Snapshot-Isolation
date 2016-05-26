@@ -92,6 +92,10 @@ public:
 		return size_;
 	}
 
+	static size_t getRecordPositionInTable(uint32_t itemID){
+		return (size_t) (itemID);
+	}
+
 	void getMemoryHandler(MemoryHandler<ItemVersion> &headVersionsMH, MemoryHandler<Timestamp> &tsListMH, MemoryHandler<ItemVersion> &olderVersionsMH){
 		headVersions->getMemoryHandler(headVersionsMH);
 		tsList->getMemoryHandler(tsListMH);
@@ -103,10 +107,11 @@ public:
 		// Select 10% of the rows to be marked "original"
 		std::set<int> original_rows = random.selectUniqueIds(size_/10, 1, (int)size_);
 
-		for (unsigned int  i = 0; i < size_; ++i) {
-			bool is_original = original_rows.find(i) != original_rows.end();
-			headVersions->getRegion()[i].item.initialize(i, is_original, random);
-			headVersions->getRegion()[i].writeTimestamp.copy(initialTimestamp);	// calls the assignment operator
+		for (unsigned int  ItemID = 0; ItemID < size_; ++ItemID) {
+			bool is_original = original_rows.find(ItemID) != original_rows.end();
+			size_t tablePosition = getRecordPositionInTable(ItemID);
+			headVersions->getRegion()[tablePosition].item.initialize(ItemID, is_original, random);
+			headVersions->getRegion()[tablePosition].writeTimestamp.copy(initialTimestamp);	// calls the assignment operator
 		}
 	}
 

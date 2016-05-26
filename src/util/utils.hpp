@@ -30,12 +30,12 @@ namespace utils {
 #define DEBUG_CERR(className,funcName,message) do { \
 		DEBUG_WRITE(std::cout, className, funcName, message); \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+		std::cerr << std::setw(45) << std::left << header << message << std::endl; \
 } while( false )
 
 #define DEBUG_WRITE(outputStream, className,funcName,message) do { \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		outputStream << std::setw(35) << std::left << header << message << std::endl; \
+		outputStream << std::setw(45) << std::left << header << message << std::endl; \
 } while( false )
 
 #define ASSERT(x) assert(x)
@@ -45,19 +45,19 @@ namespace utils {
 #define DEBUG_COUT(className,funcName,message) do {} while (false)
 #define DEBUG_CERR(className,funcName,message) do { \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+		std::cerr << std::setw(45) << std::left << header << message << std::endl; \
 } while( false )
 #define ASSERT(x) do { (void)sizeof(x); } while(0)
 #endif	// #if(DEBUG_ENABLED)
 
 #define PRINT_COUT(className,funcName,message) do { \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		std::cout << std::setw(35) << std::left << header << message << std::endl; \
+		std::cout << std::setw(45) << std::left << header << message << std::endl; \
 } while( false )
 
 #define PRINT_CERR(className,funcName,message) do { \
 		std::string header = std::string("[") + className + "::" + funcName + "] "; \
-		std::cerr << std::setw(35) << std::left << header << message << std::endl; \
+		std::cerr << std::setw(45) << std::left << header << message << std::endl; \
 } while( false )
 
 #define TEST_NZ(x) do { if ( (x)) utils::die("error: " #x " failed (returned non-zero)", __FILE__, __LINE__);  } while (0)
@@ -150,12 +150,9 @@ int sock_read(int sock, char *buffer, ssize_t xfer_size);
 size_t sock_sync_data (int sock, ssize_t xfer_size, char *local_data, char *remote_data);
 size_t sock_sync (int sock);
 
-
-
-
 int open_socket();
 
-
+int server_socket_setup(uint16_t tcpPort, int numberOfConnections);
 
 /******************************************************************************
  * Function: sock_connect

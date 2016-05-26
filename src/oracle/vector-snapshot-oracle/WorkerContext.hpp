@@ -8,9 +8,9 @@
 #ifndef SRC_ORACLE_WORKERCONTEXT_HPP_
 #define SRC_ORACLE_WORKERCONTEXT_HPP_
 
-#include "../rdma-region/RDMAContext.hpp"
-#include "../rdma-region/RDMARegion.hpp"
-#include "../basic-types/PrimitiveTypes.hpp"
+#include "../../rdma-region/RDMAContext.hpp"
+#include "../../rdma-region/RDMARegion.hpp"
+#include "../../basic-types/PrimitiveTypes.hpp"
 #include "OracleMemoryKeys.hpp"
 #include <iostream>
 

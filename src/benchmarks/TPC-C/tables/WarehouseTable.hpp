@@ -113,6 +113,10 @@ public:
 		olderVersions->getMemoryHandler(olderVersionsMH);
 	}
 
+	static size_t getRecordPositionInTable(size_t warehouseOffset){
+		return warehouseOffset;
+	}
+
 	~WarehouseTable(){
 		DEBUG_WRITE(os_, "WarehouseTable", __func__, "[Info] Deconstructor called");
 		delete headVersions;
