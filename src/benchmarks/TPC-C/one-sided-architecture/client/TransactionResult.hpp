@@ -27,6 +27,7 @@ struct TransactionResult {
 		double executionPhaseMicroSec = 0;
 		double checkVersionsPhaseMicroSec = 0;
 		double lockPhaseMicroSec = 0;
+		double logPhaseMicroSec = 0;
 		double updatePhaseMicroSec = 0;
 		double commitSnapshotMicroSec = 0;
 	} statistics;

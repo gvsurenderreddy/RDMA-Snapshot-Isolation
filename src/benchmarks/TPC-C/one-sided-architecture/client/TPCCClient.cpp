@@ -153,6 +153,7 @@ void TPCCClient::start(){
 	std::unordered_map<std::string, double> elapsedMicroSecInIndex;
 	std::unordered_map<std::string, double> elapsedMicroSecInCheckingVersions;
 	std::unordered_map<std::string, double> elapsedMicroSecInLocking;
+	std::unordered_map<std::string, double> elapsedMicroSecInLogging;
 	std::unordered_map<std::string, double> elapsedMicroSecInUpdatingRecords;
 	std::unordered_map<std::string, double> elapsedMicroSecInCommitingSnapshot;
 	double totalElapsedMicroSec = 0, elapsed = 0;
@@ -167,6 +168,7 @@ void TPCCClient::start(){
 		elapsedMicroSecInIndex[s] = 0.0;
 		elapsedMicroSecInCheckingVersions[s] = 0.0;
 		elapsedMicroSecInLocking[s] = 0.0;
+		elapsedMicroSecInLogging[s] = 0.0;
 		elapsedMicroSecInUpdatingRecords[s] = 0.0;
 		elapsedMicroSecInCommitingSnapshot[s] = 0.0;
 		executedTrxCnt[s] = 0;
@@ -209,6 +211,7 @@ void TPCCClient::start(){
 		elapsedMicroSecInIndex[trxName] = trxResult.statistics.indexElapsedMicroSec;
 		elapsedMicroSecInCheckingVersions[trxName] = trxResult.statistics.checkVersionsPhaseMicroSec;
 		elapsedMicroSecInLocking[trxName] = trxResult.statistics.lockPhaseMicroSec;
+		elapsedMicroSecInLogging[trxName] = trxResult.statistics.logPhaseMicroSec;
 		elapsedMicroSecInUpdatingRecords[trxName] = trxResult.statistics.updatePhaseMicroSec;
 		elapsedMicroSecInCommitingSnapshot[trxName] = trxResult.statistics.commitSnapshotMicroSec;
 		elapsed = ( (double)( trxFinishTime.tv_sec - trxBeginTime.tv_sec ) * 1E9 + (double)( trxFinishTime.tv_nsec - trxBeginTime.tv_nsec ) ) / 1000;
@@ -250,10 +253,10 @@ void TPCCClient::start(){
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in index (usec):	" << elapsedMicroSecInIndex[n] << std::endl;
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in version check (usec):	" << elapsedMicroSecInCheckingVersions[n] << std::endl;
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in locking (usec):	" << elapsedMicroSecInLocking[n] << std::endl;
+			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in logging (usec):	" << elapsedMicroSecInLogging[n] << std::endl;
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in updating records (usec):	" << elapsedMicroSecInUpdatingRecords[n] << std::endl;
 			std::cout << "[Stat] (Trx: " << n << ") Avg elapsed time in committing snapshot (usec):	" << elapsedMicroSecInCommitingSnapshot[n] << std::endl;
 		}
-
 	}
 
 	// ************************************************

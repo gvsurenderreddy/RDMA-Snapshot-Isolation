@@ -87,7 +87,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	TPCC::CustomerVersion *customerV;
 	std::vector<TPCC::ItemVersion*> items;
 	std::vector<TPCC::StockVersion*> stocks;
-	struct timespec beforeReadSnapshotTime, beforeIndexTime, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterUpdateTime, afterCommitTime;
+	struct timespec beforeReadSnapshotTime, beforeIndexTime, afterExecutionTime, afterCheckVersionTime, afterLockTime, afterLogTime, afterUpdateTime, afterCommitTime;
 
 
 	if (config::SNAPSHOT_ACQUISITION_TYPE == config::SnapshotAcquisitionType::COMPLETE){
@@ -385,6 +385,9 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 		DEBUG_WRITE(os_, CLASS_NAME, __func__, "[Info] Client " << clientID_ << ": Command written to log");
 	}
 
+	clock_gettime(CLOCK_REALTIME, &afterLogTime);
+
+
 	// ************************************************
 	//	Append old version to the versions list, and update the pointers list
 	// ************************************************
@@ -475,7 +478,7 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 
 	signaled = false;
 	for (uint8_t olNumber = 0; olNumber < cart_.items.size(); olNumber++){
-		bool remote = cart_.items.at(olNumber).OL_SUPPLY_W_ID == 0;	// TODO
+		bool remote = cart_.items.at(olNumber).OL_SUPPLY_W_ID == sessionState_.getHomeWarehouseID();
 
 		if (olNumber == cart_.items.size() - 1)
 			signaled = true;
@@ -579,7 +582,8 @@ TPCC::TransactionResult NewOrderTransaction::doOne(){
 	trxResult.statistics.executionPhaseMicroSec = ( (double)( afterExecutionTime.tv_sec - beforeReadSnapshotTime.tv_sec ) * 1E9 + (double)( afterExecutionTime.tv_nsec - beforeReadSnapshotTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.checkVersionsPhaseMicroSec = ( (double)( afterCheckVersionTime.tv_sec - afterExecutionTime.tv_sec ) * 1E9 + (double)( afterCheckVersionTime.tv_nsec - afterExecutionTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.lockPhaseMicroSec = ( (double)( afterLockTime.tv_sec - afterCheckVersionTime.tv_sec ) * 1E9 + (double)( afterLockTime.tv_nsec - afterCheckVersionTime.tv_nsec ) ) / 1000;
-	trxResult.statistics.updatePhaseMicroSec = ( (double)( afterUpdateTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.logPhaseMicroSec = ( (double)( afterLogTime.tv_sec - afterLockTime.tv_sec ) * 1E9 + (double)( afterLogTime.tv_nsec - afterLockTime.tv_nsec ) ) / 1000;
+	trxResult.statistics.updatePhaseMicroSec = ( (double)( afterUpdateTime.tv_sec - afterLogTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - afterLogTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.indexElapsedMicroSec = ( (double)( afterUpdateTime.tv_sec - beforeIndexTime.tv_sec ) * 1E9 + (double)( afterUpdateTime.tv_nsec - beforeIndexTime.tv_nsec ) ) / 1000;
 	trxResult.statistics.commitSnapshotMicroSec = ( (double)( afterCommitTime.tv_sec - afterUpdateTime.tv_sec ) * 1E9 + (double)( afterCommitTime.tv_nsec - afterUpdateTime.tv_nsec ) ) / 1000;
 
